@@ -20,7 +20,7 @@ jobs:
       AUTH_SECRET: ci-only-not-a-real-secret-ci-only-not-a-real-secret
       AUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
