@@ -1,0 +1,43 @@
+name: Migrate production DB
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "MIGRATE" to confirm you want to run migrations against the production database.'
+        required: true
+        type: string
+
+concurrency:
+  group: db-migrate-prod
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Apply migrations
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+    steps:
+      - name: Verify confirmation
+        if: inputs.confirm != 'MIGRATE'
+        run: |
+          echo "::error::You must type MIGRATE to confirm. Got: '${{ inputs.confirm }}'"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: List pending migrations
+        run: ls -la drizzle/*.sql
+
+      - name: Run migrations
+        run: npm run db:migrate

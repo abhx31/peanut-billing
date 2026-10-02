@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth-helpers";
 import { getBillById, getPaymentsByBill, getSettings } from "@/lib/queries";
-import { money, pad2 } from "@/lib/format";
+import { money, pad2, r2 } from "@/lib/format";
 import { PrintTrigger } from "./print-trigger";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,9 @@ export default async function PrintBillPage({ params }: Props) {
     getSettings(),
   ]);
   if (!bill) notFound();
+
+  const multiLine = bill.items.length > 1;
+  const linesWithWeights = bill.items.filter((it) => it.weightsText);
 
   return (
     <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl">
@@ -42,19 +45,47 @@ export default async function PrintBillPage({ params }: Props) {
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td className="py-1">{bill.lotName}</td>
-            <td className="text-right py-1">{bill.bags}</td>
-            <td className="text-right py-1">{bill.kg}</td>
-            <td className="text-right py-1">{money(bill.rate)}</td>
-            <td className="text-right py-1">{money(bill.amount)}</td>
-          </tr>
+          {bill.items.map((it) => (
+            <tr key={it.id}>
+              <td className="py-1">{it.lotName}</td>
+              <td className="text-right py-1">{it.bags}</td>
+              <td className="text-right py-1">{r2(it.kg)}</td>
+              <td className="text-right py-1">{money(it.rate)}</td>
+              <td className="text-right py-1">{money(it.amount)}</td>
+            </tr>
+          ))}
+          {multiLine && (
+            <tr className="font-semibold">
+              <td className="py-1 border-t border-gray-500">Total</td>
+              <td className="text-right py-1 border-t border-gray-500">{bill.bags}</td>
+              <td className="text-right py-1 border-t border-gray-500">{r2(bill.kg)}</td>
+              <td className="border-t border-gray-500" />
+              <td className="text-right py-1 border-t border-gray-500">{money(bill.amount)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
 
+      {linesWithWeights.length > 0 && (
+        <p className="text-xs mb-3">
+          <span className="font-semibold">Bag weights (kg):</span>
+          <br />
+          {linesWithWeights.map((it) => (
+            <span key={it.id}>
+              {it.lotName}: {it.weightsText}
+              <br />
+            </span>
+          ))}
+        </p>
+      )}
+
       <div className="text-right text-sm space-y-1">
         <div>Hamali: {money(bill.hamali)}</div>
-        {bill.gst > 0 && <div>GST: {money(bill.gst)}</div>}
+        {bill.gst > 0 && (
+          <div>
+            GST {bill.gstPercent}%: {money(bill.gst)}
+          </div>
+        )}
         <div className="font-bold text-base">Total: {money(bill.total)}</div>
         <div>Paid: {money(bill.paid)}</div>
         <div className="font-bold">Balance: {money(bill.balance)}</div>

@@ -90,7 +90,7 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
                 <tr key={b.id}>
                   <td className="py-1 font-mono">{pad2(b.no)}</td>
                   <td className="py-1">{b.customer}</td>
-                  <td className="py-1">{b.lotName}</td>
+                  <td className="py-1">{b.lotSummary}</td>
                   <td className="py-1 text-right">{b.bags}</td>
                   <td className="py-1 text-right">{r2(b.kg)}</td>
                   <td className="py-1 text-right">{money(b.total)}</td>

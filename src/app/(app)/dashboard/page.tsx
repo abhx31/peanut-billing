@@ -261,7 +261,7 @@ export default async function DashboardPage() {
                         <PaymentBadge balance={b.balance} total={b.total} />
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {b.date} · {b.lotName} · {b.bags} bags · {b.kg} kg
+                        {b.date} · {b.lotSummary} · {b.bags} bags · {b.kg} kg
                       </div>
                     </div>
                   </div>

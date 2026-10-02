@@ -38,21 +38,24 @@ export default async function ProfitPage({ searchParams }: Props) {
 
   const byLotMap = new Map<
     string,
-    { name: string; bags: number; kg: number; sales: number; profit: number; bills: number }
+    { name: string; bags: number; kg: number; sales: number; profit: number; billIds: Set<string> }
   >();
   for (const b of bills) {
-    const key = b.lotId;
-    const row =
-      byLotMap.get(key) ??
-      { name: b.lotName, bags: 0, kg: 0, sales: 0, profit: 0, bills: 0 };
-    row.bags += b.bags;
-    row.kg += b.kg;
-    row.sales += b.amount;
-    row.profit += b.profit ?? 0;
-    row.bills += 1;
-    byLotMap.set(key, row);
+    for (const it of b.items) {
+      const row =
+        byLotMap.get(it.lotId) ??
+        { name: it.lotName, bags: 0, kg: 0, sales: 0, profit: 0, billIds: new Set<string>() };
+      row.bags += it.bags;
+      row.kg += it.kg;
+      row.sales += it.amount;
+      row.profit += it.profit ?? 0;
+      row.billIds.add(b.id);
+      byLotMap.set(it.lotId, row);
+    }
   }
-  const byLot = Array.from(byLotMap.values()).sort((a, b) => b.profit - a.profit);
+  const byLot = Array.from(byLotMap.values())
+    .map((l) => ({ ...l, bills: l.billIds.size }))
+    .sort((a, b) => b.profit - a.profit);
 
   return (
     <div className="space-y-6">
@@ -163,7 +166,7 @@ export default async function ProfitPage({ searchParams }: Props) {
                       <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
                       <td className="py-2 pr-4">{b.date}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
-                      <td className="py-2 pr-4">{b.lotName}</td>
+                      <td className="py-2 pr-4">{b.lotSummary}</td>
                       <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>
                       <td className="py-2 pr-4 text-right">{money(b.amount)}</td>
                       <td

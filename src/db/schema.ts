@@ -102,14 +102,6 @@ export const bills = pgTable(
     fy: text("fy").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     customer: text("customer").notNull(),
-    weightsText: text("weights_text"),
-    lotId: uuid("lot_id")
-      .notNull()
-      .references(() => lots.id, { onDelete: "restrict" }),
-    lotNameSnapshot: text("lot_name_snapshot").notNull(),
-    bags: integer("bags").notNull(),
-    kg: numeric("kg", { precision: 14, scale: 3 }).notNull(),
-    rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
     hamaliPerBag: numeric("hamali_per_bag", { precision: 14, scale: 2 }).notNull(),
     hamali: numeric("hamali", { precision: 14, scale: 2 }).notNull(),
     gstPercent: numeric("gst_percent", { precision: 5, scale: 2 }).notNull().default("0"),
@@ -121,6 +113,23 @@ export const bills = pgTable(
   },
   (t) => [uniqueIndex("bills_fy_no_uq").on(t.fy, t.no)],
 );
+
+export const billItems = pgTable("bill_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  billId: uuid("bill_id")
+    .notNull()
+    .references(() => bills.id, { onDelete: "cascade" }),
+  position: integer("position").notNull().default(0),
+  lotId: uuid("lot_id")
+    .notNull()
+    .references(() => lots.id, { onDelete: "restrict" }),
+  lotNameSnapshot: text("lot_name_snapshot").notNull(),
+  weightsText: text("weights_text"),
+  bags: integer("bags").notNull(),
+  kg: numeric("kg", { precision: 14, scale: 3 }).notNull(),
+  rate: numeric("rate", { precision: 14, scale: 2 }).notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+});
 
 export const payments = pgTable("payments", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -155,9 +164,14 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const billsRelations = relations(bills, ({ one, many }) => ({
-  lot: one(lots, { fields: [bills.lotId], references: [lots.id] }),
+export const billsRelations = relations(bills, ({ many }) => ({
+  items: many(billItems),
   payments: many(payments),
+}));
+
+export const billItemsRelations = relations(billItems, ({ one }) => ({
+  bill: one(bills, { fields: [billItems.billId], references: [bills.id] }),
+  lot: one(lots, { fields: [billItems.lotId], references: [lots.id] }),
 }));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
@@ -166,7 +180,7 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 
 export const lotsRelations = relations(lots, ({ many, one }) => ({
   stockIn: many(stockIn),
-  bills: many(bills),
+  billItems: many(billItems),
   cost: one(lotCosts, { fields: [lots.id], references: [lotCosts.lotId] }),
 }));
 

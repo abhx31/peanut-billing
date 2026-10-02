@@ -1,12 +1,10 @@
-# Peanut Billing — Next.js port
+# Peanut Billing
 
-Production port of the single-file Peanut Trading billing app (`../peanut-billing/src/index.html`) to:
+Production billing app for peanut traders. Stack:
 
 - **Next.js 16** (App Router, Turbopack) + **React 19** + **Tailwind v4** + **shadcn/ui** (Base UI)
 - **Neon** serverless Postgres + **Drizzle ORM** (SQL migrations in `drizzle/`)
 - **Auth.js v5** (NextAuth beta) with Credentials provider + Drizzle adapter
-
-The source of truth for business rules is still `../peanut-billing/README.md`.
 
 ## Setup
 
@@ -62,10 +60,7 @@ The source of truth for business rules is still `../peanut-billing/README.md`.
 
 ## Adding staff accounts
 
-Public signup is **disabled**. To create a staff account today, either:
-
-- Run a quick INSERT in the Neon SQL editor (hash the password first with `node -e "console.log(require('bcryptjs').hashSync('their-password', 10))"`), or
-- Extend the Settings page with an "invite staff" form (not shipped yet).
+Public signup is **disabled**. Sign in as owner, open **Settings → Add staff**, fill in name / email / password, click Add. Share the password with the employee in person. Later you can **Disable** or **Delete** staff from the same page — disabling blocks sign-in but keeps their historical bills.
 
 ## Scripts
 
@@ -110,3 +105,39 @@ Role enforcement is **application-level**: `src/lib/auth-helpers.ts` exposes `re
 - **Settings** — owner edits firm name, hamali default, opening cash/bank
 - **Printable bill** — `/bills/[id]/print`
 - Dark mode toggle, sidebar layout, status badges
+
+## CI / CD
+
+GitHub Actions workflows live in `.github/workflows/`:
+
+### `ci.yml` — on every PR and push to main
+
+Runs `lint`, `tsc --noEmit`, and `next build` with dummy env vars. No real DB connection — all pages are `force-dynamic`, so the build never queries Postgres. If this is red, the deploy is blocked.
+
+### `db-migrate.yml` — manual trigger only
+
+Runs `npm run db:migrate` against production. Workflow is deliberately **manual** (`workflow_dispatch`) and requires typing `MIGRATE` as confirmation input, so a merged PR cannot auto-apply schema changes to prod. Uses the `production` GitHub environment (configure protection rules there if you want approval gates).
+
+**To run migrations against prod:** Actions tab → *Migrate production DB* → *Run workflow* → type `MIGRATE` → run.
+
+### Required GitHub Secrets
+
+| Secret | Scope | Used by |
+|---|---|---|
+| `PROD_DATABASE_URL` | `production` environment | db-migrate.yml |
+
+Settings → Secrets and variables → Actions → *Environments* → `production` → Add secret.
+
+### Vercel deployment
+
+Vercel's native GitHub integration handles deploys — no YAML required:
+
+1. Import the repo in the Vercel dashboard.
+2. Add env vars in the Vercel project settings: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_APP_NAME`, `OWNER_EMAIL`, `OWNER_PASSWORD`, `OWNER_NAME`.
+3. Push to `main` → Vercel builds and deploys. PRs get preview URLs automatically.
+
+**Order of operations when shipping a schema change:** run `db-migrate.yml` **before** the matching deploy lands, so the new code only ever sees the new schema.
+
+### Dependabot
+
+`.github/dependabot.yml` opens weekly grouped PRs for npm (next/react, drizzle, UI, @types) and monthly PRs for GitHub Actions versions. CI runs on each PR — if green, safe to merge.

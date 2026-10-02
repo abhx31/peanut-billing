@@ -90,7 +90,14 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                     <tr key={b.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-mono">{String(b.no).padStart(2, "0")}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
-                      <td className="py-2 pr-4">{b.lotName}</td>
+                      <td className="py-2 pr-4">
+                        <span>{b.lotSummary}</span>
+                        {b.itemCount > 1 && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({b.itemCount} lots)
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 pr-4 text-right">{b.bags}</td>
                       <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>
                       <td className="py-2 pr-4 text-right">{money(b.total)}</td>

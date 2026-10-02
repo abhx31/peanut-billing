@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { fyOf, money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
 import { saveBill } from "./actions";
 
@@ -23,8 +25,19 @@ type Lot = { id: string; name: string; left: number };
 type Props = {
   lots: Lot[];
   hamaliDefault: number;
-  customers: string[];
+  customers: { name: string; balance: number }[];
   lotCosts: Record<string, string> | null;
+};
+
+type CartItem = {
+  key: string;
+  lotId: string;
+  lotName: string;
+  bags: number;
+  kg: number;
+  rate: number;
+  amount: number;
+  weights: string;
 };
 
 export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
@@ -33,89 +46,163 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
 
   const [date, setDate] = useState(today());
   const [customer, setCustomer] = useState("");
+  const [hamaliPerBag, setHamaliPerBag] = useState(String(hamaliDefault));
+  const [gstPercent, setGstPercent] = useState("0");
+
+  // Cart (lines already added) + the current input line.
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [lotId, setLotId] = useState(lots[0]?.id ?? "");
   const [bags, setBags] = useState("");
   const [weights, setWeights] = useState("");
   const [kg, setKg] = useState("");
   const [rate, setRate] = useState("");
-  const [hamaliPerBag, setHamaliPerBag] = useState(String(hamaliDefault));
-  const [gstPercent, setGstPercent] = useState("0");
+
   const [credit, setCredit] = useState(false);
   const [cash, setCash] = useState("");
   const [upi, setUpi] = useState("");
 
-  const lot = useMemo(() => lots.find((l) => l.id === lotId), [lots, lotId]);
-  const parsed = useMemo(() => parseBagWeights(weights), [weights]);
+  const parsedWeights = useMemo(() => parseBagWeights(weights), [weights]);
 
   function onWeightsChange(v: string) {
     setWeights(v);
     const p = parseBagWeights(v);
     if (p.count > 0) {
-      setKg(String(p.totalKg));
       setBags(String(p.count));
+      setKg(String(p.totalKg));
     }
   }
 
-  const calc = useMemo(() => {
+  // Build the "current line" if the input area is valid (same as inspiration's curItem()).
+  const currentLine = useMemo((): CartItem | null => {
     const bagsN = num(bags);
     const kgN = num(kg);
     const rateN = num(rate);
-    const hamaliN = num(hamaliPerBag);
-    const gstN = num(gstPercent);
-    const cashN = num(cash);
-    const upiN = num(upi);
-    const amount = kgN * rateN;
-    const hamali = bagsN * hamaliN;
-    const gst = (amount * gstN) / 100;
-    const total = amount + hamali + gst;
-    const paid = credit ? 0 : cashN + upiN;
-    const balance = total - paid;
-    const cost = lotCosts && lot ? Number(lotCosts[lot.id] ?? 0) : 0;
-    const profit = amount - kgN * cost;
-    return { amount, hamali, gst, total, paid, balance, profit, bagsN, kgN, rateN };
-  }, [bags, kg, rate, hamaliPerBag, gstPercent, cash, upi, credit, lot, lotCosts]);
+    const lot = lots.find((l) => l.id === lotId);
+    if (!lot || bagsN <= 0 || kgN <= 0 || rateN <= 0) return null;
+    return {
+      key: "current",
+      lotId: lot.id,
+      lotName: lot.name,
+      bags: bagsN,
+      kg: kgN,
+      rate: rateN,
+      amount: r2(kgN * rateN),
+      weights: weights.trim(),
+    };
+  }, [bags, kg, rate, lotId, lots, weights]);
+
+  // Effective items for preview / save = cart + current line.
+  const items = useMemo(
+    () => (currentLine ? [...cart, currentLine] : cart),
+    [cart, currentLine],
+  );
+
+  const calc = useMemo(() => {
+    const totalBags = items.reduce((s, i) => s + i.bags, 0);
+    const totalKg = items.reduce((s, i) => s + i.kg, 0);
+    const amount = r2(items.reduce((s, i) => s + i.amount, 0));
+    const hamali = r2(totalBags * num(hamaliPerBag));
+    const gst = r2((amount * num(gstPercent)) / 100);
+    const total = r2(amount + hamali + gst);
+    const paid = credit ? 0 : num(cash) + num(upi);
+    const balance = r2(total - paid);
+    const profit = lotCosts
+      ? r2(
+          items.reduce((s, i) => {
+            const cost = Number(lotCosts[i.lotId] ?? 0);
+            return s + (i.amount - i.kg * cost);
+          }, 0),
+        )
+      : null;
+    return { totalBags, totalKg, amount, hamali, gst, total, paid, balance, profit };
+  }, [items, hamaliPerBag, gstPercent, cash, upi, credit, lotCosts]);
 
   const fy = fyOf(date);
 
-  function reset() {
-    setCustomer("");
+  // Previous balance hint: when the typed customer name matches an existing customer with pending balance.
+  const previousBalance = useMemo(() => {
+    const q = customer.trim().toLowerCase();
+    if (!q) return 0;
+    const found = customers.find((c) => c.name.toLowerCase() === q);
+    return found && found.balance > 0.5 ? found.balance : 0;
+  }, [customer, customers]);
+
+  function clearCurrentLine() {
     setBags("");
     setWeights("");
     setKg("");
     setRate("");
+  }
+
+  function addToCart() {
+    if (!currentLine) {
+      toast.error("Pick a lot and enter bags, weight and price first.");
+      return;
+    }
+    setCart((xs) => [
+      ...xs,
+      { ...currentLine, key: crypto.randomUUID() },
+    ]);
+    clearCurrentLine();
+  }
+
+  function removeFromCart(key: string) {
+    setCart((xs) => xs.filter((x) => x.key !== key));
+  }
+
+  function reset() {
+    setCustomer("");
+    setCart([]);
+    clearCurrentLine();
     setGstPercent("0");
     setCash("");
     setUpi("");
     setCredit(false);
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function validateAndWarn(): boolean {
     if (!customer.trim()) {
       toast.error("Enter a customer name.");
-      return;
+      return false;
     }
-    if (!lot) {
-      toast.error("Pick a lot.");
-      return;
+    if (items.length === 0) {
+      toast.error("Add at least one lot (pick lot + bags + weight + price).");
+      return false;
     }
-    if (calc.bagsN <= 0 || calc.kgN <= 0 || calc.rateN <= 0) {
-      toast.error("Enter bags, weight and price.");
-      return;
+    const neededByLot = new Map<string, { name: string; need: number }>();
+    for (const it of items) {
+      const prev = neededByLot.get(it.lotId);
+      neededByLot.set(it.lotId, {
+        name: it.lotName,
+        need: (prev?.need ?? 0) + it.bags,
+      });
     }
-    if (calc.bagsN > lot.left) {
-      if (!confirm(`Only ${lot.left} bags in stock. Save anyway?`)) return;
+    for (const [lotId, { name, need }] of neededByLot) {
+      const lot = lots.find((l) => l.id === lotId);
+      if (lot && need > lot.left) {
+        if (!confirm(`Only ${lot.left} bags of "${name}" in stock. Save anyway?`)) {
+          return false;
+        }
+      }
     }
+    return true;
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!validateAndWarn()) return;
 
     startTransition(async () => {
       const res = await saveBill({
         date,
         customer: customer.trim(),
-        lotId: lot.id,
-        weightsText: weights.trim(),
-        bags: calc.bagsN,
-        kg: calc.kgN,
-        rate: calc.rateN,
+        items: items.map((it) => ({
+          lotId: it.lotId,
+          weightsText: it.weights,
+          bags: it.bags,
+          kg: it.kg,
+          rate: it.rate,
+        })),
         hamaliPerBag: num(hamaliPerBag),
         gstPercent: num(gstPercent),
         payCash: credit ? 0 : num(cash),
@@ -135,20 +222,23 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
     <form onSubmit={onSubmit} className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="flex items-center gap-3 flex-wrap">
             Create bill
-            <span className="ml-3 text-sm font-normal text-muted-foreground">
-              Period {fy}
-            </span>
+            <Badge variant="secondary">Period {fy}</Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="date">Date</Label>
-            <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input
+              id="date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </div>
 
-          <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+          <div className="space-y-2 sm:col-span-2 lg:col-span-2">
             <Label htmlFor="customer">Customer name</Label>
             <Input
               id="customer"
@@ -160,88 +250,15 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
             />
             <datalist id="customer-list">
               {customers.map((c) => (
-                <option key={c} value={c} />
+                <option key={c.name} value={c.name} />
               ))}
             </datalist>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Lot / quality</Label>
-            <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Pick a lot">
-                  {(v) => {
-                    const found = lots.find((l) => l.id === v);
-                    return found ? `${found.name} (${found.left} bags left)` : "Pick a lot";
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {lots.map((l) => (
-                  <SelectItem
-                    key={l.id}
-                    value={l.id}
-                    label={`${l.name} (${l.left} bags left)`}
-                  >
-                    {l.name} ({l.left} bags left)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-            <Label htmlFor="weights">
-              Bag weights (kg) — space/comma separated. &quot;50x40.5&quot; means 50 bags of 40.5 kg.
-            </Label>
-            <Textarea
-              id="weights"
-              rows={3}
-              value={weights}
-              onChange={(e) => onWeightsChange(e.target.value)}
-              placeholder="40.5 41 39.8 50x40.5"
-            />
-            {parsed.count > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {parsed.count} bags · total {parsed.totalKg} kg
+            {previousBalance > 0 && (
+              <p className="text-xs text-warning">
+                Earlier balance of this customer: <b>{money(previousBalance)}</b> (not
+                included in this bill&apos;s total)
               </p>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bags">No. of bags</Label>
-            <Input
-              id="bags"
-              type="number"
-              min="0"
-              step="1"
-              value={bags}
-              onChange={(e) => setBags(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="kg">Total weight (kg)</Label>
-            <Input
-              id="kg"
-              type="number"
-              min="0"
-              step="0.01"
-              value={kg}
-              onChange={(e) => setKg(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="rate">Price per kg (₹)</Label>
-            <Input
-              id="rate"
-              type="number"
-              min="0"
-              step="0.01"
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-            />
           </div>
 
           <div className="space-y-2">
@@ -261,9 +278,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
             <Select value={gstPercent} onValueChange={(v) => setGstPercent(v ?? "0")}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Pick GST rate">
-                  {(v) =>
-                    v === "0" || v == null ? "Without GST" : `GST ${v}%`
-                  }
+                  {(v) => (v === "0" || v == null ? "Without GST" : `GST ${v}%`)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -274,7 +289,180 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Lots in this bill</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Fill the row below and tap <b>Add this lot</b> to put it in the bill. If you
+            only have one lot, just fill the row and tap <b>Save bill</b> — the current row
+            is included automatically.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {cart.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4">Lot / quality</th>
+                    <th className="py-2 pr-4 text-right">Bags</th>
+                    <th className="py-2 pr-4 text-right">Kg</th>
+                    <th className="py-2 pr-4 text-right">Price / kg</th>
+                    <th className="py-2 pr-4 text-right">Amount</th>
+                    <th className="py-2 pr-0" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map((it) => (
+                    <tr key={it.key} className="border-b last:border-0">
+                      <td className="py-2 pr-4">{it.lotName}</td>
+                      <td className="py-2 pr-4 text-right">{it.bags}</td>
+                      <td className="py-2 pr-4 text-right">{it.kg}</td>
+                      <td className="py-2 pr-4 text-right">{money(it.rate)}</td>
+                      <td className="py-2 pr-4 text-right font-semibold">
+                        {money(it.amount)}
+                      </td>
+                      <td className="py-2 pr-0 text-right">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeFromCart(it.key)}
+                          className="text-destructive"
+                          aria-label="Remove line"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No lot added yet. Fill in a lot below, then tap <b>Add this lot</b>, or just
+              save if the bill has one lot.
+            </p>
+          )}
+
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <Badge variant="outline">Current line</Badge>
+              {currentLine && (
+                <span className="text-sm font-semibold tabular-nums">
+                  {money(currentLine.amount)}
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2 lg:col-span-2">
+                <Label>Lot / quality</Label>
+                <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pick a lot">
+                      {(v) => {
+                        const found = lots.find((l) => l.id === v);
+                        return found
+                          ? `${found.name} (${found.left} bags left)`
+                          : "Pick a lot";
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lots.map((l) => (
+                      <SelectItem
+                        key={l.id}
+                        value={l.id}
+                        label={`${l.name} (${l.left} bags left)`}
+                      >
+                        {l.name} ({l.left} bags left)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="line-bags">Bags</Label>
+                <Input
+                  id="line-bags"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={bags}
+                  onChange={(e) => setBags(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="line-kg">Total kg</Label>
+                <Input
+                  id="line-kg"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={kg}
+                  onChange={(e) => setKg(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                <Label htmlFor="line-weights">
+                  Bag weights (kg) — &quot;50x40.5&quot; = 50 bags of 40.5 kg
+                </Label>
+                <Textarea
+                  id="line-weights"
+                  rows={2}
+                  value={weights}
+                  onChange={(e) => onWeightsChange(e.target.value)}
+                  placeholder="40.5 41 39.8 50x40.5"
+                />
+                {parsedWeights.count > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {parsedWeights.count} bags · {parsedWeights.totalKg} kg total
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="line-rate">Price per kg (₹)</Label>
+                <Input
+                  id="line-rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addToCart}
+                disabled={!currentLine}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add this lot to the bill
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="cash">Paid cash (₹)</Label>
             <Input
@@ -287,7 +475,6 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
               disabled={credit}
             />
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="upi">Paid UPI (₹)</Label>
             <Input
@@ -300,7 +487,6 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
               disabled={credit}
             />
           </div>
-
           <div className="space-y-2">
             <Label>Payment option</Label>
             <Button
@@ -326,8 +512,12 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
           <CardTitle>Preview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <SumCell label="Amount (kg × price)" value={money(calc.amount)} />
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+            <SumCell
+              label="Bags · kg"
+              value={`${calc.totalBags} · ${r2(calc.totalKg)}`}
+            />
+            <SumCell label="Amount" value={money(calc.amount)} />
             <SumCell label="Hamali" value={money(calc.hamali)} />
             {num(gstPercent) > 0 && (
               <SumCell label={`GST ${gstPercent}%`} value={money(calc.gst)} />
@@ -338,15 +528,15 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
               value={money(calc.balance)}
               danger={calc.balance > 0.5}
             />
-            {lotCosts && (
-              <SumCell label="Profit on this bill" value={money(r2(calc.profit))} />
+            {calc.profit !== null && (
+              <SumCell label="Profit on this bill" value={money(calc.profit)} />
             )}
           </div>
         </CardContent>
       </Card>
 
       <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} size="lg">
           {pending ? "Saving…" : "Save bill"}
         </Button>
       </div>
@@ -369,7 +559,7 @@ function SumCell({
     <div className="rounded-md bg-muted/50 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
-        className={`text-lg ${strong ? "font-semibold" : "font-medium"} ${danger ? "text-destructive" : ""}`}
+        className={`text-lg tabular-nums ${strong ? "font-bold" : "font-semibold"} ${danger ? "text-destructive" : ""}`}
       >
         {value}
       </div>

@@ -29,6 +29,13 @@
       "when": 1790960246759,
       "tag": "0003_user_disabled",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790966799449,
+      "tag": "0004_bill_items",
+      "breakpoints": true
     }
   ]
 }

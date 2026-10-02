@@ -58,7 +58,7 @@ export function SalesChart({ data }: { data: Point[] }) {
               color: "var(--color-popover-foreground)",
               fontSize: 12,
             }}
-            labelFormatter={(l: string) => fmtDay(l)}
+            labelFormatter={(l) => fmtDay(String(l))}
             formatter={(value, _name, item) => {
               const n = typeof value === "number" ? value : Number(value) || 0;
               const bills = (item as { payload?: { bills?: number } }).payload?.bills ?? 0;

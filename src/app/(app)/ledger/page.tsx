@@ -219,7 +219,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                     <tr key={b.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
-                      <td className="py-2 pr-4">{b.lotName}</td>
+                      <td className="py-2 pr-4">{b.lotSummary}</td>
                       <td className="py-2 pr-4 text-right">{b.bags}</td>
                       <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>
                       <td className="py-2 pr-4 text-right">{money(b.total)}</td>

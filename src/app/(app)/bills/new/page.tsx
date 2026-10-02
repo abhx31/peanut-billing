@@ -1,5 +1,10 @@
 import { requireSession } from "@/lib/auth-helpers";
-import { getCustomerNames, getLotCosts, getLotsWithStock, getSettings } from "@/lib/queries";
+import {
+  getCustomerBalances,
+  getLotCosts,
+  getLotsWithStock,
+  getSettings,
+} from "@/lib/queries";
 import { BillForm } from "./bill-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
@@ -10,10 +15,10 @@ export default async function NewBillPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
 
-  const [lots, settings, customers, costs] = await Promise.all([
+  const [lots, settings, customerBalances, costs] = await Promise.all([
     getLotsWithStock(),
     getSettings(),
-    getCustomerNames(),
+    getCustomerBalances(),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
   ]);
 
@@ -39,7 +44,7 @@ export default async function NewBillPage() {
     <BillForm
       lots={lots}
       hamaliDefault={Number(settings.hamaliDefault)}
-      customers={customers}
+      customers={customerBalances.map((c) => ({ name: c.name, balance: c.balance }))}
       lotCosts={isOwner ? costs : null}
     />
   );

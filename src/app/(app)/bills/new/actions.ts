@@ -1,20 +1,24 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { fyOf, r2 } from "@/lib/format";
 
-const saveBillSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
-  customer: z.string().trim().min(1).max(120),
+const itemSchema = z.object({
   lotId: z.string().uuid(),
   weightsText: z.string().max(500).optional().default(""),
   bags: z.number().int().positive(),
   kg: z.number().positive(),
   rate: z.number().positive(),
+});
+
+const saveBillSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  customer: z.string().trim().min(1).max(120),
+  items: z.array(itemSchema).min(1, "Add at least one lot."),
   hamaliPerBag: z.number().min(0),
   gstPercent: z.number().min(0).max(100),
   payCash: z.number().min(0),
@@ -34,17 +38,29 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
   const d = parsed.data;
   const fy = fyOf(d.date);
 
-  const amount = r2(d.kg * d.rate);
-  const hamali = r2(d.bags * d.hamaliPerBag);
-  const gst = r2((amount * d.gstPercent) / 100);
-  const total = r2(amount + hamali + gst);
+  const items = d.items.map((it) => ({
+    ...it,
+    amount: r2(it.kg * it.rate),
+  }));
+  const totalBags = items.reduce((s, it) => s + it.bags, 0);
+  const totalAmount = r2(items.reduce((s, it) => s + it.amount, 0));
+  const hamali = r2(totalBags * d.hamaliPerBag);
+  const gst = r2((totalAmount * d.gstPercent) / 100);
+  const total = r2(totalAmount + hamali + gst);
 
   try {
     const result = await db.transaction(async (tx) => {
-      const lot = await tx.query.lots.findFirst({
-        where: eq(schema.lots.id, d.lotId),
-      });
-      if (!lot) throw new Error("Lot not found.");
+      const lotIds = Array.from(new Set(items.map((it) => it.lotId)));
+      const lots = await tx
+        .select()
+        .from(schema.lots)
+        .where(inArray(schema.lots.id, lotIds));
+      const lotMap = new Map(lots.map((l) => [l.id, l]));
+      for (const it of items) {
+        if (!lotMap.has(it.lotId)) {
+          throw new Error("One of the selected lots was not found.");
+        }
+      }
 
       const noResult = await tx.execute<{ no: number }>(
         sql`select next_bill_no(${fy}) as no`,
@@ -58,23 +74,31 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           fy,
           date: d.date,
           customer: d.customer,
-          weightsText: d.weightsText || null,
-          lotId: lot.id,
-          lotNameSnapshot: lot.name,
-          bags: d.bags,
-          kg: d.kg.toString(),
-          rate: d.rate.toString(),
           hamaliPerBag: d.hamaliPerBag.toString(),
           hamali: hamali.toString(),
           gstPercent: d.gstPercent.toString(),
           gst: gst.toString(),
-          amount: amount.toString(),
+          amount: totalAmount.toString(),
           total: total.toString(),
           createdBy: session.user.id,
         })
         .returning({ id: schema.bills.id });
 
-      const payRows: typeof schema.payments.$inferInsert[] = [];
+      await tx.insert(schema.billItems).values(
+        items.map((it, idx) => ({
+          billId: bill.id,
+          position: idx,
+          lotId: it.lotId,
+          lotNameSnapshot: lotMap.get(it.lotId)!.name,
+          weightsText: it.weightsText || null,
+          bags: it.bags,
+          kg: it.kg.toString(),
+          rate: it.rate.toString(),
+          amount: it.amount.toString(),
+        })),
+      );
+
+      const payRows: (typeof schema.payments.$inferInsert)[] = [];
       if (d.payCash > 0) {
         payRows.push({
           billId: bill.id,
@@ -100,6 +124,9 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
 
     revalidatePath("/bills/new");
     revalidatePath("/lots");
+    revalidatePath("/day");
+    revalidatePath("/stock");
+    revalidatePath("/dashboard");
     return { ok: true, billId: result.billId, billNo: result.billNo, fy };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Could not save the bill.";

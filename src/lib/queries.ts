@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 
 export async function getLotsWithStock(opts: { includeDeleted?: boolean } = {}) {
@@ -13,12 +13,12 @@ export async function getLotsWithStock(opts: { includeDeleted?: boolean } = {}) 
 
   const soldRows = await db
     .select({
-      lotId: schema.bills.lotId,
-      bagsSold: sql<number>`coalesce(sum(${schema.bills.bags}), 0)::int`,
-      kgSold: sql<string>`coalesce(sum(${schema.bills.kg}), 0)`,
+      lotId: schema.billItems.lotId,
+      bagsSold: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int`,
+      kgSold: sql<string>`coalesce(sum(${schema.billItems.kg}), 0)`,
     })
-    .from(schema.bills)
-    .groupBy(schema.bills.lotId);
+    .from(schema.billItems)
+    .groupBy(schema.billItems.lotId);
   const soldMap = new Map(soldRows.map((r) => [r.lotId, r]));
 
   const lots = await db
@@ -85,24 +85,40 @@ export async function getCustomerNames() {
   return rows.map((r) => r.customer);
 }
 
-export type BillRow = {
+export type BillLineRow = {
   id: string;
-  no: number;
-  fy: string;
-  date: string;
-  customer: string;
+  position: number;
   lotId: string;
   lotName: string;
   bags: number;
   kg: number;
   rate: number;
   amount: number;
+  weightsText: string | null;
+  profit: number | null;
+};
+
+export type BillRow = {
+  id: string;
+  no: number;
+  fy: string;
+  date: string;
+  customer: string;
+  bags: number;
+  kg: number;
+  amount: number;
   hamali: number;
+  hamaliPerBag: number;
+  gstPercent: number;
   gst: number;
   total: number;
   paid: number;
   balance: number;
   profit: number | null;
+  items: BillLineRow[];
+  // Convenience view for list displays: lot name of first item, or "Multiple" if >1.
+  lotSummary: string;
+  itemCount: number;
 };
 
 async function enrichBills(
@@ -111,15 +127,22 @@ async function enrichBills(
 ): Promise<BillRow[]> {
   if (rows.length === 0) return [];
   const billIds = rows.map((b) => b.id);
+
   const payRows = await db
     .select({
       billId: schema.payments.billId,
       paid: sql<string>`coalesce(sum(${schema.payments.amount}), 0)`,
     })
     .from(schema.payments)
-    .where(sql`${schema.payments.billId} = ANY(${billIds}::uuid[])`)
+    .where(inArray(schema.payments.billId, billIds))
     .groupBy(schema.payments.billId);
   const paidMap = new Map(payRows.map((r) => [r.billId, Number(r.paid)]));
+
+  const itemRows = await db
+    .select()
+    .from(schema.billItems)
+    .where(inArray(schema.billItems.billId, billIds))
+    .orderBy(asc(schema.billItems.billId), asc(schema.billItems.position));
 
   let costs: Record<string, number> = {};
   if (isOwner) {
@@ -127,30 +150,64 @@ async function enrichBills(
     costs = Object.fromEntries(costRows.map((c) => [c.lotId, Number(c.costPerKg)]));
   }
 
+  const itemsByBill = new Map<string, BillLineRow[]>();
+  for (const it of itemRows) {
+    const kg = Number(it.kg);
+    const amount = Number(it.amount);
+    const cost = costs[it.lotId] ?? 0;
+    const line: BillLineRow = {
+      id: it.id,
+      position: it.position,
+      lotId: it.lotId,
+      lotName: it.lotNameSnapshot,
+      bags: it.bags,
+      kg,
+      rate: Number(it.rate),
+      amount,
+      weightsText: it.weightsText,
+      profit: isOwner ? amount - kg * cost : null,
+    };
+    const arr = itemsByBill.get(it.billId) ?? [];
+    arr.push(line);
+    itemsByBill.set(it.billId, arr);
+  }
+
   return rows.map((b) => {
     const paid = paidMap.get(b.id) ?? 0;
     const total = Number(b.total);
-    const kg = Number(b.kg);
-    const cost = costs[b.lotId] ?? 0;
     const amount = Number(b.amount);
+    const items = itemsByBill.get(b.id) ?? [];
+    const totalBags = items.reduce((s, it) => s + it.bags, 0);
+    const totalKg = items.reduce((s, it) => s + it.kg, 0);
+    const profit = isOwner
+      ? items.reduce((s, it) => s + (it.profit ?? 0), 0)
+      : null;
+    const lotSummary =
+      items.length === 0
+        ? "—"
+        : items.length === 1
+          ? items[0].lotName
+          : `${items[0].lotName} +${items.length - 1} more`;
     return {
       id: b.id,
       no: b.no,
       fy: b.fy,
       date: b.date,
       customer: b.customer,
-      lotId: b.lotId,
-      lotName: b.lotNameSnapshot,
-      bags: b.bags,
-      kg,
-      rate: Number(b.rate),
+      bags: totalBags,
+      kg: totalKg,
       amount,
       hamali: Number(b.hamali),
+      hamaliPerBag: Number(b.hamaliPerBag),
+      gstPercent: Number(b.gstPercent),
       gst: Number(b.gst),
       total,
       paid,
       balance: total - paid,
-      profit: isOwner ? amount - kg * cost : null,
+      profit,
+      items,
+      lotSummary,
+      itemCount: items.length,
     };
   });
 }
