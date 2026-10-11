@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, ShoppingBasket, SlidersHorizontal, Wallet } from "lucide-react";
+import { Printer, Save, ShoppingBasket, SlidersHorizontal, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,8 +67,7 @@ export function PattiForm({ lotNameSuggestions }: Props) {
     return { bagsN, kgN, rateN, amount, cd, labor, broker, trans, net };
   }, [bags, kg, rate, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport]);
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(mode: "save" | "save-print") {
     if (!party.trim() || calc.bagsN <= 0 || calc.kgN <= 0 || calc.rateN <= 0) {
       toast.error("Enter seller name, bags, weight and price.");
       return;
@@ -94,6 +93,9 @@ export function PattiForm({ lotNameSuggestions }: Props) {
         return;
       }
       toast.success(`Saved patti ${pad2(res.pattiNo)} · net ${money(calc.net)}`);
+      if (mode === "save-print") {
+        window.open(`/patti/${res.pattiId}/print`, "_blank");
+      }
       setParty("");
       setLotName("");
       setBags("");
@@ -109,6 +111,11 @@ export function PattiForm({ lotNameSuggestions }: Props) {
       setPaidMode("");
       router.refresh();
     });
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit("save");
   }
 
   return (
@@ -297,6 +304,16 @@ export function PattiForm({ lotNameSuggestions }: Props) {
       </FormSection>
 
       <FormActions>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          size="lg"
+          onClick={() => submit("save-print")}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Save &amp; print
+        </Button>
         <Button type="submit" disabled={pending} size="lg">
           <Save className="mr-2 h-4 w-4" />
           {pending ? "Saving…" : "Save patti bill"}

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Printer, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -197,10 +197,8 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
     return true;
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(mode: "save" | "save-print") {
     if (!validateAndWarn()) return;
-
     startTransition(async () => {
       const res = await saveBill({
         date,
@@ -223,9 +221,17 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
         return;
       }
       toast.success(`Saved bill ${pad2(res.billNo)} · ${fy}`);
+      if (mode === "save-print") {
+        window.open(`/bills/${res.billId}/print`, "_blank");
+      }
       reset();
       router.refresh();
     });
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit("save");
   }
 
   return (
@@ -563,6 +569,16 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
       </Card>
 
       <FormActions>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          size="lg"
+          onClick={() => submit("save-print")}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Save &amp; print
+        </Button>
         <Button type="submit" disabled={pending} size="lg">
           <Save className="mr-2 h-4 w-4" />
           {pending ? "Saving…" : "Save bill"}
