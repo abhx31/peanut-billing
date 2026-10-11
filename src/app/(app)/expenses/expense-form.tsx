@@ -28,7 +28,13 @@ const SUGGESTED = [
   "Other",
 ];
 
-export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
+export function ExpenseForm({
+  defaultDate,
+  defaultLoc,
+}: {
+  defaultDate: string;
+  defaultLoc: "" | "NM";
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [date, setDate] = useState(defaultDate);
@@ -36,6 +42,7 @@ export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<"Cash" | "UPI">("Cash");
+  const [loc, setLoc] = useState<"" | "NM">(defaultLoc);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,6 +58,7 @@ export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
         note: note.trim(),
         amount: amt,
         mode,
+        loc,
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -114,6 +122,26 @@ export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
             <SelectContent>
               <SelectItem value="Cash" label="Cash">Cash</SelectItem>
               <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Store" required>
+          <Select
+            value={loc === "NM" ? "NM" : "MAIN"}
+            onValueChange={(v) => setLoc(v === "NM" ? "NM" : "")}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {(v) => (v === "NM" ? "New Mahavir" : "Main store")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MAIN" label="Main store">
+                Main store
+              </SelectItem>
+              <SelectItem value="NM" label="New Mahavir">
+                New Mahavir
+              </SelectItem>
             </SelectContent>
           </Select>
         </Field>
