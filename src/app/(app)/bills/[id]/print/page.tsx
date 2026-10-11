@@ -6,6 +6,11 @@ import { db, schema } from "@/db";
 import { money, pad2, r2 } from "@/lib/format";
 import { moneyInWords } from "@/lib/words";
 import { PrintTrigger } from "./print-trigger";
+import {
+  PrintSizeChooser,
+  PrintSizeToggle,
+} from "@/components/print-size-toggle";
+import { hasPageSize, parsePageSize, type PageSize } from "@/lib/print-size";
 import type {
   GstHeaderExtras,
   GstProfile,
@@ -15,10 +20,14 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ size?: string }>;
+};
 
-export default async function PrintBillPage({ params }: Props) {
+export default async function PrintBillPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
   const [bill, pays, settings] = await Promise.all([
@@ -32,8 +41,12 @@ export default async function PrintBillPage({ params }: Props) {
     const raw = await db.query.bills.findFirst({
       where: eq(schema.bills.id, id),
     });
+    const size = parsePageSize(sp.size, "A4");
+    const chosen = hasPageSize(sp.size);
     return (
       <GstInvoicePrint
+        size={size}
+        chosen={chosen}
         bill={bill}
         pays={pays}
         buyer={(raw?.buyerSnapshot ?? {}) as PartySnapshot}
@@ -45,13 +58,22 @@ export default async function PrintBillPage({ params }: Props) {
     );
   }
 
+  const size = parsePageSize(sp.size, "A5");
+  const chosen = hasPageSize(sp.size);
   const multiLine = bill.items.length > 1;
   const linesWithWeights = bill.items.filter((it) => it.weightsText);
 
   return (
     <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl">
-      <PrintTrigger />
-      <style>{`@media print { @page { size: A5; margin: 10mm; } nav, header { display: none !important; } }`}</style>
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A5" />
+      )}
+      <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header { display: none !important; } }`}</style>
 
       <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
       <div className="text-sm mb-4">
@@ -148,6 +170,8 @@ export default async function PrintBillPage({ params }: Props) {
 }
 
 function GstInvoicePrint({
+  size,
+  chosen,
   bill,
   pays,
   buyer,
@@ -156,6 +180,8 @@ function GstInvoicePrint({
   header,
   tax,
 }: {
+  size: PageSize;
+  chosen: boolean;
   bill: Awaited<ReturnType<typeof getBillById>>;
   pays: Awaited<ReturnType<typeof getPaymentsByBill>>;
   buyer: PartySnapshot;
@@ -170,11 +196,22 @@ function GstInvoicePrint({
   const totalBags = bill.items.reduce((s, i) => s + i.bags, 0);
   const totalKg = bill.items.reduce((s, i) => s + i.kg, 0);
   const words = moneyInWords(bill.total);
+  const fontPx = size === "A5" ? 10 : 12;
 
   return (
-    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 mx-auto max-w-5xl text-[12px]">
-      <PrintTrigger />
-      <style>{`@media print { @page { size: A4 portrait; margin: 8mm } nav, header { display: none !important; } }
+    <div
+      className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 mx-auto max-w-5xl"
+      style={{ fontSize: `${fontPx}px` }}
+    >
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A4" />
+      )}
+      <style>{`@media print { @page { size: ${size} portrait; margin: 8mm } nav, header { display: none !important; } }
       table.gs, table.gs td, table.gs th { border: 1px solid #000; border-collapse: collapse; }
       table.gs th, table.gs td { padding: 3px 6px; vertical-align: top; }
       `}</style>

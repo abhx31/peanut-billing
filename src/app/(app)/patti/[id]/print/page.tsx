@@ -5,13 +5,21 @@ import { db, schema } from "@/db";
 import { getSettings } from "@/lib/queries";
 import { money, pad2, r2 } from "@/lib/format";
 import { PrintTrigger } from "../../../bills/[id]/print/print-trigger";
+import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
+import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ size?: string }>;
+};
 
-export default async function PrintPattiPage({ params }: Props) {
+export default async function PrintPattiPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = await searchParams;
+  const size = parsePageSize(sp.size, "A5");
+  const chosen = hasPageSize(sp.size);
   await requireOwnerOrEditor();
   const [patti, settings] = await Promise.all([
     db.query.pattiBills.findFirst({ where: eq(schema.pattiBills.id, id) }),
@@ -26,8 +34,15 @@ export default async function PrintPattiPage({ params }: Props) {
 
   return (
     <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
-      <PrintTrigger />
-      <style>{`@media print { @page { size: A5; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A5" />
+      )}
+      <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
 
       <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
       <div className="mb-4">

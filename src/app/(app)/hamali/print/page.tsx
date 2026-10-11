@@ -3,15 +3,19 @@ import { getHamaliForDate, getHamaliPaidForDate } from "@/lib/queries-hamali";
 import { getSettings } from "@/lib/queries";
 import { money, pad2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
+import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
+import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ d?: string }> };
+type Props = { searchParams: Promise<{ d?: string; size?: string }> };
 
 export default async function PrintHamaliPage({ searchParams }: Props) {
   await requireSession();
   const sp = await searchParams;
   const date = sp.d || today();
+  const size = parsePageSize(sp.size, "A5");
+  const chosen = hasPageSize(sp.size);
   const [h, paid, settings] = await Promise.all([
     getHamaliForDate(date),
     getHamaliPaidForDate(date),
@@ -20,8 +24,15 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
 
   return (
     <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
-      <PrintTrigger />
-      <style>{`@media print { @page { size: A5 portrait; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A5" />
+      )}
+      <style>{`@media print { @page { size: ${size} portrait; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
 
       <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
       <div className="mb-4">

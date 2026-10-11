@@ -76,6 +76,10 @@ export function AppShell({ firm, user, loc, items, children }: Props) {
     (i) => pathname === i.href || (i.href !== "/" && pathname.startsWith(i.href)),
   );
 
+  // Print pages render just the printable content — no sidebar, header, LocBar or footer.
+  const isPrint = pathname?.endsWith("/print") || pathname?.includes("/print/");
+  if (isPrint) return <>{children}</>;
+
   return (
     <div className="min-h-screen flex bg-muted/30">
       <Sidebar firm={firm} items={items} />

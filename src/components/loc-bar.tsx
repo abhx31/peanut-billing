@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Store } from "lucide-react";
 import { setLoc } from "@/app/(app)/loc/actions";
 import { cn } from "cn";
@@ -11,7 +11,13 @@ type Props = { loc: Loc };
 
 export function LocBar({ loc }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
+
+  // Hide on print pages — they're meant to render just the printable content.
+  if (pathname?.endsWith("/print") || pathname?.includes("/print/")) {
+    return null;
+  }
 
   function switchTo(next: Loc) {
     if (next === loc || pending) return;

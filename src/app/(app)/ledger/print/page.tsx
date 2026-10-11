@@ -8,14 +8,18 @@ import {
 import { requireSession } from "@/lib/auth-helpers";
 import { money, pad2, r2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
+import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
+import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ d?: string }> };
+type Props = { searchParams: Promise<{ d?: string; size?: string }> };
 
 export default async function PrintLedgerPage({ searchParams }: Props) {
   const sp = await searchParams;
   const date = sp.d || today();
+  const size = parsePageSize(sp.size, "A4");
+  const chosen = hasPageSize(sp.size);
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
 
@@ -42,8 +46,15 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
 
   return (
     <div className="bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
-      <PrintTrigger />
-      <style>{`@media print { @page { size: A4; margin: 10mm; } nav, header { display: none !important; } }`}</style>
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A4" />
+      )}
+      <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header { display: none !important; } }`}</style>
 
       <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
       <div className="mb-4">Daily ledger — {date}</div>
