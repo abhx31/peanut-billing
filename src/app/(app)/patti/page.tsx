@@ -1,4 +1,4 @@
-import { ShoppingBasket, Trash2 } from "lucide-react";
+import { ShoppingBasket } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,8 @@ import { getPattiBillsByDate, getPattiLotNameSuggestions } from "@/lib/queries-p
 import { money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
-import { ConfirmDestructive } from "@/components/confirm-destructive";
 import { PattiMarkPaid } from "./patti-mark-paid";
-import { deletePatti } from "./actions";
+import { DeletePattiButton } from "./delete-patti-button";
 
 export const dynamic = "force-dynamic";
 
@@ -118,23 +117,7 @@ export default async function PattiPage({ searchParams }: Props) {
                             net={Number(b.net)}
                             paidMode={b.paidMode as "Cash" | "UPI" | null}
                           />
-                          <ConfirmDestructive
-                            title="Delete this patti bill?"
-                            description="Removes it from the ledger too. Payments made against it are undone."
-                            confirmLabel="Delete"
-                            successMessage="Patti deleted"
-                            onConfirm={() => deletePatti({ id: b.id })}
-                            trigger={
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            }
-                          />
+                          <DeletePattiButton id={b.id} />
                         </div>
                       </td>
                     </tr>

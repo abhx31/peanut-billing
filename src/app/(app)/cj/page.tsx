@@ -1,4 +1,4 @@
-import { HandCoins, Trash2 } from "lucide-react";
+import { HandCoins } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,7 @@ import {
 import { money, pad2 } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { CjSettlementForm } from "./cj-settlement-form";
-import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { deleteCjSettlement } from "./actions";
+import { DeleteCjSettlementButton } from "./delete-cj-settlement-button";
 
 export const dynamic = "force-dynamic";
 
@@ -93,26 +92,7 @@ export default async function CJPage() {
                       </td>
                       {isPrivileged && (
                         <td className="py-2 pr-0 text-right">
-                          <ConfirmDestructive
-                            title="Delete this settlement?"
-                            description="Removes it from the ledger. CJ outstanding goes back up by this amount."
-                            confirmLabel="Delete"
-                            successMessage="Settlement deleted"
-                            onConfirm={() => deleteCjSettlement({ id: s.id })}
-                            trigger={
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span className="sr-only sm:not-sr-only sm:ml-1">
-                                  Delete
-                                </span>
-                              </Button>
-                            }
-                          />
+                          <DeleteCjSettlementButton id={s.id} />
                         </td>
                       )}
                     </tr>

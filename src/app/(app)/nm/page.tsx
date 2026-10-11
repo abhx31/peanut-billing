@@ -11,13 +11,11 @@ import {
   getBillsByDate,
   getLotsWithStock,
 } from "@/lib/queries";
-import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { Trash2 } from "lucide-react";
 import { money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
 import { TransferForm } from "./transfer-form";
-import { deleteTransfer } from "./actions";
+import { DeleteTransferButton } from "./delete-transfer-button";
 
 export const dynamic = "force-dynamic";
 
@@ -206,26 +204,7 @@ export default async function NewMahavirPage({ searchParams }: Props) {
                       </td>
                       {isPrivileged && (
                         <td className="py-2 pr-0 text-right">
-                          <ConfirmDestructive
-                            title="Delete this transfer?"
-                            description="The stock moves back to where it came from."
-                            confirmLabel="Delete transfer"
-                            successMessage="Transfer deleted"
-                            onConfirm={() => deleteTransfer({ id: t.id })}
-                            trigger={
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span className="sr-only sm:not-sr-only sm:ml-1">
-                                  Delete
-                                </span>
-                              </Button>
-                            }
-                          />
+                          <DeleteTransferButton id={t.id} />
                         </td>
                       )}
                     </tr>

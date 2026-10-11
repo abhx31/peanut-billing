@@ -1,4 +1,4 @@
-import { Wallet, Trash2, Pencil } from "lucide-react";
+import { Wallet, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
@@ -10,8 +10,7 @@ import { SumGrid } from "@/components/sum-grid";
 import { AddOldDueForm } from "./add-old-due-form";
 import { ReceiveDueDialog } from "./receive-due-dialog";
 import { EditDueDialog } from "./edit-due-dialog";
-import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { deleteOldDue } from "./actions";
+import { DeleteOldDueButton } from "./delete-old-due-button";
 
 export const dynamic = "force-dynamic";
 
@@ -103,23 +102,7 @@ export default async function ReceivablesPage() {
                           {isPrivileged && (
                             <>
                               <EditDueDialog id={d.id} customer={d.customer} amount={d.amount} />
-                              <ConfirmDestructive
-                                title={`Delete old due for ${d.customer}?`}
-                                description="This also removes any payments recorded against it."
-                                confirmLabel="Delete due"
-                                successMessage="Old due deleted"
-                                onConfirm={() => deleteOldDue({ id: d.id })}
-                                trigger={
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                }
-                              />
+                              <DeleteOldDueButton id={d.id} customer={d.customer} />
                             </>
                           )}
                         </div>

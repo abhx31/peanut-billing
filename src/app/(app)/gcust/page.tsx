@@ -1,4 +1,4 @@
-import { Users, Trash2 } from "lucide-react";
+import { Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
@@ -6,8 +6,7 @@ import { db, schema } from "@/db";
 import { asc } from "drizzle-orm";
 import { GstCustomerForm } from "./gst-customer-form";
 import { FirmGstProfileForm } from "./firm-gst-profile-form";
-import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { deleteGstCustomer } from "./actions";
+import { DeleteGstCustomerButton } from "./delete-gst-customer-button";
 import { fyOf, today } from "@/lib/format";
 import type { GstProfile } from "@/lib/gst-types";
 
@@ -73,23 +72,7 @@ export default async function GstCustomersPage() {
                       <td className="py-2 pr-4">{c.phone ?? ""}</td>
                       <td className="py-2 pr-0 text-right">
                         {isOwner && (
-                          <ConfirmDestructive
-                            title={`Delete ${c.name}?`}
-                            description="Past invoices keep the buyer snapshot, so this won't change history."
-                            confirmLabel="Delete"
-                            successMessage="Customer deleted"
-                            onConfirm={() => deleteGstCustomer({ id: c.id })}
-                            trigger={
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            }
-                          />
+                          <DeleteGstCustomerButton id={c.id} name={c.name} />
                         )}
                       </td>
                     </tr>
