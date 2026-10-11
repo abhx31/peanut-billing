@@ -18,6 +18,7 @@ import { sql } from "drizzle-orm";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   cashBalanceBefore,
+  getAllPaymentsOnDate,
   getBillsByDate,
   getCustomerBalances,
   getLatestBills,
@@ -27,6 +28,7 @@ import {
 import { getCjTotals } from "@/lib/queries-cj";
 import { getOldDuesSummary } from "@/lib/queries-recv";
 import { db, schema } from "@/db";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { money, pad2, today } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,31 +43,78 @@ export default async function DashboardPage() {
   const isPrivileged = role === "owner" || role === "editor";
   const isOwner = role === "owner";
   const date = today();
+  const loc = await getCurrentLoc();
+  const storeName = locLabel(loc);
   // Use a sentinel that's clearly past any real business date to get the all-time position.
   const futureAnchor = "9999-12-31";
 
-  const [bills, lots, balances, cashBal, upiBal, latest, series, cj, dues, pattiUnpaidRow] =
-    await Promise.all([
-      getBillsByDate(date, isOwner),
-      getLotsWithStock(),
-      getCustomerBalances(),
-      cashBalanceBefore("Cash", futureAnchor),
-      cashBalanceBefore("UPI", futureAnchor),
-      getLatestBills(8, isOwner),
-      getSalesSeries(14),
-      getCjTotals(),
-      getOldDuesSummary(),
-      isPrivileged
-        ? db
-            .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
-            .from(schema.pattiBills)
-            .where(sql`${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = ''`)
-            .then((r) => r[0])
-        : Promise.resolve(undefined),
-    ]);
+  const [
+    bills,
+    paysToday,
+    lots,
+    balances,
+    cashBal,
+    upiBal,
+    latestAll,
+    series,
+    cj,
+    dues,
+    pattiUnpaidRow,
+  ] = await Promise.all([
+    getBillsByDate(date, isOwner),
+    getAllPaymentsOnDate(date),
+    getLotsWithStock(),
+    getCustomerBalances(),
+    cashBalanceBefore("Cash", futureAnchor),
+    cashBalanceBefore("UPI", futureAnchor),
+    getLatestBills(24, isOwner),
+    getSalesSeries(14, loc),
+    getCjTotals(),
+    getOldDuesSummary(),
+    isPrivileged
+      ? db
+          .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
+          .from(schema.pattiBills)
+          .where(sql`${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = ''`)
+          .then((r) => r[0])
+      : Promise.resolve(undefined),
+  ]);
+  const latest = latestAll.filter((b) => b.loc === loc).slice(0, 8);
+  const billsHere = bills.filter((b) => b.loc === loc);
+
+  function statsFor(loc: "" | "NM") {
+    const bs = bills.filter((b) => b.loc === loc);
+    const ps = paysToday.filter((p) => (p.billLoc ?? "") === loc);
+    const sumPay = (m: "Cash" | "UPI" | "CJ") =>
+      ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
+    return {
+      bills: bs.length,
+      bags: bs.reduce((s, b) => s + b.bags, 0),
+      sales: bs.reduce((s, b) => s + b.total, 0),
+      cashIn: sumPay("Cash"),
+      upiIn: sumPay("UPI"),
+      cjIn: sumPay("CJ"),
+      creditGiven: bs.reduce((s, b) => s + b.balance, 0),
+      profit: isOwner ? bs.reduce((s, b) => s + (b.profit ?? 0), 0) : 0,
+    };
+  }
+  const storeRows: { name: string; stats: ReturnType<typeof statsFor> }[] = [
+    { name: "Main store", stats: statsFor("") },
+    { name: "New Mahavir", stats: statsFor("NM") },
+  ];
+  const storeTotals = {
+    bills: storeRows.reduce((s, r) => s + r.stats.bills, 0),
+    bags: storeRows.reduce((s, r) => s + r.stats.bags, 0),
+    sales: storeRows.reduce((s, r) => s + r.stats.sales, 0),
+    cashIn: storeRows.reduce((s, r) => s + r.stats.cashIn, 0),
+    upiIn: storeRows.reduce((s, r) => s + r.stats.upiIn, 0),
+    cjIn: storeRows.reduce((s, r) => s + r.stats.cjIn, 0),
+    creditGiven: storeRows.reduce((s, r) => s + r.stats.creditGiven, 0),
+    profit: storeRows.reduce((s, r) => s + r.stats.profit, 0),
+  };
 
   const pattiUnpaid = Number(pattiUnpaidRow?.s ?? 0);
-  const salesToday = bills.reduce((s, b) => s + b.total, 0);
+  const salesToday = billsHere.reduce((s, b) => s + b.total, 0);
   const salesYesterday = series[series.length - 2]?.total ?? 0;
   const salesDelta =
     salesYesterday > 0
@@ -98,6 +147,8 @@ export default async function DashboardPage() {
               month: "long",
               year: "numeric",
             })}
+            <span className="mx-2">·</span>
+            Viewing <b>{storeName}</b>
           </p>
         </div>
         <div className="flex gap-2">
@@ -118,9 +169,9 @@ export default async function DashboardPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
-          title="Sales today"
+          title={`Sales today · ${storeName}`}
           value={money(salesToday)}
-          sub={`${bills.length} bill${bills.length === 1 ? "" : "s"}`}
+          sub={`${billsHere.length} bill${billsHere.length === 1 ? "" : "s"}`}
           icon={Receipt}
           delta={salesDelta}
           href="/day"
@@ -194,13 +245,88 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-primary" />
+            Today by store
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-4">Store</th>
+                  <th className="py-2 pr-4 text-right">Bills</th>
+                  <th className="py-2 pr-4 text-right">Bags</th>
+                  <th className="py-2 pr-4 text-right">Sales</th>
+                  <th className="py-2 pr-4 text-right">Cash in</th>
+                  <th className="py-2 pr-4 text-right">UPI in</th>
+                  <th className="py-2 pr-4 text-right">CJ in</th>
+                  <th className="py-2 pr-4 text-right">Credit given</th>
+                  {isOwner && <th className="py-2 pr-4 text-right">Profit</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {storeRows.map((r) => {
+                  const isCurrent = r.name === storeName;
+                  return (
+                  <tr
+                    key={r.name}
+                    className={`border-b ${isCurrent ? "bg-primary/5" : ""}`}
+                  >
+                    <td className="py-2 pr-4 font-medium">
+                      {r.name}
+                      {isCurrent && (
+                        <Badge variant="secondary" className="ml-2 text-[10px]">
+                          Working here
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{r.stats.bills}</td>
+                    <td className="py-2 pr-4 text-right">{r.stats.bags}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.stats.sales)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.stats.cashIn)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.stats.upiIn)}</td>
+                    <td className="py-2 pr-4 text-right">{money(r.stats.cjIn)}</td>
+                    <td className="py-2 pr-4 text-right">
+                      {money(r.stats.creditGiven)}
+                    </td>
+                    {isOwner && (
+                      <td className="py-2 pr-4 text-right">{money(r.stats.profit)}</td>
+                    )}
+                  </tr>
+                  );
+                })}
+                <tr className="font-semibold">
+                  <td className="py-2 pr-4">Total</td>
+                  <td className="py-2 pr-4 text-right">{storeTotals.bills}</td>
+                  <td className="py-2 pr-4 text-right">{storeTotals.bags}</td>
+                  <td className="py-2 pr-4 text-right">{money(storeTotals.sales)}</td>
+                  <td className="py-2 pr-4 text-right">{money(storeTotals.cashIn)}</td>
+                  <td className="py-2 pr-4 text-right">{money(storeTotals.upiIn)}</td>
+                  <td className="py-2 pr-4 text-right">{money(storeTotals.cjIn)}</td>
+                  <td className="py-2 pr-4 text-right">
+                    {money(storeTotals.creditGiven)}
+                  </td>
+                  {isOwner && (
+                    <td className="py-2 pr-4 text-right">{money(storeTotals.profit)}</td>
+                  )}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       <section className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 overflow-hidden">
           <CardHeader className="flex-row items-start justify-between gap-2 pb-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                Sales — last 14 days
+                Sales — last 14 days · {storeName}
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
                 Total: {money(salesLast14)}
@@ -290,7 +416,7 @@ export default async function DashboardPage() {
         <CardHeader className="flex-row items-center justify-between pb-3">
           <CardTitle className="flex items-center gap-2">
             <Receipt className="h-4 w-4 text-primary" />
-            Latest bills
+            Latest bills · {storeName}
           </CardTitle>
           <Link
             href="/day"
