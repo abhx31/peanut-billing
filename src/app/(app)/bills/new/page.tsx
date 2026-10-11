@@ -43,12 +43,41 @@ export default async function NewBillPage() {
     );
   }
 
-  // Pre-shape lots so the form only sees the store-relevant stock number.
-  const storeLots = lots.map((l) => ({
-    id: l.id,
-    name: l.name,
-    left: loc === "NM" ? l.stkN : l.stkM,
-  }));
+  // Only show lots that have stock at the current store. The bill is tagged
+  // server-side with whichever store the user is working at.
+  const storeLots = lots
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      left: loc === "NM" ? l.stkN : l.stkM,
+    }))
+    .filter((l) => l.left > 0);
+  const storeName = loc === "NM" ? "New Mahavir" : "Main store";
+
+  if (storeLots.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No stock at {storeName}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            None of your lots have bags at <b>{storeName}</b>. Transfer stock in
+            from the other store, add stock here, or switch the Working-at bar
+            to the store that has stock.
+          </p>
+          <div className="flex gap-3">
+            <Link href="/nm" className="underline">
+              Open transfers →
+            </Link>
+            <Link href="/lots" className="underline">
+              Add stock →
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <BillForm
