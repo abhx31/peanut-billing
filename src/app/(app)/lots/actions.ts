@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwner, requireSession } from "@/lib/auth-helpers";
+import { closedDateError } from "@/lib/year-close";
 import { today } from "@/lib/format";
 
 const addLotSchema = z.object({
@@ -71,6 +72,8 @@ export async function addBags(input: z.input<typeof addBagsSchema>): Promise<Res
   const session = await requireSession();
   const parsed = addBagsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Enter a positive number of bags." };
+  const closed = await closedDateError(parsed.data.date ?? today());
+  if (closed) return { ok: false, error: closed };
 
   await db.insert(schema.stockIn).values({
     lotId: parsed.data.lotId,

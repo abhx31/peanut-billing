@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
+import { ExcelButton } from "@/components/excel-button";
 import { getExpensesByDate } from "@/lib/queries";
 import { money, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
@@ -36,6 +37,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Expenses on this date</CardTitle>
+          <ExcelButton report="expenses" date={date} />
         </CardHeader>
         <CardContent>
           <DateFilter paramKey="d" value={date} />

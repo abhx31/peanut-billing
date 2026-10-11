@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import * as schema from "./schema";
+import { pgConfig } from "./pg-config";
 
 config({ path: ".env.local" });
 
@@ -28,12 +29,7 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes("sslmode=require")
-      ? { rejectUnauthorized: false }
-      : undefined,
-  });
+  const pool = new Pool(pgConfig(process.env.DATABASE_URL));
   const db = drizzle(pool, { schema });
 
   const passwordHash = await bcrypt.hash(password, 10);

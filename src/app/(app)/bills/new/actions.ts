@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
+import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
+import { getCurrentLoc } from "@/lib/loc";
 
 const itemSchema = z.object({
   lotId: z.string().uuid(),
@@ -23,6 +25,7 @@ const saveBillSchema = z.object({
   gstPercent: z.number().min(0).max(100),
   payCash: z.number().min(0),
   payUpi: z.number().min(0),
+  payCj: z.number().min(0).optional().default(0),
 });
 
 type Result =
@@ -36,7 +39,10 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const d = parsed.data;
+  const closed = await closedDateError(d.date);
+  if (closed) return { ok: false, error: closed };
   const fy = fyOf(d.date);
+  const loc = await getCurrentLoc();
 
   const items = d.items.map((it) => ({
     ...it,
@@ -63,17 +69,19 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
       }
 
       const noResult = await tx.execute<{ no: number }>(
-        sql`select next_bill_no(${fy}) as no`,
+        sql`select next_bill_no(${fy}, 'normal') as no`,
       );
       const no = noResult.rows[0].no;
 
       const [bill] = await tx
         .insert(schema.bills)
         .values({
+          kind: "normal",
           no,
           fy,
           date: d.date,
           customer: d.customer,
+          loc: loc === "NM" ? "NM" : null,
           hamaliPerBag: d.hamaliPerBag.toString(),
           hamali: hamali.toString(),
           gstPercent: d.gstPercent.toString(),
@@ -117,6 +125,15 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           createdBy: session.user.id,
         });
       }
+      if (d.payCj && d.payCj > 0) {
+        payRows.push({
+          billId: bill.id,
+          date: d.date,
+          mode: "CJ",
+          amount: d.payCj.toString(),
+          createdBy: session.user.id,
+        });
+      }
       if (payRows.length) await tx.insert(schema.payments).values(payRows);
 
       return { billId: bill.id, billNo: no };
@@ -126,6 +143,8 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
     revalidatePath("/lots");
     revalidatePath("/day");
     revalidatePath("/stock");
+    revalidatePath("/nm");
+    revalidatePath("/cj");
     revalidatePath("/dashboard");
     return { ok: true, billId: result.billId, billNo: result.billNo, fy };
   } catch (err) {

@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FormActions, FormGrid } from "@/components/form";
 import { updateSettings } from "./actions";
 
 type Props = {
@@ -44,57 +45,69 @@ export function SettingsForm(initial: Props) {
         openingCash: openCashN,
         openingBank: openBankN,
       });
-      if (!res.ok) { toast.error(res.error); return; }
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
       toast.success("Settings saved");
       router.refresh();
     });
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="firm">Firm name</Label>
-        <Input id="firm" value={firm} onChange={(e) => setFirm(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="hamali">Default hamali per bag (₹)</Label>
-        <Input
-          id="hamali"
-          type="number"
-          min="0"
-          step="0.5"
-          value={hamali}
-          onChange={(e) => setHamali(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2" />
-      <div className="space-y-2">
-        <Label htmlFor="oc">Opening cash in hand (₹)</Label>
-        <Input
-          id="oc"
-          type="number"
-          min="0"
-          step="0.01"
-          value={openCash}
-          onChange={(e) => setOpenCash(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="ob">Opening bank / UPI balance (₹)</Label>
-        <Input
-          id="ob"
-          type="number"
-          min="0"
-          step="0.01"
-          value={openBank}
-          onChange={(e) => setOpenBank(e.target.value)}
-        />
-      </div>
-      <div className="sm:col-span-2">
+    <form onSubmit={onSubmit} className="space-y-5">
+      <FormGrid cols={2}>
+        <Field label="Firm name" htmlFor="firm" required span={2}>
+          <Input id="firm" value={firm} onChange={(e) => setFirm(e.target.value)} />
+        </Field>
+        <Field
+          label="Default hamali per bag (₹)"
+          htmlFor="hamali"
+          required
+          hint="Pre-fills on every new bill. You can still override per bill."
+        >
+          <Input
+            id="hamali"
+            type="number"
+            min="0"
+            step="0.5"
+            value={hamali}
+            onChange={(e) => setHamali(e.target.value)}
+          />
+        </Field>
+      </FormGrid>
+      <FormGrid cols={2}>
+        <Field
+          label="Opening cash in hand (₹)"
+          htmlFor="oc"
+          hint="Only used before the first closing is saved; after that the daily ledger uses the latest closing."
+        >
+          <Input
+            id="oc"
+            type="number"
+            min="0"
+            step="0.01"
+            value={openCash}
+            onChange={(e) => setOpenCash(e.target.value)}
+          />
+        </Field>
+        <Field label="Opening bank / UPI balance (₹)" htmlFor="ob">
+          <Input
+            id="ob"
+            type="number"
+            min="0"
+            step="0.01"
+            value={openBank}
+            onChange={(e) => setOpenBank(e.target.value)}
+          />
+        </Field>
+      </FormGrid>
+      <FormActions>
         <Button type="submit" disabled={pending}>
+          <Save className="mr-2 h-4 w-4" />
           {pending ? "Saving…" : "Save settings"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

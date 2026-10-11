@@ -36,6 +36,27 @@
       "when": 1790966799449,
       "tag": "0004_bill_items",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0005_phase1_schema_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791700000000,
+      "tag": "0006_year_close",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0007_archive_check_step",
+      "breakpoints": true
     }
   ]
 }

@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Field, FormActions, FormGrid } from "@/components/form";
 import { addExpense } from "./actions";
 
 const SUGGESTED = [
@@ -51,7 +52,10 @@ export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
         amount: amt,
         mode,
       });
-      if (!res.ok) { toast.error(res.error); return; }
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
       toast.success("Expense added");
       setCategory("");
       setNote("");
@@ -61,59 +65,65 @@ export function ExpenseForm({ defaultDate }: { defaultDate: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 items-end">
-      <div className="space-y-2">
-        <Label htmlFor="xd">Date</Label>
-        <Input id="xd" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="xc">Category</Label>
-        <Input
-          id="xc"
-          list="xcl"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="e.g. Transport"
-          autoComplete="off"
-        />
-        <datalist id="xcl">
-          {SUGGESTED.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="xn">Note</Label>
-        <Input id="xn" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="xa">Amount (₹)</Label>
-        <Input
-          id="xa"
-          type="number"
-          min="0"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Paid by</Label>
-        <Select value={mode} onValueChange={(v) => setMode((v as "Cash" | "UPI") ?? "Cash")}>
-          <SelectTrigger className="w-full">
-            <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Cash" label="Cash">Cash</SelectItem>
-            <SelectItem value="UPI" label="UPI">UPI</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="sm:col-span-2 lg:col-span-5">
+    <form onSubmit={onSubmit} className="space-y-5">
+      <FormGrid cols={3}>
+        <Field label="Date" htmlFor="xd" required>
+          <Input
+            id="xd"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </Field>
+        <Field label="Category" htmlFor="xc" required>
+          <Input
+            id="xc"
+            list="xcl"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g. Transport"
+            autoComplete="off"
+          />
+          <datalist id="xcl">
+            {SUGGESTED.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Note" htmlFor="xn" hint="Optional context like a vehicle no. or vendor name.">
+          <Input id="xn" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Field label="Amount (₹)" htmlFor="xa" required>
+          <Input
+            id="xa"
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </Field>
+        <Field label="Paid by" required>
+          <Select
+            value={mode}
+            onValueChange={(v) => setMode((v as "Cash" | "UPI") ?? "Cash")}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Cash" label="Cash">Cash</SelectItem>
+              <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      </FormGrid>
+      <FormActions>
         <Button type="submit" disabled={pending}>
+          <Plus className="mr-2 h-4 w-4" />
           {pending ? "Adding…" : "Add expense"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

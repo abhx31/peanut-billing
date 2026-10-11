@@ -14,10 +14,11 @@ const settingsSchema = z.object({
   openingBank: z.number().min(0),
 });
 
-const createStaffSchema = z.object({
+const createUserSchema = z.object({
   name: z.string().trim().min(1).max(80),
   email: z.string().email().transform((v) => v.trim().toLowerCase()),
   password: z.string().min(8).max(100),
+  role: z.enum(["owner", "editor", "staff"]).default("staff"),
 });
 
 const resetPasswordSchema = z.object({
@@ -58,11 +59,11 @@ export async function updateSettings(
   return { ok: true };
 }
 
-export async function createStaff(
-  input: z.input<typeof createStaffSchema>,
+export async function createUser(
+  input: z.input<typeof createUserSchema>,
 ): Promise<Result> {
   await requireOwner();
-  const parsed = createStaffSchema.safeParse(input);
+  const parsed = createUserSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Enter a name, valid email, and 8+ char password." };
   }
@@ -77,7 +78,7 @@ export async function createStaff(
     name: parsed.data.name,
     email: parsed.data.email,
     passwordHash,
-    role: "staff",
+    role: parsed.data.role,
   });
   revalidatePath("/settings");
   return { ok: true };
@@ -94,9 +95,8 @@ export async function resetStaffPassword(
     where: eq(schema.users.id, parsed.data.userId),
   });
   if (!target) return { ok: false, error: "User not found." };
-  if (target.role === "owner" && target.id !== session.user.id) {
-    return { ok: false, error: "You can only reset your own owner password here." };
-  }
+  // Any owner can reset any other user's password (including other owners).
+  void session;
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
   await db

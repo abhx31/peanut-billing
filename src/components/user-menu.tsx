@@ -16,7 +16,7 @@ import {
 type Props = {
   name: string | null;
   email: string;
-  role: "owner" | "staff";
+  role: "owner" | "editor" | "staff";
 };
 
 export function UserMenu({ name, email, role }: Props) {
@@ -63,7 +63,7 @@ export function UserMenu({ name, email, role }: Props) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {role === "owner" && (
+          {(role === "owner" || role === "editor") && (
             <DropdownMenuItem
               onClick={() => router.push("/settings")}
               className="cursor-pointer gap-2"

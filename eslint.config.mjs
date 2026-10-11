@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Reference HTML / vanilla JS — kept for porting, not shipped.
+    "inspiration/**",
   ]),
 ]);
 

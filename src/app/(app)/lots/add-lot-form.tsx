@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FormActions, FormGrid } from "@/components/form";
 import { addLot } from "./actions";
 
 export function AddLotForm({ isOwner }: { isOwner: boolean }) {
@@ -41,45 +42,54 @@ export function AddLotForm({ isOwner }: { isOwner: boolean }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
-      <div className="sm:col-span-2 space-y-2">
-        <Label htmlFor="lot-name">Lot no. / quality name</Label>
-        <Input
-          id="lot-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Lot 12 – Bold 40/50"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="lot-bags">Bags (opening stock)</Label>
-        <Input
-          id="lot-bags"
-          type="number"
-          min="0"
-          step="1"
-          value={bags}
-          onChange={(e) => setBags(e.target.value)}
-        />
-      </div>
-      {isOwner && (
-        <div className="space-y-2">
-          <Label htmlFor="lot-cost">Cost per kg (₹)</Label>
+    <form onSubmit={onSubmit} className="space-y-5">
+      <FormGrid cols={isOwner ? 3 : 2}>
+        <Field
+          label="Lot no. / quality name"
+          htmlFor="lot-name"
+          required
+          span={isOwner ? 1 : 2}
+        >
           <Input
-            id="lot-cost"
+            id="lot-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Lot 12 – Bold 40/50"
+          />
+        </Field>
+        <Field label="Bags (opening stock)" htmlFor="lot-bags">
+          <Input
+            id="lot-bags"
             type="number"
             min="0"
-            step="0.01"
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
+            step="1"
+            value={bags}
+            onChange={(e) => setBags(e.target.value)}
           />
-        </div>
-      )}
-      <div className={isOwner ? "sm:col-span-2 lg:col-span-4" : "sm:col-span-2 lg:col-span-3"}>
+        </Field>
+        {isOwner && (
+          <Field
+            label="Cost per kg (₹)"
+            htmlFor="lot-cost"
+            hint="Owner-only — used to compute profit. Visible to owners and editors."
+          >
+            <Input
+              id="lot-cost"
+              type="number"
+              min="0"
+              step="0.01"
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+            />
+          </Field>
+        )}
+      </FormGrid>
+      <FormActions>
         <Button type="submit" disabled={pending}>
+          <Plus className="mr-2 h-4 w-4" />
           {pending ? "Adding…" : "Add lot"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

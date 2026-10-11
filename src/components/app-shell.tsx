@@ -8,20 +8,29 @@ import {
   Boxes,
   CalendarRange,
   CreditCard,
+  FileText,
+  HandCoins,
   LayoutDashboard,
   LineChart,
   Menu,
   Nut,
+  Package,
   Receipt,
+  Scale,
   Settings as SettingsIcon,
+  ShoppingBasket,
+  Store,
   TrendingUp,
+  Users as UsersIcon,
   Wallet,
   X,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
+import { LocBar } from "@/components/loc-bar";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
+import type { Loc } from "@/lib/loc";
 
 export type NavItem = {
   href: string;
@@ -35,22 +44,30 @@ const ICONS = {
   bill: Receipt,
   lots: Boxes,
   day: CalendarRange,
-  stock: Wallet,
+  stock: Package,
+  nm: Store,
   ledger: BarChart3,
   expenses: CreditCard,
+  hamali: Scale,
+  cj: HandCoins,
+  recv: Wallet,
   balances: LineChart,
+  gst: FileText,
+  gcust: UsersIcon,
+  patti: ShoppingBasket,
   profit: TrendingUp,
   settings: SettingsIcon,
 };
 
 type Props = {
   firm: string;
-  user: { name: string | null; email: string; role: "owner" | "staff" };
+  user: { name: string | null; email: string; role: "owner" | "editor" | "staff" };
+  loc: Loc;
   items: NavItem[];
   children: React.ReactNode;
 };
 
-export function AppShell({ firm, user, items, children }: Props) {
+export function AppShell({ firm, user, loc, items, children }: Props) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
   const closeMobile = React.useCallback(() => setMobileOpen(false), []);
@@ -115,6 +132,8 @@ export function AppShell({ firm, user, items, children }: Props) {
             <UserMenu name={user.name} email={user.email} role={user.role} />
           </div>
         </header>
+
+        <LocBar loc={loc} />
 
         <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 md:px-8 md:py-8">
           {children}

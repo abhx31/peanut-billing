@@ -18,13 +18,13 @@ export default {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id as string;
-        token.role = (user as { role?: "owner" | "staff" }).role;
+        token.role = (user as { role?: "owner" | "editor" | "staff" }).role;
       }
       return token;
     },
     async session({ session, token }) {
       if (token.id) session.user.id = token.id as string;
-      if (token.role) session.user.role = token.role as "owner" | "staff";
+      if (token.role) session.user.role = token.role as "owner" | "editor" | "staff";
       return session;
     },
   },

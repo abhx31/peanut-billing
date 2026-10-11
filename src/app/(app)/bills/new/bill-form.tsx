@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormActions } from "@/components/form";
 import { Badge } from "@/components/ui/badge";
 import { fyOf, money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
 import { saveBill } from "./actions";
@@ -27,6 +28,7 @@ type Props = {
   hamaliDefault: number;
   customers: { name: string; balance: number }[];
   lotCosts: Record<string, string> | null;
+  loc: "" | "NM";
 };
 
 type CartItem = {
@@ -40,9 +42,10 @@ type CartItem = {
   weights: string;
 };
 
-export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
+export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const storeLabel = loc === "NM" ? "New Mahavir" : "Main store";
 
   const [date, setDate] = useState(today());
   const [customer, setCustomer] = useState("");
@@ -60,6 +63,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
   const [credit, setCredit] = useState(false);
   const [cash, setCash] = useState("");
   const [upi, setUpi] = useState("");
+  const [cj, setCj] = useState("");
 
   const parsedWeights = useMemo(() => parseBagWeights(weights), [weights]);
 
@@ -104,7 +108,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
     const hamali = r2(totalBags * num(hamaliPerBag));
     const gst = r2((amount * num(gstPercent)) / 100);
     const total = r2(amount + hamali + gst);
-    const paid = credit ? 0 : num(cash) + num(upi);
+    const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(total - paid);
     const profit = lotCosts
       ? r2(
@@ -115,7 +119,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
         )
       : null;
     return { totalBags, totalKg, amount, hamali, gst, total, paid, balance, profit };
-  }, [items, hamaliPerBag, gstPercent, cash, upi, credit, lotCosts]);
+  }, [items, hamaliPerBag, gstPercent, cash, upi, cj, credit, lotCosts]);
 
   const fy = fyOf(date);
 
@@ -157,6 +161,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
     setGstPercent("0");
     setCash("");
     setUpi("");
+    setCj("");
     setCredit(false);
   }
 
@@ -180,7 +185,11 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
     for (const [lotId, { name, need }] of neededByLot) {
       const lot = lots.find((l) => l.id === lotId);
       if (lot && need > lot.left) {
-        if (!confirm(`Only ${lot.left} bags of "${name}" in stock. Save anyway?`)) {
+        if (
+          !confirm(
+            `Only ${lot.left} bags of "${name}" in stock at ${storeLabel}. Save anyway?`,
+          )
+        ) {
           return false;
         }
       }
@@ -207,6 +216,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
         gstPercent: num(gstPercent),
         payCash: credit ? 0 : num(cash),
         payUpi: credit ? 0 : num(upi),
+        payCj: credit ? 0 : num(cj),
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -461,8 +471,12 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Payment</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Billing at <b>{storeLabel}</b> — cash and UPI go to this store&apos;s ledger.
+            Use <b>CJ</b> when the customer pays through the go-between (settles later).
+          </p>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="cash">Paid cash (₹)</Label>
             <Input
@@ -488,6 +502,18 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="cj">Paid via CJ (₹)</Label>
+            <Input
+              id="cj"
+              type="number"
+              min="0"
+              step="0.01"
+              value={cj}
+              onChange={(e) => setCj(e.target.value)}
+              disabled={credit}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Payment option</Label>
             <Button
               type="button"
@@ -498,6 +524,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
                 if (!credit) {
                   setCash("");
                   setUpi("");
+                  setCj("");
                 }
               }}
             >
@@ -535,11 +562,12 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts }: Props) {
         </CardContent>
       </Card>
 
-      <div className="flex gap-3">
+      <FormActions>
         <Button type="submit" disabled={pending} size="lg">
+          <Save className="mr-2 h-4 w-4" />
           {pending ? "Saving…" : "Save bill"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

@@ -5,6 +5,7 @@ import {
   getLotsWithStock,
   getSettings,
 } from "@/lib/queries";
+import { getCurrentLoc } from "@/lib/loc";
 import { BillForm } from "./bill-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
@@ -13,13 +14,15 @@ export const dynamic = "force-dynamic";
 
 export default async function NewBillPage() {
   const session = await requireSession();
-  const isOwner = session.user.role === "owner";
+  const role = session.user.role;
+  const canSeeCost = role === "owner" || role === "editor";
 
-  const [lots, settings, customerBalances, costs] = await Promise.all([
+  const [lots, settings, customerBalances, costs, loc] = await Promise.all([
     getLotsWithStock(),
     getSettings(),
     getCustomerBalances(),
-    isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
+    canSeeCost ? getLotCosts() : Promise.resolve({} as Record<string, string>),
+    getCurrentLoc(),
   ]);
 
   if (lots.length === 0) {
@@ -40,12 +43,20 @@ export default async function NewBillPage() {
     );
   }
 
+  // Pre-shape lots so the form only sees the store-relevant stock number.
+  const storeLots = lots.map((l) => ({
+    id: l.id,
+    name: l.name,
+    left: loc === "NM" ? l.stkN : l.stkM,
+  }));
+
   return (
     <BillForm
-      lots={lots}
+      lots={storeLots}
       hamaliDefault={Number(settings.hamaliDefault)}
       customers={customerBalances.map((c) => ({ name: c.name, balance: c.balance }))}
-      lotCosts={isOwner ? costs : null}
+      lotCosts={canSeeCost ? costs : null}
+      loc={loc}
     />
   );
 }

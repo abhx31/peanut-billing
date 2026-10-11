@@ -4,6 +4,7 @@ import { getCustomerBalances } from "@/lib/queries";
 import { money } from "@/lib/format";
 import { ReceiveFromCustomerButton } from "./receive-from-customer-button";
 import { BackupButtons } from "./backup-buttons";
+import { ExcelButton } from "@/components/excel-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,10 @@ export default async function BalancesPage() {
           <CardTitle>Backup</CardTitle>
         </CardHeader>
         <CardContent>
-          <BackupButtons isOwner={isOwner} />
+          <div className="flex gap-2 flex-wrap items-center">
+            <ExcelButton report="balances" label="Balances (Excel)" />
+            <BackupButtons isOwner={isOwner} />
+          </div>
         </CardContent>
       </Card>
 

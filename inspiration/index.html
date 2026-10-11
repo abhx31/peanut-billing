@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Peanut Billing</title>
+<link rel="stylesheet" href="styles.css"></head><body>
+<main>
+<div id="bn" class="card" hidden></div>
+<h1 id="firm" title="Tap to rename"></h1>
+<div id="role" class="empty"></div>
+<div id="locbar" class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px"><label style="margin:0;flex:1;min-width:150px">Working at<select id="loc"><option value="">Main store</option><option value="NM">New Mahavir</option></select></label><span id="locmsg" style="font-weight:600"></span></div>
+<nav><button data-t="dash" class="on">Dashboard</button><button data-t="bill">New bill</button><button data-t="lots">Add lots</button><button data-t="day">Daily summary</button><button data-t="stock">Stock</button><button data-t="nm">New Mahavir</button><button data-t="ledger">Daily ledger</button><button data-t="exp">Expenses</button><button data-t="ham">Hamali</button><button data-t="cj">CJ</button><button data-t="recv">Receivables</button><button data-t="bal">Balances</button><button data-t="gst">GST bill</button><button data-t="gcust">GST customers</button><button data-t="patti">Patti bill</button><button data-t="profit">Profit</button></nav>
+
+<section id="dash">
+<div class="card"><h2>Today</h2><div class="sum" id="dbx"></div><div class="tw" id="dbs" style="margin-top:8px"></div></div>
+<div class="card"><h2>Position now</h2><div class="sum" id="dby"></div></div>
+<div class="card"><h2>Latest bills</h2><div class="tw" id="dbl"></div></div>
+</section>
+
+<section id="bill" hidden>
+<div class="card"><h2>Create bill</h2><div id="nb" style="font-weight:600;margin-bottom:8px"></div>
+<div class="grid" style="grid-template-columns:1fr 1fr">
+<label style="grid-column:1/-1">Date<input type="date" id="bd"></label>
+<label>Customer name<input id="bc" placeholder="Customer" list="cl" autocomplete="off"><datalist id="cl"></datalist></label>
+<label>Hamali per bag (₹)<input type="number" id="bh" min="0" step="0.5" inputmode="decimal"></label>
+</div>
+<h2 style="margin-top:16px">Lots in this bill</h2>
+<div class="tw" id="cart"></div>
+<div class="grid" style="margin-top:8px;grid-template-columns:1fr 1fr">
+<label>Lot / quality<select id="bl"></select></label>
+<label>Price per kg (₹)<input type="number" id="bp" min="0" step="0.01" inputmode="decimal"></label>
+<label style="grid-column:1/-1">Weight of each bag (kg)<textarea id="bw" rows="3" placeholder="e.g. 40.5 41 39.8"></textarea><span id="bwi" class="empty"></span></label>
+<label>No. of bags<input type="number" id="bb" min="0" step="1" inputmode="numeric"></label>
+<label>Total weight (kg)<input type="number" id="bk" min="0" step="0.01" inputmode="decimal"></label>
+</div>
+<button class="sm" id="additem" type="button" style="margin:10px 0;padding:9px 14px">+ Add this lot to the bill (another lot for the same customer)</button>
+<h2 style="margin-top:8px">Payment</h2>
+<div class="grid">
+<label>Paid cash (₹)<input type="number" id="bcash" min="0" step="0.01"></label>
+<label>Paid UPI (₹)<input type="number" id="bupi" min="0" step="0.01"></label>
+<label>Paid via CJ (₹)<input type="number" id="bcj" min="0" step="0.01"></label>
+<div><label>Payment option</label><button class="sm tog" id="credit" type="button" aria-pressed="false">Balance / credit</button></div>
+</div>
+<div id="prev" class="empty"></div>
+<div class="sum" id="pv"></div>
+<button class="btn" id="save">Save bill</button> <button class="btn" id="savev" type="button">Save &amp; view bill</button> <button class="btn" id="savep" type="button">Save &amp; print</button> <span id="msg" class="empty"></span>
+</div></section>
+
+<section id="nm" hidden>
+<div class="card"><h2>Transfer stock</h2><div class="grid">
+<label>Date<input type="date" id="xfdt"></label>
+<label>Lot / quality<select id="xfl"></select></label>
+<label>Bags<input type="number" id="xfb" min="0" step="1"></label>
+<label>Direction<select id="xfd"><option value="out">Main store → New Mahavir</option><option value="back">New Mahavir → Main store (return)</option></select></label>
+<label style="grid-column:1/-1">Vehicle / note (optional)<input id="xfn"></label></div>
+<button class="btn" id="xfadd" type="button" style="margin-top:10px">Transfer</button></div>
+<div class="card"><h2>Stock at New Mahavir</h2><div class="tw" id="nms"></div></div>
+<div class="card"><div class="row"><label>Show New Mahavir sales of<input type="date" id="nmd"></label></div><div class="sum" id="nmx" style="margin-top:8px"></div><div class="tw" id="nmb"></div></div>
+<div class="card"><h2>Transfers (latest 30)</h2><div class="tw" id="nmt"></div></div>
+</section>
+
+<section id="stock" hidden>
+<div class="card"><h2>Stock left</h2><div class="sum" id="sts"></div><div class="tw" id="stt"></div></div>
+<div class="card"><h2>Stock added (latest 30)</h2><div class="tw" id="sth"></div></div>
+</section>
+
+<section id="ledger" hidden>
+<div class="card"><div class="row"><label>Date<input type="date" id="ld"></label><button class="sm" id="lp" type="button">Print ledger</button><button class="sm" id="lo" type="button">Set opening balance</button></div></div>
+<div class="card"><h2>Close the day</h2><div id="clinfo" class="sum"></div>
+<div class="grid" id="clin"><label>Cash counted in hand (₹)<input type="number" id="clc" min="0" step="0.01" inputmode="decimal"></label><label>Bank / UPI balance (₹, optional)<input type="number" id="clb" step="0.01" inputmode="decimal"></label></div>
+<button class="btn" id="clsave" type="button" style="margin-top:10px">Save as closing</button> <button class="sm" id="clrm" type="button">Remove closing</button>
+<div class="empty" style="margin-top:6px">The closing you save becomes the opening of the next day. Save it after all bills and expenses of the day are entered.</div></div>
+<div id="lgc"></div>
+</section>
+
+<section id="exp" hidden>
+<div class="card"><h2>Add expense</h2><div class="grid">
+<label>Date<input type="date" id="xd"></label>
+<label>Category<input id="xc" list="xcl" placeholder="e.g. Transport" autocomplete="off"><datalist id="xcl"><option value="Hamali / labour"><option value="Transport"><option value="Rent"><option value="Salary"><option value="Electricity"><option value="Packing / bags"><option value="Tea &amp; food"><option value="Repairs"><option value="Other"></datalist></label>
+<label>Note<input id="xn" placeholder="Optional"></label>
+<label>Amount (₹)<input type="number" id="xa" min="0" step="0.01"></label>
+<label>Paid by<select id="xm"><option>Cash</option><option>UPI</option></select></label>
+<label>Store<select id="xs"><option value="">Main store</option><option value="NM">New Mahavir</option></select></label></div>
+<button class="btn" id="xadd" style="margin-top:10px">Add expense</button></div>
+<div class="card"><h2>Expenses on this date</h2><div class="tw" id="xl"></div></div>
+</section>
+
+<section id="profit" hidden>
+<div class="card"><div class="row"><label>Accounting period (1 Apr – 31 Mar)<select id="pf"></select></label></div><div class="sum" id="pst"></div></div>
+<div class="card"><h2>Day-wise profit</h2><div class="tw" id="pdw"></div></div>
+<div class="card"><h2>Profit by lot</h2><div class="tw" id="pl"></div></div>
+<div class="card"><h2>Profit on each bill</h2><div class="tw" id="pbl"></div></div>
+</section>
+
+<section id="ham" hidden>
+<div class="card"><div class="row"><label>Date<input type="date" id="hmd"></label></div><div class="sum" id="hmx" style="margin-top:8px"></div>
+<button class="btn" id="hmpay" type="button">Record hamali payment</button> <button class="sm" id="hmun" type="button" hidden>Undo payment</button>
+<div class="empty" style="margin-top:6px">Recording the payment adds it to Expenses as Hamali, so your cash or UPI balance goes down on that day.</div></div>
+<div class="card"><h2>Hamali charged on this date's bills</h2><div class="tw" id="hmb"></div></div>
+<div class="card"><h2>Recent days</h2><div class="tw" id="hmr"></div></div>
+</section>
+
+<section id="cj" hidden>
+<div class="card"><h2>Payments received through CJ</h2><div class="sum" id="cjx"></div>
+<div class="grid" id="cjf" style="margin-top:10px"><label>Date<input type="date" id="cjdt"></label><label>Amount CJ gave you (₹)<input type="number" id="cja" min="0" step="0.01" inputmode="decimal"></label><label>You received it as<select id="cjm"><option>Cash</option><option>UPI</option></select></label><label>Note (optional)<input id="cjn"></label></div>
+<button class="btn" id="cjsave" type="button" style="margin-top:10px">Record settlement</button>
+<div class="empty" style="margin-top:6px">When CJ hands over or transfers the money to you, record it here. It then counts as cash or UPI in your ledger on that day.</div></div>
+<div class="card"><h2>Settlements (CJ paid you)</h2><div class="tw" id="cjs"></div></div>
+<div class="card"><h2>Received through CJ (latest 40)</h2><div class="tw" id="cjr"></div></div>
+</section>
+
+<section id="recv" hidden>
+<div class="card" id="rvf"><h2>Old dues from before you started using the app</h2>
+<div class="empty" style="margin-bottom:8px">Enter each customer's total due as of your start date. These are not new sales, so they do not change sales, profit, stock or hamali.</div>
+<div class="grid"><label>Customer<input id="rvc" list="rvl" autocomplete="off"><datalist id="rvl"></datalist></label>
+<label>Amount due (₹)<input type="number" id="rva" min="0" step="0.01"></label>
+<label>Due as of (start date)<input type="date" id="rvd"></label>
+<label>Note (optional)<input id="rvn"></label></div>
+<button class="btn" id="rvadd" type="button" style="margin-top:10px">Add old due</button></div>
+<div class="card"><h2>Old dues</h2><div class="sum" id="rvs"></div><div class="tw" id="rvt"></div></div>
+</section>
+
+<section id="bal" hidden>
+<div class="card"><h2>Backup</h2><button class="sm" id="bk1">Download all bills (CSV)</button> <button class="sm" id="bk2">Download full backup (JSON)</button></div>
+<div class="card"><h2>Customer balances (credit given)</h2><input id="bsr" placeholder="Search customer name" autocomplete="off" style="margin-bottom:8px"><div class="tw" id="bt"></div></div>
+</section>
+
+<section id="gst" hidden>
+<div class="card"><h2>GST tax invoice</h2><div id="gnb" style="font-weight:600;margin-bottom:8px"></div>
+<div class="grid">
+<label>Date<input type="date" id="gd"></label>
+<label>Buyer (bill to)<select id="gcu"></select></label>
+<label>e-Way bill no.<input id="gew"></label>
+<label>Motor vehicle no.<input id="gve"></label>
+<label>Dispatched through<input id="gth" value="Self"></label>
+<label>Destination<input id="gde"></label>
+</div>
+<label style="margin-top:8px"><input type="checkbox" id="gsame" checked style="width:auto;margin-right:6px">Consignee (ship to) is the same as buyer</label>
+<div id="gcow" hidden><label>Consignee (ship to)<select id="gco"></select></label></div>
+<details style="margin-top:8px"><summary>More invoice details (optional)</summary><div class="grid" style="margin-top:8px">
+<label>Delivery note<input id="gdn"></label><label>Mode / terms of payment<input id="gmp"></label>
+<label>Reference no. &amp; date<input id="grf"></label><label>Other references<input id="gor"></label>
+<label>Buyer's order no.<input id="gbo"></label><label>Buyer's order date<input id="gbd"></label>
+<label>Dispatch doc no.<input id="gdd"></label><label>Delivery note date<input id="gdt"></label>
+<label>Bill of lading / LR-RR no.<input id="glr"></label><label>Terms of delivery<input id="gtd"></label>
+</div></details>
+<h2 style="margin-top:16px">Lots in this invoice</h2>
+<div class="tw" id="gcart"></div>
+<div class="grid" style="margin-top:8px">
+<label>Lot / quality (stock)<select id="gl"></select></label>
+<label>Description on invoice<input id="gds" value="Ground Nuts"></label>
+<label>HSN/SAC<input id="ghs" value="12023090"></label>
+<label>No. of bags<input type="number" id="gb" min="0" step="1"></label>
+<label style="grid-column:1/-1">Weight of each bag (kg) – separate with space, comma or new line. Same weight bags: 50x40.5<textarea id="gw" rows="3" placeholder="40.5 41 39.8 50x40.5"></textarea><span id="gwi" class="empty"></span></label>
+<label>Total weight (kg)<input type="number" id="gk" min="0" step="0.01"></label>
+<label>Rate per kg (₹)<input type="number" id="gp" min="0" step="0.01"></label>
+<label>Or item amount (₹)<input type="number" id="ga" min="0" step="0.01" placeholder="overrides kg × rate"></label>
+</div>
+<button class="sm" id="gadd" type="button" style="margin:10px 0;padding:9px 14px">+ Add this lot to the invoice</button>
+<div class="grid">
+<label>GST rate<select id="grt"><option value="5">5% (CGST 2.5% + SGST 2.5%)</option><option value="0">0%</option><option value="12">12%</option><option value="18">18%</option></select></label>
+<label>Paid cash (₹)<input type="number" id="gcash" min="0" step="0.01"></label>
+<label>Paid UPI (₹)<input type="number" id="gupi" min="0" step="0.01"></label>
+<label>Paid via CJ (₹)<input type="number" id="gcj" min="0" step="0.01"></label>
+<div><label>Payment option</label><button class="sm tog" id="gcredit" type="button" aria-pressed="false">Balance / credit</button></div>
+</div>
+<div class="sum" id="gpv"></div>
+<button class="btn" id="gsave" type="button">Save invoice</button> <button class="btn" id="gsavev" type="button">Save &amp; view</button> <button class="btn" id="gsavep" type="button">Save &amp; print</button> <span id="gmsg" class="empty"></span>
+</div></section>
+
+<section id="gcust" hidden>
+<div class="card"><h2>Add / edit GST customer</h2><div class="grid">
+<label>Name<input id="cn"></label><label>GSTIN<input id="cg" maxlength="15" autocapitalize="characters"></label>
+<label>State<input id="cs"></label><label>State code<input id="cc"></label>
+<label>Phone (optional)<input id="cp"></label>
+<label style="grid-column:1/-1">Address<textarea id="ca" rows="3"></textarea></label></div>
+<div style="margin-top:10px"><button class="btn" id="csave" type="button">Save customer</button> <button class="sm" id="cclr" type="button">Clear</button> <span id="cmsg" class="empty"></span></div></div>
+<div class="card"><h2>GST customers</h2><div class="tw" id="clist"></div></div>
+<div class="card" id="fcard"><h2>My firm details (printed on GST invoices)</h2><div class="grid">
+<label>Firm name<input id="fn"></label><label>GSTIN<input id="fg"></label>
+<label>FSSAI no.<input id="ff"></label><label>E-mail<input id="fe"></label>
+<label>State<input id="fs"></label><label>State code<input id="fc"></label>
+<label style="grid-column:1/-1">Address<textarea id="fa" rows="3"></textarea></label>
+<label>Bank account holder<input id="fbh"></label><label>Bank name<input id="fbn"></label>
+<label>A/c no.<input id="fba"></label><label>Branch &amp; IFS code<input id="fbi"></label>
+<label style="grid-column:1/-1">Declaration<textarea id="fdc" rows="3"></textarea></label>
+<label>Next invoice no. (this financial year)<input type="number" id="fnx" min="1" step="1"></label></div>
+<div style="margin-top:10px"><button class="btn" id="fsave" type="button">Save firm details</button> <span id="fmsg" class="empty"></span></div></div>
+</section>
+
+<section id="patti" hidden>
+<div class="card"><h2>Patti bill (purchase / procurement)</h2>
+<div id="pnb" style="font-weight:600;margin-bottom:8px"></div>
+<div class="grid">
+<label>Date<input type="date" id="pd"></label>
+<label>Seller / party name<input id="pn" placeholder="Seller" autocomplete="off"></label>
+<label>Lot / quality (optional)<input id="pq" list="pql" placeholder="e.g. Bold 40/50" autocomplete="off"><datalist id="pql"></datalist></label>
+<label>No. of bags<input type="number" id="pb" min="0" step="1" inputmode="numeric"></label>
+<label>Total weight (kg)<input type="number" id="pk" min="0" step="0.01" inputmode="decimal"></label>
+<label>Price per kg (₹)<input type="number" id="pp" min="0" step="0.01" inputmode="decimal"></label>
+<label style="grid-column:1/-1">Each bag's weight (kg) – optional. Leave it empty if you only have the total weight and number of bags<textarea id="pw" rows="2" placeholder="optional"></textarea><span id="pwi" class="empty"></span></label>
+</div>
+<h2 style="margin-top:16px">Optional – tick only what applies to this bill</h2>
+<div class="grid">
+<div><label><input type="checkbox" id="pcdOn" style="width:auto;margin-right:6px">CD % (deducted)</label><input type="number" id="pcdP" value="1" min="0" step="0.1" disabled></div>
+<div><label><input type="checkbox" id="plbOn" style="width:auto;margin-right:6px">Labour ₹ per bag (deducted)</label><input type="number" id="plb" min="0" step="0.5" disabled></div>
+<div><label><input type="checkbox" id="pbrOn" style="width:auto;margin-right:6px">Brokerage ₹ per bag (added)</label><input type="number" id="pbr" value="10" min="0" step="0.5" disabled></div>
+<div><label><input type="checkbox" id="ptrOn" style="width:auto;margin-right:6px">Transportation ₹ (deducted)</label><input type="number" id="ptr" min="0" step="0.01" disabled></div>
+</div>
+<div class="grid" style="margin-top:12px"><label>Payment to seller<select id="ppm"><option value="">Not paid yet</option><option>Cash</option><option>UPI</option></select></label></div>
+<div class="sum" id="ppv"></div>
+<button class="btn" id="psave" type="button">Save patti bill</button> <button class="btn" id="psavev" type="button">Save &amp; view</button> <span id="pmsg" class="empty"></span>
+</div>
+<div class="card"><div class="row"><label>Show patti bills of date<input type="date" id="pld"></label></div><div class="tw" id="pls" style="margin-top:8px"></div></div>
+</section>
+
+<section id="lots" hidden>
+<div class="card"><h2>Add lot</h2>
+<div class="row">
+<label style="flex:2;min-width:160px">Lot no. / quality name<input id="ln" placeholder="e.g. Lot 12 – Bold 40/50"></label>
+<label style="flex:1;min-width:90px">Bags<input type="number" id="lb" min="0" step="1"></label>
+<label id="lcw" style="flex:1;min-width:110px">Cost per kg (₹)<input type="number" id="lc" min="0" step="0.01"></label>
+<button class="btn" id="addlot">Add lot</button></div></div>
+<div class="card"><h2>Stock</h2><div class="tw" id="lt"></div></div>
+</section>
+
+<section id="day" hidden>
+<div class="card"><div class="row"><label>Date<input type="date" id="dd"></label></div>
+<div class="sum" id="ds"></div>
+<div class="tw" id="dsb" style="margin-top:10px"></div></div>
+<div class="card"><h2>Bills on this date</h2><div class="tw" id="dt"></div></div>
+<div class="card"><h2>Stock left</h2><div class="tw" id="st"></div></div>
+</section>
+</main>
+<div id="ov" hidden style="position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))">
+<div style="max-width:760px;margin:0 auto"><div class="row" style="margin-bottom:8px"><button class="btn" id="ovp" type="button">Print</button><button class="sm" id="ovs" type="button" style="padding:10px 16px;background:var(--card);color:var(--ink)">Save as file</button><button class="btn" id="ovc" type="button" style="background:var(--card);color:var(--ink);border:1px solid var(--line)">Close</button></div>
+<div id="ovb"></div></div></div>
+<div id="dlg" hidden style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))"><div id="dlgb" class="card" style="max-width:420px;margin:10vh auto 0"></div></div>
+<div id="toast" hidden style="position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:70;background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:8px;font-weight:500;max-width:560px;margin:0 auto"></div>
+<style id="pgsz"></style>
+<div id="inv"></div>
+
+<!-- DEV ONLY: a local stand-in for the storage/user/download functions the page needs (see SPEC.md).
+     Delete this line once your own backend provides window.claude. -->
+<script src="mock-claude.js"></script>
+<script src="app.js"></script></body></html>

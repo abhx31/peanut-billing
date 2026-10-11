@@ -12,7 +12,7 @@ type User = {
   id: string;
   name: string | null;
   email: string;
-  role: "owner" | "staff";
+  role: "owner" | "editor" | "staff";
   disabled: boolean;
   createdAt: Date;
 };
@@ -41,6 +41,9 @@ export function StaffList({ users, currentUserId }: Props) {
           {users.map((u) => {
             const isSelf = u.id === currentUserId;
             const isOwner = u.role === "owner";
+            const isEditor = u.role === "editor";
+            // Owners cannot be deleted or disabled; editors can.
+            const canModify = !isOwner && !isSelf;
             return (
               <tr key={u.id} className={`border-b last:border-0 ${u.disabled ? "opacity-60" : ""}`}>
                 <td className="py-2 pr-4">
@@ -55,6 +58,10 @@ export function StaffList({ users, currentUserId }: Props) {
                 <td className="py-2 pr-4">
                   {isOwner ? (
                     <Badge className="bg-primary/15 text-primary border-0">Owner</Badge>
+                  ) : isEditor ? (
+                    <Badge className="bg-primary/10 text-primary border border-primary/20">
+                      Editor
+                    </Badge>
                   ) : (
                     <Badge variant="secondary">Staff</Badge>
                   )}
@@ -79,14 +86,14 @@ export function StaffList({ users, currentUserId }: Props) {
                 <td className="py-2 pr-0 text-right">
                   <div className="flex gap-1 justify-end flex-wrap">
                     <ResetPasswordDialog userId={u.id} userName={u.name ?? u.email} />
-                    {!isOwner && !isSelf && (
+                    {canModify && (
                       <ToggleDisabledButton
                         userId={u.id}
                         userName={u.name ?? u.email}
                         disabled={u.disabled}
                       />
                     )}
-                    {!isOwner && !isSelf && (
+                    {canModify && (
                       <ConfirmDestructive
                         title={`Delete ${u.name ?? u.email}?`}
                         description="Permanent removal — their login is gone forever. Bills they created stay in the system. Prefer Disable if they might return."

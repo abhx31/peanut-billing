@@ -67,14 +67,41 @@ export async function GET(req: Request) {
   }
 
   // JSON backup
-  const [lots, stockIn, bills, payments, expenses, settings, costs] = await Promise.all([
+  const [
+    lots,
+    stockIn,
+    transfers,
+    bills,
+    billItems,
+    payments,
+    expenses,
+    hamaliPaid,
+    openingDues,
+    openingPayments,
+    cjSettlements,
+    closings,
+    gstCustomers,
+    settings,
+    costs,
+    pattiBills,
+  ] = await Promise.all([
     db.select().from(schema.lots),
     db.select().from(schema.stockIn),
+    db.select().from(schema.transfers),
     db.select().from(schema.bills),
+    db.select().from(schema.billItems),
     db.select().from(schema.payments),
     db.select().from(schema.expenses),
+    db.select().from(schema.hamaliPaid),
+    db.select().from(schema.openingDues),
+    db.select().from(schema.openingPayments),
+    db.select().from(schema.cjSettlements),
+    db.select().from(schema.closings),
+    db.select().from(schema.gstCustomers),
     db.select().from(schema.settings),
     isOwner ? db.select().from(schema.lotCosts) : Promise.resolve([]),
+    // Purchase prices: owner only, like lot costs.
+    isOwner ? db.select().from(schema.pattiBills) : Promise.resolve([]),
   ]);
 
   const payload = {
@@ -83,11 +110,19 @@ export async function GET(req: Request) {
     role: session.user.role,
     lots,
     stockIn,
+    transfers,
     bills,
+    billItems,
     payments,
     expenses,
+    hamaliPaid,
+    openingDues,
+    openingPayments,
+    cjSettlements,
+    closings,
+    gstCustomers,
     settings,
-    ...(isOwner ? { lotCosts: costs } : {}),
+    ...(isOwner ? { lotCosts: costs, pattiBills } : {}),
   };
 
   return new Response(JSON.stringify(payload, null, 2), {

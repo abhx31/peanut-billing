@@ -6,20 +6,27 @@ import {
   Banknote,
   Boxes,
   CreditCard,
+  HandCoins,
   Package,
   Receipt,
+  ShoppingBasket,
+  Store,
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { sql } from "drizzle-orm";
 import { requireSession } from "@/lib/auth-helpers";
 import {
-  currentBalance,
+  cashBalanceBefore,
   getBillsByDate,
   getCustomerBalances,
   getLatestBills,
   getLotsWithStock,
   getSalesSeries,
 } from "@/lib/queries";
+import { getCjTotals } from "@/lib/queries-cj";
+import { getOldDuesSummary } from "@/lib/queries-recv";
+import { db, schema } from "@/db";
 import { money, pad2, today } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,19 +37,34 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const session = await requireSession();
-  const isOwner = session.user.role === "owner";
+  const role = session.user.role;
+  const isPrivileged = role === "owner" || role === "editor";
+  const isOwner = role === "owner";
   const date = today();
+  // Use a sentinel that's clearly past any real business date to get the all-time position.
+  const futureAnchor = "9999-12-31";
 
-  const [bills, lots, balances, cashBal, upiBal, latest, series] = await Promise.all([
-    getBillsByDate(date, isOwner),
-    getLotsWithStock(),
-    getCustomerBalances(),
-    currentBalance("Cash"),
-    currentBalance("UPI"),
-    getLatestBills(6, isOwner),
-    getSalesSeries(14),
-  ]);
+  const [bills, lots, balances, cashBal, upiBal, latest, series, cj, dues, pattiUnpaidRow] =
+    await Promise.all([
+      getBillsByDate(date, isOwner),
+      getLotsWithStock(),
+      getCustomerBalances(),
+      cashBalanceBefore("Cash", futureAnchor),
+      cashBalanceBefore("UPI", futureAnchor),
+      getLatestBills(8, isOwner),
+      getSalesSeries(14),
+      getCjTotals(),
+      getOldDuesSummary(),
+      isPrivileged
+        ? db
+            .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
+            .from(schema.pattiBills)
+            .where(sql`${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = ''`)
+            .then((r) => r[0])
+        : Promise.resolve(undefined),
+    ]);
 
+  const pattiUnpaid = Number(pattiUnpaidRow?.s ?? 0);
   const salesToday = bills.reduce((s, b) => s + b.total, 0);
   const salesYesterday = series[series.length - 2]?.total ?? 0;
   const salesDelta =
@@ -52,9 +74,12 @@ export default async function DashboardPage() {
         ? 100
         : 0;
 
-  const pendingCredit = balances.reduce((s, c) => s + c.balance, 0);
+  const pendingCredit =
+    balances.reduce((s, c) => s + c.balance, 0) + dues.outstanding;
   const dueCount = balances.filter((c) => c.balance > 0.5).length;
   const totalBagsLeft = lots.reduce((s, l) => s + l.left, 0);
+  const stockM = lots.reduce((s, l) => s + l.stkM, 0);
+  const stockN = lots.reduce((s, l) => s + l.stkN, 0);
   const lowStockLots = lots.filter((l) => l.left > 0 && l.left <= 5).length;
   const outOfStock = lots.filter((l) => l.left <= 0).length;
   const salesLast14 = series.reduce((s, d) => s + d.total, 0);
@@ -103,25 +128,70 @@ export default async function DashboardPage() {
         <KPICard
           title="Cash in hand"
           value={money(cashBal)}
-          sub="Live balance"
+          sub="Book balance"
           icon={Banknote}
           href="/ledger"
         />
         <KPICard
           title="Bank / UPI"
           value={money(upiBal)}
-          sub="Live balance"
+          sub="Book balance"
           icon={Wallet}
           href="/ledger"
         />
         <KPICard
-          title="Pending credit"
+          title="Owed by customers"
           value={money(pendingCredit)}
-          sub={`${dueCount} customer${dueCount === 1 ? "" : "s"}`}
+          sub={`${dueCount} with pending bills${dues.outstanding > 0.5 ? ` · incl ${money(dues.outstanding)} old` : ""}`}
           icon={CreditCard}
           tone={pendingCredit > 0.5 ? "warn" : undefined}
           href="/balances"
         />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KPICard
+          title="With CJ (to collect)"
+          value={money(cj.outstanding)}
+          sub={`Received today: ${money(cj.receivedToday)}`}
+          icon={HandCoins}
+          tone={cj.outstanding > 0.5 ? "warn" : undefined}
+          href="/cj"
+        />
+        <KPICard
+          title="Main store"
+          value={`${stockM} bags`}
+          sub={`${lots.length} lot${lots.length === 1 ? "" : "s"}`}
+          icon={Store}
+          href="/stock"
+        />
+        <KPICard
+          title="New Mahavir"
+          value={`${stockN} bags`}
+          sub="Branch stock"
+          icon={Store}
+          href="/nm"
+        />
+        {isPrivileged && (
+          <KPICard
+            title="Patti not yet paid"
+            value={money(pattiUnpaid)}
+            sub="Purchases pending payment"
+            icon={ShoppingBasket}
+            tone={pattiUnpaid > 0.5 ? "warn" : undefined}
+            href="/patti"
+          />
+        )}
+        {!isPrivileged && (
+          <KPICard
+            title="Total stock"
+            value={`${totalBagsLeft} bags`}
+            sub={`${outOfStock + lowStockLots} low / out`}
+            icon={Boxes}
+            tone={outOfStock > 0 || lowStockLots > 0 ? "warn" : undefined}
+            href="/stock"
+          />
+        )}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">

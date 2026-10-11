@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { money, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { BillRowActions } from "../bills/bill-row-actions";
+import { EditBillDialog } from "../bills/edit-bill-dialog";
 import { SumGrid } from "@/components/sum-grid";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,9 @@ export default async function DailySummaryPage({ searchParams }: Props) {
   const sp = await searchParams;
   const date = sp.d || today();
   const session = await requireSession();
-  const isOwner = session.user.role === "owner";
+  const role = session.user.role;
+  const isOwner = role === "owner";
+  const canEditBill = isOwner || role === "editor";
 
   const [bills, pays, lots, balances] = await Promise.all([
     getBillsByDate(date, isOwner),
@@ -111,7 +114,25 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                         <td className="py-2 pr-4 text-right">{money(b.profit ?? 0)}</td>
                       )}
                       <td className="py-2 pr-0 text-right">
-                        <BillRowActions billId={b.id} billNo={b.no} balance={b.balance} />
+                        <div className="flex gap-1 justify-end flex-wrap">
+                          {canEditBill && b.items.length > 0 && (
+                            <EditBillDialog
+                              billId={b.id}
+                              billNo={b.no}
+                              customer={b.customer}
+                              items={b.items.map((it) => ({
+                                id: it.id,
+                                lotId: it.lotId,
+                                lotName: it.lotName,
+                                bags: it.bags,
+                                kg: it.kg,
+                                rate: it.rate,
+                              }))}
+                              lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+                            />
+                          )}
+                          <BillRowActions billId={b.id} billNo={b.no} balance={b.balance} />
+                        </div>
                       </td>
                     </tr>
                   ))}

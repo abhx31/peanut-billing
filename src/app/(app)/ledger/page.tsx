@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   cashBalanceBefore,
@@ -6,13 +7,16 @@ import {
   getExpensesByDate,
   getSettings,
 } from "@/lib/queries";
+import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { money, pad2, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
 import { Button } from "@/components/ui/button";
 import { OpeningBalanceButton } from "./opening-balance-button";
+import { CloseDayCard } from "./close-day-card";
 import Link from "next/link";
+import { ExcelButton } from "@/components/excel-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +26,18 @@ export default async function LedgerPage({ searchParams }: Props) {
   const sp = await searchParams;
   const date = sp.d || today();
   const session = await requireSession();
-  const isOwner = session.user.role === "owner";
+  const role = session.user.role;
+  const isOwner = role === "owner";
+  const canEditClosing = role === "owner" || role === "editor";
 
-  const [bills, pays, expenses, settings, openCash, openBank] = await Promise.all([
+  const [bills, pays, expenses, settings, openCash, openBank, existingClosing] = await Promise.all([
     getBillsByDate(date, isOwner),
     getAllPaymentsOnDate(date),
     getExpensesByDate(date),
     getSettings(),
     cashBalanceBefore("Cash", date),
     cashBalanceBefore("UPI", date),
+    db.query.closings.findFirst({ where: eq(schema.closings.date, date) }),
   ]);
 
   const cashIn = pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0);
@@ -44,6 +51,8 @@ export default async function LedgerPage({ searchParams }: Props) {
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
+  const bookCashClose = openCash + cashIn - cashOut;
+  const bookBankClose = openBank + upiIn - upiOut;
 
   return (
     <div className="space-y-6">
@@ -58,12 +67,40 @@ export default async function LedgerPage({ searchParams }: Props) {
               Print ledger
             </Button>
           </Link>
+          <ExcelButton report="ledger" date={date} label="Ledger (Excel)" />
+          <ExcelButton
+            report="day"
+            date={date}
+            label="Full day report (Excel)"
+            variant="default"
+          />
           {isOwner && (
             <OpeningBalanceButton
               openingCash={Number(settings.openingCash)}
               openingBank={Number(settings.openingBank)}
             />
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Close the day</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            After entering all bills and expenses for {date}, count your cash and (if you
+            can) check the bank balance, then save it as the closing. Tomorrow&apos;s
+            opening uses this number.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <CloseDayCard
+            date={date}
+            bookCash={bookCashClose}
+            bookBank={bookBankClose}
+            existingCash={existingClosing?.cash ?? null}
+            existingBank={existingClosing?.bank ?? null}
+            canEdit={canEditClosing}
+          />
         </CardContent>
       </Card>
 

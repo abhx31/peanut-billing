@@ -1,0 +1,56 @@
+import { desc, eq, sql } from "drizzle-orm";
+import { db, schema } from "@/db";
+
+export async function getHamaliForDate(date: string) {
+  const bs = await db
+    .select({
+      id: schema.bills.id,
+      no: schema.bills.no,
+      kind: schema.bills.kind,
+      loc: schema.bills.loc,
+      customer: schema.bills.customer,
+      bags: sql<number>`coalesce((select sum(bags) from bill_items where bill_id = ${schema.bills.id}), 0)::int`,
+      hamali: schema.bills.hamali,
+      hamaliPerBag: schema.bills.hamaliPerBag,
+    })
+    .from(schema.bills)
+    .where(sql`${schema.bills.date} = ${date} AND ${schema.bills.hamali}::numeric > 0`)
+    .orderBy(schema.bills.no);
+  const totalBags = bs.reduce((s, b) => s + Number(b.bags), 0);
+  const totalAmount = bs.reduce((s, b) => s + Number(b.hamali), 0);
+  return { bills: bs, totalBags, totalAmount };
+}
+
+export async function getHamaliPaidForDate(date: string) {
+  return db.query.hamaliPaid.findFirst({
+    where: eq(schema.hamaliPaid.date, date),
+  });
+}
+
+export async function getRecentHamaliDays(limit = 14) {
+  // Days (latest first) where any bill had hamali > 0.
+  const dates = await db
+    .selectDistinct({ date: schema.bills.date })
+    .from(schema.bills)
+    .where(sql`${schema.bills.hamali}::numeric > 0`)
+    .orderBy(desc(schema.bills.date))
+    .limit(limit);
+
+  const result: {
+    date: string;
+    bags: number;
+    amount: number;
+    paid: { amount: string; mode: "Cash" | "UPI" | "CJ" } | null;
+  }[] = [];
+  for (const { date } of dates) {
+    const h = await getHamaliForDate(date);
+    const paid = await getHamaliPaidForDate(date);
+    result.push({
+      date,
+      bags: h.totalBags,
+      amount: h.totalAmount,
+      paid: paid ? { amount: paid.amount, mode: paid.mode } : null,
+    });
+  }
+  return result;
+}
