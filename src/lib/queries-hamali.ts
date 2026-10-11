@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 
 export async function getHamaliForDate(date: string) {
@@ -9,12 +9,19 @@ export async function getHamaliForDate(date: string) {
       kind: schema.bills.kind,
       loc: schema.bills.loc,
       customer: schema.bills.customer,
-      bags: sql<number>`coalesce((select sum(bags) from bill_items where bill_id = ${schema.bills.id}), 0)::int`,
+      bags: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int`,
       hamali: schema.bills.hamali,
       hamaliPerBag: schema.bills.hamaliPerBag,
     })
     .from(schema.bills)
-    .where(sql`${schema.bills.date} = ${date} AND ${schema.bills.hamali}::numeric > 0`)
+    .leftJoin(schema.billItems, eq(schema.billItems.billId, schema.bills.id))
+    .where(
+      and(
+        eq(schema.bills.date, date),
+        sql`${schema.bills.hamali}::numeric > 0`,
+      ),
+    )
+    .groupBy(schema.bills.id)
     .orderBy(schema.bills.no);
   const totalBags = bs.reduce((s, b) => s + Number(b.bags), 0);
   const totalAmount = bs.reduce((s, b) => s + Number(b.hamali), 0);

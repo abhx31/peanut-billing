@@ -1,4 +1,6 @@
-import { Scale } from "lucide-react";
+import Link from "next/link";
+import { Printer, Scale } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireSession } from "@/lib/auth-helpers";
@@ -41,7 +43,15 @@ export default async function HamaliPage({ searchParams }: Props) {
             <Scale className="h-4 w-4 text-primary" />
             Hamali for a date
           </CardTitle>
-          <DateFilter paramKey="d" value={date} />
+          <div className="flex items-end gap-3 flex-wrap">
+            <DateFilter paramKey="d" value={date} />
+            <Link href={`/hamali/print?d=${date}`} target="_blank">
+              <Button type="button" variant="outline" size="sm">
+                <Printer className="mr-2 h-4 w-4" />
+                Print statement
+              </Button>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <SumGrid
@@ -149,8 +159,18 @@ export default async function HamaliPage({ searchParams }: Props) {
                 </thead>
                 <tbody>
                   {recent.map((r) => (
-                    <tr key={r.date} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{r.date}</td>
+                    <tr
+                      key={r.date}
+                      className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                    >
+                      <td className="py-2 pr-4">
+                        <Link
+                          href={`/hamali?d=${r.date}`}
+                          className="block underline-offset-2 hover:underline"
+                        >
+                          {r.date}
+                        </Link>
+                      </td>
                       <td className="py-2 pr-4 text-right">{r.bags}</td>
                       <td className="py-2 pr-4 text-right">{money(r.amount)}</td>
                       <td className="py-2 pr-4">
