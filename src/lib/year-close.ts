@@ -24,17 +24,6 @@ export const FY_RE = /^\d{4}-\d{2}$/;
 
 export type ArchiveStatus = "pending" | "closed";
 
-/**
- * Development only: YEAR_CLOSE_TEST_TODAY (YYYY-MM-DD) pretends a later date for the
- * "has this year ended?" checks, so an unfinished year can be archived on a test database.
- */
-export function yearCloseTestDate(): string | null {
-  const t = process.env.YEAR_CLOSE_TEST_TODAY;
-  return process.env.NODE_ENV !== "production" && t && /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
-}
-
-const closeToday = () => yearCloseTestDate() ?? today();
-
 export function fyBounds(fy: string) {
   const a = Number(fy.slice(0, 4));
   return { start: `${a}-04-01`, end: `${a + 1}-03-31`, nextStart: `${a + 1}-04-01` };
@@ -89,7 +78,7 @@ export async function nextFyToClose(
   if (!d) return null;
   const fy = fyOf(d);
   const { end } = fyBounds(fy);
-  return { fy, end, canClose: end < closeToday() };
+  return { fy, end, canClose: end < today() };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -299,7 +288,7 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
   const { fy, cash, bank, userId } = input;
   if (!FY_RE.test(fy)) throw new Error("Invalid financial year.");
   const { end, nextStart } = fyBounds(fy);
-  if (end >= closeToday()) throw new Error(`${fy} has not ended yet. It can be closed after ${end}.`);
+  if (end >= today()) throw new Error(`${fy} has not ended yet. It can be closed after ${end}.`);
 
   // Hold off writes (reads keep working) so the before/after check sees a still picture.
   await tx.execute(sql`SET LOCAL lock_timeout = '15s'`);

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOwner } from "@/lib/auth-helpers";
 import { cashBalanceBefore, getAllUsers, getSettings } from "@/lib/queries";
-import { fyBounds, listArchives, nextFyToClose, yearCloseTestDate } from "@/lib/year-close";
+import { fyBounds, listArchives, nextFyToClose } from "@/lib/year-close";
 import { SettingsForm } from "./settings-form";
 import { StaffList } from "./staff-list";
 import { AddStaffForm } from "./add-staff-form";
@@ -83,7 +83,6 @@ export default async function SettingsPage() {
         <CardContent>
           <YearCloseCard
             next={next}
-            testDate={yearCloseTestDate()}
             cash={closeCash}
             bank={closeBank}
             archives={archives.map((a) => {

@@ -41,8 +41,6 @@ export type ArchiveRow = {
 
 type Props = {
   next: { fy: string; end: string; canClose: boolean } | null;
-  /** Set when YEAR_CLOSE_TEST_TODAY is on (development only). */
-  testDate: string | null;
   cash: number;
   bank: number;
   archives: ArchiveRow[];
@@ -65,18 +63,11 @@ export async function downloadArchive(fy: string, format: "json" | "csv") {
   }
 }
 
-export function YearCloseCard({ next, testDate, cash, bank, archives }: Props) {
+export function YearCloseCard({ next, cash, bank, archives }: Props) {
   const pending = archives.find((a) => a.status === "pending");
 
   return (
     <div className="space-y-4">
-      {testDate && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-          <b>Test mode:</b> year closing pretends today is {testDate} (YEAR_CLOSE_TEST_TODAY).
-          Use it only on a test copy of the database. Archiving locks that year&apos;s entries,
-          and removing deletes records for real.
-        </p>
-      )}
       {pending ? (
         <PendingArchive a={pending} />
       ) : next?.canClose ? (
