@@ -14,10 +14,14 @@ jobs:
     name: Lint · Type-check · Build
     runs-on: ubuntu-latest
     env:
-      # Dummy values so Next's build doesn't error on missing env.
-      # No actual DB connection happens at build time (all pages are force-dynamic).
-      DATABASE_URL: postgresql://user:pass@localhost:5432/dummy?sslmode=disable
-      AUTH_SECRET: ci-only-not-a-real-secret-ci-only-not-a-real-secret
+      # Repo-level secrets if you've set them; otherwise harmless dummies that
+      # satisfy `next build`. The build doesn't actually connect to Postgres
+      # (every page is force-dynamic, so no queries fire at build time) and
+      # AUTH_SECRET only needs to be a non-empty string long enough for Auth.js
+      # to accept. To use real values, add CI_DATABASE_URL and CI_AUTH_SECRET
+      # under Settings → Secrets and variables → Actions.
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL || 'postgresql://user:pass@localhost:5432/dummy?sslmode=disable' }}
+      AUTH_SECRET: ${{ secrets.CI_AUTH_SECRET || 'ci-only-not-a-real-secret-ci-only-not-a-real-secret' }}
       AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +31,14 @@ jobs:
           node-version: 20
           cache: npm
 
+      # We use `npm install` instead of `npm ci` because the lock file is
+      # generated on Windows and doesn't fully record Linux-only optional
+      # dep paths (sharp-wasm32, tailwindcss-oxide-wasm). `npm ci` would
+      # refuse those as "out of sync". `npm install` is forgiving and
+      # resolves them on the fly; the lock still steers resolution so
+      # builds stay reproducible in practice.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: Lint
         run: npm run lint
