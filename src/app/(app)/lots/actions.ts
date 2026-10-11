@@ -52,7 +52,7 @@ export async function addLot(input: z.input<typeof addLotSchema>): Promise<
         lotId: lot.id,
         bags,
         date: today(),
-        loc: loc === "NM" ? "NM" : null,
+        loc: loc === "NM" ? "NM" : "MS",
         createdBy: session.user.id,
       });
     }
@@ -83,7 +83,7 @@ export async function addBags(input: z.input<typeof addBagsSchema>): Promise<Res
     lotId: parsed.data.lotId,
     bags: parsed.data.bags,
     date: parsed.data.date ?? today(),
-    loc: loc === "NM" ? "NM" : null,
+    loc: loc === "NM" ? "NM" : "MS",
     createdBy: session.user.id,
   });
   revalidatePath("/lots");

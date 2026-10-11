@@ -91,7 +91,7 @@ export async function receiveOnDue(
   await db.insert(schema.openingPayments).values({
     openingDueId: due.id,
     customer: due.customer,
-    loc: loc === "NM" ? "NM" : null,
+    loc: loc === "NM" ? "NM" : "MS",
     date: parsed.data.date ?? today(),
     mode: parsed.data.mode,
     amount: parsed.data.amount.toString(),
@@ -152,7 +152,7 @@ export async function receiveFromCustomerV2(
       await tx.insert(schema.openingPayments).values({
         openingDueId: od.id,
         customer,
-        loc: loc === "NM" ? "NM" : null,
+        loc: loc === "NM" ? "NM" : "MS",
         date: payDate,
         mode,
         amount: take.toString(),

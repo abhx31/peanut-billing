@@ -27,7 +27,7 @@ type Props = {
   hamaliDefault: number;
   customers: { name: string; balance: number }[];
   lotCosts: Record<string, string> | null;
-  loc: "" | "NM";
+  loc: "MS" | "NM";
 };
 
 type CartItem = {

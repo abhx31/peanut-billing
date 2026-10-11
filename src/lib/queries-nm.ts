@@ -36,7 +36,7 @@ export async function getBillsByDateAndLoc(date: string, loc: string | null) {
     .where(
       loc === "NM"
         ? sql`${schema.bills.date} = ${date} AND ${schema.bills.loc} = 'NM'`
-        : sql`${schema.bills.date} = ${date} AND (${schema.bills.loc} IS NULL OR ${schema.bills.loc} = '')`,
+        : sql`${schema.bills.date} = ${date} AND (${schema.bills.loc} IS NULL OR ${schema.bills.loc} <> 'NM')`,
     )
     .orderBy(schema.bills.no);
 }

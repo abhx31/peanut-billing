@@ -33,7 +33,7 @@ export function ExpenseForm({
   defaultLoc,
 }: {
   defaultDate: string;
-  defaultLoc: "" | "NM";
+  defaultLoc: "MS" | "NM";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -42,7 +42,7 @@ export function ExpenseForm({
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<"Cash" | "UPI">("Cash");
-  const [loc, setLoc] = useState<"" | "NM">(defaultLoc);
+  const [loc, setLoc] = useState<"MS" | "NM">(defaultLoc);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -127,8 +127,8 @@ export function ExpenseForm({
         </Field>
         <Field label="Store" required>
           <Select
-            value={loc === "NM" ? "NM" : "MAIN"}
-            onValueChange={(v) => setLoc(v === "NM" ? "NM" : "")}
+            value={loc}
+            onValueChange={(v) => setLoc(v === "NM" ? "NM" : "MS")}
           >
             <SelectTrigger className="w-full">
               <SelectValue>
@@ -136,7 +136,7 @@ export function ExpenseForm({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="MAIN" label="Main store">
+              <SelectItem value="MS" label="Main store">
                 Main store
               </SelectItem>
               <SelectItem value="NM" label="New Mahavir">

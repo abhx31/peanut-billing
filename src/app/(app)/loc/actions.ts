@@ -8,7 +8,7 @@ import { requireSession } from "@/lib/auth-helpers";
 export async function setLoc(loc: Loc) {
   await requireSession();
   const c = await cookies();
-  c.set(LOC_COOKIE, loc === "NM" ? "NM" : "", {
+  c.set(LOC_COOKIE, loc === "NM" ? "NM" : "MS", {
     httpOnly: false,
     sameSite: "lax",
     path: "/",

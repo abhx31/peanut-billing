@@ -159,7 +159,7 @@ export type BillRow = {
   fy: string;
   date: string;
   customer: string;
-  loc: "" | "NM";
+  loc: "MS" | "NM";
   bags: number;
   kg: number;
   amount: number;
@@ -252,7 +252,7 @@ async function enrichBills(
       fy: b.fy,
       date: b.date,
       customer: b.customer,
-      loc: (b.loc ?? "") as "" | "NM",
+      loc: b.loc === "NM" ? "NM" : "MS",
       bags: totalBags,
       kg: totalKg,
       amount,
@@ -359,13 +359,14 @@ export async function currentBalance(mode: "Cash" | "UPI") {
   return opening + Number(pr?.s ?? 0) - Number(ex?.s ?? 0);
 }
 
-export async function getSalesSeries(days: number, loc?: "" | "NM") {
+export async function getSalesSeries(days: number, loc?: "MS" | "NM") {
   // Returns last N days of sales totals (one row per day, zero-filled).
   // When loc is provided, only bills from that store are counted.
+  // Legacy rows written with NULL are treated as Main store ("MS").
   const locFilter =
     loc === undefined
       ? sql``
-      : sql` AND COALESCE(b.loc, '') = ${loc}`;
+      : sql` AND COALESCE(b.loc, 'MS') = ${loc}`;
   const rows = await db.execute<{ d: string; total: string; bills: number }>(sql`
     SELECT to_char(d::date, 'YYYY-MM-DD') AS d,
            COALESCE(SUM(b.total), 0)::text AS total,

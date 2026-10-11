@@ -46,11 +46,11 @@ export function LocBar({ loc }: Props) {
         <div className="flex gap-1 rounded-md bg-background/20 p-0.5">
           <button
             type="button"
-            onClick={() => switchTo("")}
+            onClick={() => switchTo("MS")}
             disabled={pending}
             className={cn(
               "px-3 py-1 rounded text-xs transition-colors",
-              loc === ""
+              loc === "MS"
                 ? "bg-background text-foreground font-semibold shadow-sm"
                 : "hover:bg-background/40",
             )}

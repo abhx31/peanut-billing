@@ -81,7 +81,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           fy,
           date: d.date,
           customer: d.customer,
-          loc: loc === "NM" ? "NM" : null,
+          loc: loc === "NM" ? "NM" : "MS",
           hamaliPerBag: d.hamaliPerBag.toString(),
           hamali: hamali.toString(),
           gstPercent: d.gstPercent.toString(),

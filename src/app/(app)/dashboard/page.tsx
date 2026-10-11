@@ -82,9 +82,11 @@ export default async function DashboardPage() {
   const latest = latestAll.filter((b) => b.loc === loc).slice(0, 8);
   const billsHere = bills.filter((b) => b.loc === loc);
 
-  function statsFor(loc: "" | "NM") {
+  function statsFor(loc: "MS" | "NM") {
     const bs = bills.filter((b) => b.loc === loc);
-    const ps = paysToday.filter((p) => (p.billLoc ?? "") === loc);
+    const ps = paysToday.filter(
+      (p) => (p.billLoc === "NM" ? "NM" : "MS") === loc,
+    );
     const sumPay = (m: "Cash" | "UPI" | "CJ") =>
       ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
     return {
@@ -99,7 +101,7 @@ export default async function DashboardPage() {
     };
   }
   const storeRows: { name: string; stats: ReturnType<typeof statsFor> }[] = [
-    { name: "Main store", stats: statsFor("") },
+    { name: "Main store", stats: statsFor("MS") },
     { name: "New Mahavir", stats: statsFor("NM") },
   ];
   const storeTotals = {

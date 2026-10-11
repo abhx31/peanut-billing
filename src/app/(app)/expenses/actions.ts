@@ -14,7 +14,7 @@ const addSchema = z.object({
   note: z.string().trim().max(240).optional().default(""),
   amount: z.number().positive(),
   mode: z.enum(["Cash", "UPI"]),
-  loc: z.enum(["", "NM"]).optional(),
+  loc: z.enum(["MS", "NM"]).optional(),
 });
 
 const delSchema = z.object({ id: z.string().uuid() });
@@ -37,7 +37,7 @@ export async function addExpense(input: z.input<typeof addSchema>): Promise<Resu
     note: parsed.data.note || null,
     amount: parsed.data.amount.toString(),
     mode: parsed.data.mode,
-    loc: loc === "NM" ? "NM" : null,
+    loc: loc === "NM" ? "NM" : "MS",
     createdBy: session.user.id,
   });
   revalidatePath("/expenses");
