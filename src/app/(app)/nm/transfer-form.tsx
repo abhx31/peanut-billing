@@ -80,18 +80,14 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
               <SelectValue placeholder="Pick a lot">
                 {(v) => {
                   const l = lots.find((x) => x.id === v);
-                  return l ? `${l.name} · Main ${l.stkM} · NM ${l.stkN}` : "Pick a lot";
+                  return l ? l.name : "Pick a lot";
                 }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {lots.map((l) => (
-                <SelectItem
-                  key={l.id}
-                  value={l.id}
-                  label={`${l.name} · Main ${l.stkM} · NM ${l.stkN}`}
-                >
-                  {l.name} · Main {l.stkM} · NM {l.stkN}
+                <SelectItem key={l.id} value={l.id} label={l.name}>
+                  {l.name}
                 </SelectItem>
               ))}
             </SelectContent>
