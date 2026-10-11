@@ -27,10 +27,13 @@ export async function getLotsWithStock(
     .select({
       lotId: schema.stockIn.lotId,
       bagsAdded: sql<number>`coalesce(sum(${schema.stockIn.bags}), 0)::int`,
+      bagsAddedNM: sql<number>`coalesce(sum(case when ${schema.stockIn.loc} = 'NM' then ${schema.stockIn.bags} else 0 end), 0)::int`,
     })
     .from(schema.stockIn)
     .groupBy(schema.stockIn.lotId);
-  const addedMap = new Map(addedRows.map((r) => [r.lotId, r.bagsAdded]));
+  const addedMap = new Map(
+    addedRows.map((r) => [r.lotId, { total: r.bagsAdded, nm: r.bagsAddedNM }]),
+  );
 
   // Total sold across the item + split by store (NM vs Main).
   const soldRows = await exec
@@ -63,7 +66,10 @@ export async function getLotsWithStock(
     .orderBy(desc(schema.lots.createdAt));
 
   return lots.map((l) => {
-    const added = addedMap.get(l.id) ?? 0;
+    const addedEntry = addedMap.get(l.id);
+    const added = addedEntry?.total ?? 0;
+    const addedNM = addedEntry?.nm ?? 0;
+    const addedMain = added - addedNM;
     const sold = soldMap.get(l.id)?.bagsSold ?? 0;
     const soldNM = soldMap.get(l.id)?.bagsSoldNM ?? 0;
     const soldMain = sold - soldNM;
@@ -71,8 +77,8 @@ export async function getLotsWithStock(
     const xferOut = xferMap.get(l.id)?.out ?? 0;
     const xferBack = xferMap.get(l.id)?.back ?? 0;
     const recvN = xferOut - xferBack;
-    const stkM = added - xferOut + xferBack - soldMain;
-    const stkN = xferOut - xferBack - soldNM;
+    const stkM = addedMain - xferOut + xferBack - soldMain;
+    const stkN = addedNM + xferOut - xferBack - soldNM;
     return {
       id: l.id,
       name: l.name,
@@ -153,6 +159,7 @@ export type BillRow = {
   fy: string;
   date: string;
   customer: string;
+  loc: "" | "NM";
   bags: number;
   kg: number;
   amount: number;
@@ -245,6 +252,7 @@ async function enrichBills(
       fy: b.fy,
       date: b.date,
       customer: b.customer,
+      loc: (b.loc ?? "") as "" | "NM",
       bags: totalBags,
       kg: totalKg,
       amount,
@@ -307,6 +315,7 @@ export async function getAllPaymentsOnDate(date: string) {
       billId: schema.payments.billId,
       billNo: schema.bills.no,
       customer: schema.bills.customer,
+      billLoc: schema.bills.loc,
       mode: schema.payments.mode,
       amount: schema.payments.amount,
       date: schema.payments.date,
@@ -325,6 +334,7 @@ export async function getStockHistory(limit = 30) {
       lotName: schema.lots.name,
       bags: schema.stockIn.bags,
       date: schema.stockIn.date,
+      loc: schema.stockIn.loc,
       createdAt: schema.stockIn.createdAt,
     })
     .from(schema.stockIn)
@@ -349,8 +359,13 @@ export async function currentBalance(mode: "Cash" | "UPI") {
   return opening + Number(pr?.s ?? 0) - Number(ex?.s ?? 0);
 }
 
-export async function getSalesSeries(days: number) {
+export async function getSalesSeries(days: number, loc?: "" | "NM") {
   // Returns last N days of sales totals (one row per day, zero-filled).
+  // When loc is provided, only bills from that store are counted.
+  const locFilter =
+    loc === undefined
+      ? sql``
+      : sql` AND COALESCE(b.loc, '') = ${loc}`;
   const rows = await db.execute<{ d: string; total: string; bills: number }>(sql`
     SELECT to_char(d::date, 'YYYY-MM-DD') AS d,
            COALESCE(SUM(b.total), 0)::text AS total,
@@ -360,7 +375,7 @@ export async function getSalesSeries(days: number) {
            CURRENT_DATE,
            '1 day'::interval
          ) AS d
-    LEFT JOIN bills b ON b.date = d::date
+    LEFT JOIN bills b ON b.date = d::date${locFilter}
     GROUP BY d
     ORDER BY d
   `);

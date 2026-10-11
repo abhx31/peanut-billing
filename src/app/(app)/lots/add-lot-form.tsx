@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Field, FormActions, FormGrid } from "@/components/form";
 import { addLot } from "./actions";
 
-export function AddLotForm({ isOwner }: { isOwner: boolean }) {
+export function AddLotForm({
+  isOwner,
+  storeName,
+}: {
+  isOwner: boolean;
+  storeName: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -57,7 +63,11 @@ export function AddLotForm({ isOwner }: { isOwner: boolean }) {
             placeholder="e.g. Lot 12 – Bold 40/50"
           />
         </Field>
-        <Field label="Bags (opening stock)" htmlFor="lot-bags">
+        <Field
+          label="Bags"
+          htmlFor="lot-bags"
+          hint={`Lands at ${storeName}. Switch stores from the Working-at bar at the top to add stock elsewhere.`}
+        >
           <Input
             id="lot-bags"
             type="number"

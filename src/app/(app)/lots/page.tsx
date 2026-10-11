@@ -1,5 +1,6 @@
 import { getLotsWithStock, getLotCosts } from "@/lib/queries";
 import { requireSession } from "@/lib/auth-helpers";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { money } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddLotForm } from "./add-lot-form";
@@ -10,10 +11,12 @@ export const dynamic = "force-dynamic";
 export default async function LotsPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
-  const [lots, costs] = await Promise.all([
+  const [lots, costs, loc] = await Promise.all([
     getLotsWithStock(),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
+    getCurrentLoc(),
   ]);
+  const storeName = locLabel(loc);
 
   return (
     <div className="space-y-6">
@@ -22,7 +25,7 @@ export default async function LotsPage() {
           <CardTitle>Add lot</CardTitle>
         </CardHeader>
         <CardContent>
-          <AddLotForm isOwner={isOwner} />
+          <AddLotForm isOwner={isOwner} storeName={storeName} />
         </CardContent>
       </Card>
 

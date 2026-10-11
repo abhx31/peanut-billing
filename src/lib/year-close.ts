@@ -450,7 +450,10 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
     const d = delta.get(lotId) ?? { main: 0, nm: 0 };
     delta.set(lotId, { main: d.main + main, nm: d.nm + nm });
   };
-  for (const s of removed.stockIn) bump(s.lotId, s.bags, 0);
+  for (const s of removed.stockIn) {
+    if (s.loc === "NM") bump(s.lotId, 0, s.bags);
+    else bump(s.lotId, s.bags, 0);
+  }
   for (const t of removed.transfers) {
     if (t.dir === "out") bump(t.lotId, -t.bags, t.bags);
     else bump(t.lotId, t.bags, -t.bags);

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwner, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
+import { getCurrentLoc } from "@/lib/loc";
 import { today } from "@/lib/format";
 
 const addLotSchema = z.object({
@@ -38,6 +39,7 @@ export async function addLot(input: z.input<typeof addLotSchema>): Promise<
 
   const { name, bags, costPerKg } = parsed.data;
   const isOwner = session.user.role === "owner";
+  const loc = await getCurrentLoc();
 
   const lotId = await db.transaction(async (tx) => {
     const [lot] = await tx
@@ -50,6 +52,7 @@ export async function addLot(input: z.input<typeof addLotSchema>): Promise<
         lotId: lot.id,
         bags,
         date: today(),
+        loc: loc === "NM" ? "NM" : null,
         createdBy: session.user.id,
       });
     }
@@ -74,11 +77,13 @@ export async function addBags(input: z.input<typeof addBagsSchema>): Promise<Res
   if (!parsed.success) return { ok: false, error: "Enter a positive number of bags." };
   const closed = await closedDateError(parsed.data.date ?? today());
   if (closed) return { ok: false, error: closed };
+  const loc = await getCurrentLoc();
 
   await db.insert(schema.stockIn).values({
     lotId: parsed.data.lotId,
     bags: parsed.data.bags,
     date: parsed.data.date ?? today(),
+    loc: loc === "NM" ? "NM" : null,
     createdBy: session.user.id,
   });
   revalidatePath("/lots");

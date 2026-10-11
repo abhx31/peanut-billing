@@ -97,6 +97,7 @@ export const stockIn = pgTable("stock_in", {
     .references(() => lots.id, { onDelete: "cascade" }),
   bags: integer("bags").notNull(),
   date: date("date", { mode: "string" }).notNull(),
+  loc: text("loc"), // null = Main store, "NM" = New Mahavir
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
