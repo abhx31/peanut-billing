@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { asc } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
-import { getLotsWithStock } from "@/lib/queries";
+import { getLotCosts, getLotsWithStock } from "@/lib/queries";
+import { fyOf, today } from "@/lib/format";
 import { GstBillForm } from "./gst-bill-form";
 import { ExcelButton } from "@/components/excel-button";
 import type { GstProfile } from "@/lib/gst-types";
@@ -12,16 +13,32 @@ import type { GstProfile } from "@/lib/gst-types";
 export const dynamic = "force-dynamic";
 
 export default async function GstBillPage() {
-  await requireSession();
-  const [customers, settingsRow, lots] = await Promise.all([
+  const session = await requireSession();
+  const isOwner = session.user.role === "owner";
+  const currentFy = fyOf(today());
+  const [customers, settingsRow, lots, nextNoRow, lotCosts] = await Promise.all([
     db
       .select()
       .from(schema.gstCustomers)
       .orderBy(asc(schema.gstCustomers.name)),
     db.query.settings.findFirst(),
     getLotsWithStock(),
+    db
+      .select({
+        max: sql<number>`coalesce(max(${schema.bills.no}), 0)::int`,
+      })
+      .from(schema.bills)
+      .where(and(eq(schema.bills.kind, "gst"), eq(schema.bills.fy, currentFy)))
+      .then((r) => r[0]),
+    isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
   ]);
   const profile = (settingsRow?.gstProfile ?? null) as GstProfile | null;
+  const nextInvoiceNo = Number(nextNoRow?.max ?? 0) + 1;
+  // Allow a settings-level override: settings.gstProfile may embed a "nextNo" the user has set.
+  const forcedNext = Number(
+    (settingsRow?.gstProfile as { nextNo?: unknown } | null)?.nextNo ?? 0,
+  );
+  const invoiceNo = forcedNext > nextInvoiceNo ? forcedNext : nextInvoiceNo;
 
   if (!profile?.name || !profile?.stateCode) {
     return (
@@ -89,6 +106,9 @@ export default async function GstBillPage() {
           address: c.address,
         }))}
         lots={lots.map((l) => ({ id: l.id, name: l.name, left: l.stkM }))}
+        nextInvoiceNo={invoiceNo}
+        currentFy={currentFy}
+        lotCosts={isOwner ? lotCosts : null}
       />
       <Card>
         <CardHeader>
