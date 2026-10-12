@@ -12,7 +12,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:clean": "node scripts/clean-db.mjs"
+    "db:clean": "node scripts/clean-db.mjs",
+    "db:migrate-copy": "node scripts/migrate-db.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
