@@ -9,11 +9,11 @@ export function ReceiveFromCustomerButton({ customer, balance }: Props) {
   return (
     <ReceiveDialog
       title={`Receive from ${customer}`}
-      description="The payment is applied to this customer's oldest unpaid bills first."
+      description="Old dues clear first, then the oldest unpaid bills. Anything left over is kept as an advance."
       balance={balance}
       defaultAmount={balance}
-      onConfirm={({ amount, mode }) =>
-        receiveFromCustomer({ customer, amount, mode })
+      onConfirm={({ amount, mode, date }) =>
+        receiveFromCustomer({ customer, amount, mode, date })
       }
     />
   );

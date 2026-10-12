@@ -83,7 +83,10 @@ export default async function NewBillPage() {
     <BillForm
       lots={storeLots}
       hamaliDefault={Number(settings.hamaliDefault)}
-      customers={customerBalances.map((c) => ({ name: c.name, balance: c.balance }))}
+      customers={customerBalances.map((c) => ({
+        name: c.name,
+        balance: c.totalBalance,
+      }))}
       lotCosts={canSeeCost ? costs : null}
       loc={loc}
     />

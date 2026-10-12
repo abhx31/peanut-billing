@@ -1,6 +1,6 @@
 "use server";
 
-import { inArray, sql } from "drizzle-orm";
+import { asc, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -8,6 +8,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
 import { getCurrentLoc } from "@/lib/loc";
+import { customerKey } from "@/lib/queries";
 
 const itemSchema = z.object({
   lotId: z.string().uuid(),
@@ -54,6 +55,8 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
   const gst = r2((totalAmount * d.gstPercent) / 100);
   const total = r2(totalAmount + hamali + gst);
 
+  const paidNow = r2((d.payCash ?? 0) + (d.payUpi ?? 0) + (d.payCj ?? 0));
+
   try {
     const result = await db.transaction(async (tx) => {
       const lotIds = Array.from(new Set(items.map((it) => it.lotId)));
@@ -67,6 +70,34 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           throw new Error("One of the selected lots was not found.");
         }
       }
+
+      // Compute the customer's balance BEFORE this bill. Used both for the
+      // snapshot stored on the bill and for the overpayment cascade.
+      const key = customerKey(d.customer);
+      const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
+      const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+      const [{ s: billsSum } = { s: "0" }] = await tx
+        .select({ s: sql<string>`coalesce(sum(${schema.bills.total}), 0)` })
+        .from(schema.bills)
+        .where(nameMatches);
+      const [{ s: paysSum } = { s: "0" }] = await tx
+        .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
+        .from(schema.payments)
+        .innerJoin(schema.bills, sql`${schema.bills.id} = ${schema.payments.billId} AND ${nameMatches}`);
+      const [{ s: duesSum } = { s: "0" }] = await tx
+        .select({ s: sql<string>`coalesce(sum(${schema.openingDues.amount}), 0)` })
+        .from(schema.openingDues)
+        .where(dueNameMatches);
+      const [{ s: duePaysSum } = { s: "0" }] = await tx
+        .select({ s: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)` })
+        .from(schema.openingPayments)
+        .where(sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`);
+      const prev = r2(
+        Number(billsSum ?? 0) +
+          Number(duesSum ?? 0) -
+          Number(paysSum ?? 0) -
+          Number(duePaysSum ?? 0),
+      );
 
       const noResult = await tx.execute<{ no: number }>(
         sql`select next_bill_no(${fy}, 'normal') as no`,
@@ -88,6 +119,8 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           gst: gst.toString(),
           amount: totalAmount.toString(),
           total: total.toString(),
+          prev: prev.toString(),
+          paidNow: paidNow.toString(),
           createdBy: session.user.id,
         })
         .returning({ id: schema.bills.id });
@@ -106,35 +139,137 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
         })),
       );
 
+      // Payment split: if the customer pays more than this bill alone, cap the
+      // on-bill payments to the bill total and cascade the rest to older dues
+      // (oldest first — opening dues, then older bills). Any surplus becomes
+      // an "Advance received" opening row.
+      const cashIn = d.payCash;
+      const upiIn = d.payUpi;
+      const cjIn = d.payCj ?? 0;
+      let onBillCap = total;
+      const cashOnBill = Math.min(cashIn, onBillCap);
+      onBillCap -= cashOnBill;
+      const upiOnBill = Math.min(upiIn, onBillCap);
+      onBillCap -= upiOnBill;
+      const cjOnBill = Math.min(cjIn, onBillCap);
+      onBillCap -= cjOnBill;
+      const cashExtra = r2(cashIn - cashOnBill);
+      const upiExtra = r2(upiIn - upiOnBill);
+      const cjExtra = r2(cjIn - cjOnBill);
+
       const payRows: (typeof schema.payments.$inferInsert)[] = [];
-      if (d.payCash > 0) {
+      if (cashOnBill > 0) {
         payRows.push({
           billId: bill.id,
           date: d.date,
           mode: "Cash",
-          amount: d.payCash.toString(),
+          amount: cashOnBill.toString(),
           createdBy: session.user.id,
         });
       }
-      if (d.payUpi > 0) {
+      if (upiOnBill > 0) {
         payRows.push({
           billId: bill.id,
           date: d.date,
           mode: "UPI",
-          amount: d.payUpi.toString(),
+          amount: upiOnBill.toString(),
           createdBy: session.user.id,
         });
       }
-      if (d.payCj && d.payCj > 0) {
+      if (cjOnBill > 0) {
         payRows.push({
           billId: bill.id,
           date: d.date,
           mode: "CJ",
-          amount: d.payCj.toString(),
+          amount: cjOnBill.toString(),
           createdBy: session.user.id,
         });
       }
       if (payRows.length) await tx.insert(schema.payments).values(payRows);
+
+      // Cascade any mode-level extras to the customer's other debts.
+      async function cascade(mode: "Cash" | "UPI" | "CJ", extra: number) {
+        if (extra <= 0.005) return;
+        // Oldest opening dues first.
+        const dues = await tx
+          .select({
+            id: schema.openingDues.id,
+            customer: schema.openingDues.customer,
+            amount: schema.openingDues.amount,
+            paid: sql<string>`coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)`,
+          })
+          .from(schema.openingDues)
+          .where(dueNameMatches)
+          .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt));
+        let left = extra;
+        for (const o of dues) {
+          if (left <= 0.005) break;
+          const outstanding = Number(o.amount) - Number(o.paid);
+          if (outstanding <= 0.005) continue;
+          const take = Math.min(outstanding, left);
+          await tx.insert(schema.openingPayments).values({
+            openingDueId: o.id,
+            customer: o.customer,
+            loc: loc === "NM" ? "NM" : "MS",
+            date: d.date,
+            mode,
+            amount: take.toString(),
+            createdBy: session.user.id,
+          });
+          left -= take;
+        }
+        // Then older bills (excluding this one).
+        if (left > 0.005) {
+          const older = await tx
+            .select({
+              id: schema.bills.id,
+              total: schema.bills.total,
+              paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
+            })
+            .from(schema.bills)
+            .where(sql`${nameMatches} AND ${schema.bills.id} <> ${bill.id}`)
+            .orderBy(asc(schema.bills.date), asc(schema.bills.no));
+          for (const b of older) {
+            if (left <= 0.005) break;
+            const due = Number(b.total) - Number(b.paid);
+            if (due <= 0.005) continue;
+            const take = Math.min(due, left);
+            await tx.insert(schema.payments).values({
+              billId: b.id,
+              date: d.date,
+              mode,
+              amount: take.toString(),
+              createdBy: session.user.id,
+            });
+            left -= take;
+          }
+        }
+        // Still leftover → record as an advance (opening row amount=0 + payment).
+        if (left > 0.005) {
+          const [adv] = await tx
+            .insert(schema.openingDues)
+            .values({
+              customer: d.customer,
+              amount: "0",
+              date: d.date,
+              note: "Advance received",
+              createdBy: session.user.id,
+            })
+            .returning({ id: schema.openingDues.id });
+          await tx.insert(schema.openingPayments).values({
+            openingDueId: adv.id,
+            customer: d.customer,
+            loc: loc === "NM" ? "NM" : "MS",
+            date: d.date,
+            mode,
+            amount: left.toString(),
+            createdBy: session.user.id,
+          });
+        }
+      }
+      await cascade("Cash", cashExtra);
+      await cascade("UPI", upiExtra);
+      await cascade("CJ", cjExtra);
 
       return { billId: bill.id, billNo: no };
     });
@@ -146,6 +281,9 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
     revalidatePath("/nm");
     revalidatePath("/cj");
     revalidatePath("/dashboard");
+    revalidatePath("/balances");
+    revalidatePath("/recv");
+    revalidatePath("/ledger");
     return { ok: true, billId: result.billId, billNo: result.billNo, fy };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Could not save the bill.";

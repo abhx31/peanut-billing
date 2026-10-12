@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { money } from "@/lib/format";
+import { money, today } from "@/lib/format";
 import { receiveOnDue } from "./actions";
 
 type Mode = "Cash" | "UPI" | "CJ";
@@ -36,6 +36,7 @@ export function ReceiveDueDialog({ id, customer, due }: Props) {
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(String(due));
   const [mode, setMode] = useState<Mode>("Cash");
+  const [date, setDate] = useState(today());
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,13 +45,17 @@ export function ReceiveDueDialog({ id, customer, due }: Props) {
       toast.error("Enter a positive amount.");
       return;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date.");
+      return;
+    }
     startTransition(async () => {
-      const res = await receiveOnDue({ id, amount: n, mode });
+      const res = await receiveOnDue({ id, amount: n, mode, date });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Received ${money(n)} from ${customer}`);
+      toast.success(`Received ${money(n)} from ${customer} on ${date}`);
       setOpen(false);
       router.refresh();
     });
@@ -86,18 +91,29 @@ export function ReceiveDueDialog({ id, customer, due }: Props) {
               autoFocus
             />
           </div>
-          <div className="space-y-2">
-            <Label>Received as</Label>
-            <Select value={mode} onValueChange={(v) => setMode((v as Mode) ?? "Cash")}>
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Cash" label="Cash">Cash</SelectItem>
-                <SelectItem value="UPI" label="UPI">UPI</SelectItem>
-                <SelectItem value="CJ" label="CJ">CJ (go-between)</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Received as</Label>
+              <Select value={mode} onValueChange={(v) => setMode((v as Mode) ?? "Cash")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash" label="Cash">Cash</SelectItem>
+                  <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+                  <SelectItem value="CJ" label="CJ">CJ (go-between)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="od-pay-date">Date received</Label>
+              <Input
+                id="od-pay-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

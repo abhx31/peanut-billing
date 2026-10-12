@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -22,12 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AmountInput } from "@/components/ui/amount-input";
-import { money } from "@/lib/format";
+import { money, today } from "@/lib/format";
 
-type Mode = "Cash" | "UPI";
+type Mode = "Cash" | "UPI" | "CJ";
 type Action = (input: {
   amount: number;
   mode: Mode;
+  date: string;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 type Props = {
@@ -38,6 +40,8 @@ type Props = {
   balance: number;
   onConfirm: Action;
   size?: "sm" | "default";
+  /** When true, the Mode dropdown includes CJ (customer paid through the go-between). */
+  allowCj?: boolean;
 };
 
 export function ReceiveDialog({
@@ -48,12 +52,14 @@ export function ReceiveDialog({
   balance,
   onConfirm,
   size = "sm",
+  allowCj = true,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
   const [mode, setMode] = useState<Mode>("Cash");
+  const [date, setDate] = useState(today());
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -62,15 +68,20 @@ export function ReceiveDialog({
       toast.error("Enter a positive amount.");
       return;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date.");
+      return;
+    }
     startTransition(async () => {
-      const res = await onConfirm({ amount: n, mode });
+      const res = await onConfirm({ amount: n, mode, date });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Received ${money(n)} (${mode})`);
+      toast.success(`Received ${money(n)} (${mode}) on ${date}`);
       setOpen(false);
       setAmount("");
+      setDate(today());
       router.refresh();
     });
   }
@@ -104,17 +115,33 @@ export function ReceiveDialog({
             onChange={setAmount}
             autoFocus
           />
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Mode</label>
-            <Select value={mode} onValueChange={(v) => setMode((v as Mode) ?? "Cash")}>
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Cash" label="Cash">Cash</SelectItem>
-                <SelectItem value="UPI" label="UPI">UPI</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Mode</label>
+              <Select value={mode} onValueChange={(v) => setMode((v as Mode) ?? "Cash")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash" label="Cash">Cash</SelectItem>
+                  <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+                  {allowCj && (
+                    <SelectItem value="CJ" label="CJ">CJ</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="receive-date">
+                Date received
+              </label>
+              <Input
+                id="receive-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

@@ -117,11 +117,28 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
 
   const fy = fyOf(date);
 
+  const nameKey = (s: string) =>
+    s.trim().toLowerCase().replace(/\s+/g, " ");
+
   const previousBalance = useMemo(() => {
-    const q = customer.trim().toLowerCase();
+    const q = nameKey(customer);
     if (!q) return 0;
-    const found = customers.find((c) => c.name.toLowerCase() === q);
+    const found = customers.find((c) => nameKey(c.name) === q);
     return found && found.balance > 0.5 ? found.balance : 0;
+  }, [customer, customers]);
+
+  const similarCustomers = useMemo(() => {
+    const q = nameKey(customer);
+    if (!q) return [];
+    const exact = customers.find((c) => nameKey(c.name) === q);
+    if (exact) return [];
+    return customers
+      .filter((c) => {
+        if (c.balance <= 0.5) return false;
+        const k = nameKey(c.name);
+        return k.includes(q) || q.includes(k);
+      })
+      .slice(0, 4);
   }, [customer, customers]);
 
   function clearCurrentLine() {
@@ -473,8 +490,18 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
 
           {previousBalance > 0 && (
             <p className="text-xs text-warning">
-              Earlier balance of this customer: <b>{money(previousBalance)}</b> (not
-              included in this bill&apos;s total)
+              Earlier balance of this customer: <b>{money(previousBalance)}</b>{" "}
+              (old dues + unpaid bills). It is added to the <b>Total due after
+              this bill</b> below. Pay more than this bill and the extra will
+              clear the earlier balance (old dues first, then older bills).
+            </p>
+          )}
+          {previousBalance === 0 && similarCustomers.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              No customer with this exact name. Similar names with pending dues:{" "}
+              {similarCustomers
+                .map((c) => `${c.name} (${money(c.balance)})`)
+                .join(", ")}
             </p>
           )}
 
@@ -485,11 +512,19 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
             />
             <SumCell label="Amount" value={money(calc.amount)} />
             <SumCell label="Hamali" value={money(calc.hamali)} />
-            <SumCell label="Total" value={money(calc.total)} strong />
+            <SumCell label="This bill total" value={money(calc.total)} strong />
+            {previousBalance > 0 && (
+              <SumCell
+                label="Previous balance"
+                value={money(previousBalance)}
+                danger
+              />
+            )}
             <SumCell
-              label="Balance"
-              value={money(calc.balance)}
-              danger={calc.balance > 0.5}
+              label={previousBalance > 0 ? "Total due after this bill" : "Balance"}
+              value={money(previousBalance + calc.balance)}
+              danger={previousBalance + calc.balance > 0.5}
+              strong
             />
             {calc.profit !== null && (
               <SumCell label="Profit on this bill" value={money(calc.profit)} />

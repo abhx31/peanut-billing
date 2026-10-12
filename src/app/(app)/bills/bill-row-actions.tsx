@@ -26,11 +26,11 @@ export function BillRowActions({ billId, billNo, balance }: Props) {
       {balance > 0.5 && (
         <ReceiveDialog
           title={`Receive for bill #${pad2(billNo)}`}
-          description="Select payment mode and enter the amount received."
+          description="Select payment mode, date and the amount received."
           balance={balance}
           defaultAmount={balance}
-          onConfirm={({ amount, mode }) =>
-            receivePaymentForBill({ billId, amount, mode })
+          onConfirm={({ amount, mode, date }) =>
+            receivePaymentForBill({ billId, amount, mode, date })
           }
         />
       )}

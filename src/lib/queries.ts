@@ -175,6 +175,10 @@ export type BillRow = {
   // Convenience view for list displays: lot name of first item, or "Multiple" if >1.
   lotSummary: string;
   itemCount: number;
+  /** Customer balance BEFORE this bill (snapshot at bill creation). null for pre-v2 bills. */
+  prev: number | null;
+  /** Amount paid at bill creation (snapshot). null for pre-v2 bills. */
+  paidNow: number | null;
 };
 
 async function enrichBills(
@@ -267,6 +271,8 @@ async function enrichBills(
       items,
       lotSummary,
       itemCount: items.length,
+      prev: b.prev != null ? Number(b.prev) : null,
+      paidNow: b.paidNow != null ? Number(b.paidNow) : null,
     };
   });
 }
@@ -472,10 +478,31 @@ export async function cashBalanceBefore(
 
 export type CustomerBalance = {
   name: string;
+  /** Legacy "billed" (bill totals only). Does NOT include old dues — see totalBilled. */
   billed: number;
+  /** Legacy "paid" against bills only. See totalPaid for the full picture. */
   paid: number;
+  /** Legacy bill-only balance; prefer `totalBalance` for display. */
   balance: number;
+  /** Opening balance from before the app started tracking (sum of opening_dues). */
+  openingDue: number;
+  /** Payments received against opening dues. */
+  openingPaid: number;
+  /** billed + openingDue (what the customer was ever on the hook for). */
+  totalBilled: number;
+  /** paid + openingPaid (every receipt from this customer). */
+  totalPaid: number;
+  /** totalBilled − totalPaid (negative means the customer is in advance). */
+  totalBalance: number;
 };
+
+/**
+ * Case-insensitive, whitespace-collapsed key for matching customer names
+ * across bills and opening dues. Mirrors inspiration's `key(name)`.
+ */
+export function customerKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 export async function getCustomerBalances(
   exec: DbExecutor = db,
@@ -497,14 +524,60 @@ export async function getCustomerBalances(
     .innerJoin(schema.bills, eq(schema.payments.billId, schema.bills.id))
     .groupBy(schema.bills.customer);
 
-  // Both sides are grouped by the exact customer text, so match on it exactly.
-  const paidMap = new Map(pays.map((p) => [p.customer, Number(p.paid)]));
-
-  return bills
-    .map((b) => {
-      const paid = paidMap.get(b.customer) ?? 0;
-      const billed = Number(b.billed);
-      return { name: b.customer, billed, paid, balance: billed - paid };
+  const dues = await exec
+    .select({
+      customer: schema.openingDues.customer,
+      openingDue: sql<string>`coalesce(sum(${schema.openingDues.amount}), 0)`,
     })
-    .sort((a, b) => b.balance - a.balance);
+    .from(schema.openingDues)
+    .groupBy(schema.openingDues.customer);
+
+  const duePays = await exec
+    .select({
+      customer: schema.openingPayments.customer,
+      openingPaid: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)`,
+    })
+    .from(schema.openingPayments)
+    .groupBy(schema.openingPayments.customer);
+
+  // Merge by name-key so case / whitespace differences collapse into one row.
+  type Row = {
+    display: string;
+    billed: number;
+    paid: number;
+    openingDue: number;
+    openingPaid: number;
+  };
+  const map = new Map<string, Row>();
+  const get = (name: string): Row => {
+    const k = customerKey(name);
+    let r = map.get(k);
+    if (!r) {
+      r = { display: name, billed: 0, paid: 0, openingDue: 0, openingPaid: 0 };
+      map.set(k, r);
+    }
+    return r;
+  };
+  for (const b of bills) get(b.customer).billed += Number(b.billed);
+  for (const p of pays) get(p.customer).paid += Number(p.paid);
+  for (const d of dues) get(d.customer).openingDue += Number(d.openingDue);
+  for (const p of duePays) get(p.customer).openingPaid += Number(p.openingPaid);
+
+  return Array.from(map.values())
+    .map((r) => {
+      const totalBilled = r.billed + r.openingDue;
+      const totalPaid = r.paid + r.openingPaid;
+      return {
+        name: r.display,
+        billed: r.billed,
+        paid: r.paid,
+        balance: r.billed - r.paid,
+        openingDue: r.openingDue,
+        openingPaid: r.openingPaid,
+        totalBilled,
+        totalPaid,
+        totalBalance: totalBilled - totalPaid,
+      };
+    })
+    .sort((a, b) => b.totalBalance - a.totalBalance);
 }

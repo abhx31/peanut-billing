@@ -138,8 +138,22 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
           </div>
         )}
         <div className="font-bold text-base">Total: {money(bill.total)}</div>
-        <div>Paid: {money(bill.paid)}</div>
-        <div className="font-bold">Balance: {money(bill.balance)}</div>
+        {bill.paidNow != null && (
+          <div>Paid now: {money(bill.paidNow)}</div>
+        )}
+        {bill.prev != null && bill.prev > 0.005 && (
+          <div>Previous balance: {money(bill.prev)}</div>
+        )}
+        {bill.prev != null && bill.prev > 0.005 ? (
+          <div className="font-bold">
+            Total balance due: {money(bill.prev + bill.balance)}
+          </div>
+        ) : (
+          <>
+            <div>Paid: {money(bill.paid)}</div>
+            <div className="font-bold">Balance: {money(bill.balance)}</div>
+          </>
+        )}
       </div>
 
       {pays.length > 0 && (

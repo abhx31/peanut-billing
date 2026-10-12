@@ -5,13 +5,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
+import { getCurrentLoc } from "@/lib/loc";
 import { today } from "@/lib/format";
+import { customerKey } from "@/lib/queries";
 
 const deleteBillSchema = z.object({ id: z.string().uuid() });
 const receiveForBillSchema = z.object({
   billId: z.string().uuid(),
   amount: z.number().positive(),
-  mode: z.enum(["Cash", "UPI"]),
+  mode: z.enum(["Cash", "UPI", "CJ"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
@@ -54,11 +56,20 @@ export async function receivePaymentForBill(
 const receiveFromCustomerSchema = z.object({
   customer: z.string().trim().min(1),
   amount: z.number().positive(),
-  mode: z.enum(["Cash", "UPI"]),
+  mode: z.enum(["Cash", "UPI", "CJ"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
-// Applies the payment to this customer's oldest unpaid bills first.
+/**
+ * Apply a receipt from a customer against their dues, oldest first:
+ *   1. Open opening_dues (by date, then no — oldest first)
+ *   2. Unpaid bills (by date, then number)
+ *   3. Leftover becomes an "Advance received" opening row with amount=0,
+ *      plus an opening_payment linked to it.
+ *
+ * Mirrors inspiration's `receiveFrom`. CJ settlements are inserted as
+ * mode="CJ" so the ledger CJ-to-collect number moves correctly.
+ */
 export async function receiveFromCustomer(
   input: z.input<typeof receiveFromCustomerSchema>,
 ): Promise<Result> {
@@ -68,8 +79,45 @@ export async function receiveFromCustomer(
 
   const { customer, amount, mode, date } = parsed.data;
   const payDate = date ?? today();
+  const loc = await getCurrentLoc();
 
   await db.transaction(async (tx) => {
+    const key = customerKey(customer);
+    const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
+    const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+
+    // 1) Opening dues, oldest first (by date, then creation order).
+    const dues = await tx
+      .select({
+        id: schema.openingDues.id,
+        customer: schema.openingDues.customer,
+        amount: schema.openingDues.amount,
+        date: schema.openingDues.date,
+        paid: sql<string>`coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)`,
+      })
+      .from(schema.openingDues)
+      .where(dueNameMatches)
+      .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt));
+
+    let left = amount;
+    for (const d of dues) {
+      if (left <= 0.005) break;
+      const outstanding = Number(d.amount) - Number(d.paid);
+      if (outstanding <= 0.005) continue;
+      const take = Math.min(outstanding, left);
+      await tx.insert(schema.openingPayments).values({
+        openingDueId: d.id,
+        customer: d.customer,
+        loc: loc === "NM" ? "NM" : "MS",
+        date: payDate,
+        mode,
+        amount: take.toString(),
+        createdBy: session.user.id,
+      });
+      left -= take;
+    }
+
+    // 2) Unpaid bills, oldest first.
     const bills = await tx
       .select({
         id: schema.bills.id,
@@ -77,10 +125,9 @@ export async function receiveFromCustomer(
         paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
       })
       .from(schema.bills)
-      .where(sql`lower(trim(${schema.bills.customer})) = lower(trim(${customer}))`)
-      .orderBy(asc(schema.bills.no));
+      .where(nameMatches)
+      .orderBy(asc(schema.bills.date), asc(schema.bills.no));
 
-    let left = amount;
     for (const b of bills) {
       if (left <= 0.005) break;
       const due = Number(b.total) - Number(b.paid);
@@ -95,10 +142,49 @@ export async function receiveFromCustomer(
       });
       left -= take;
     }
+
+    // 3) Advance received — the customer paid more than they owed. Record it
+    //    as an opening row with amount=0 and an opening_payment with the
+    //    leftover; the customer's balance becomes negative (= money we owe
+    //    them / they prepaid).
+    if (left > 0.005) {
+      const displayName =
+        dues[0]?.customer ??
+        bills.length > 0
+          ? (
+              await tx
+                .select({ c: schema.bills.customer })
+                .from(schema.bills)
+                .where(nameMatches)
+                .limit(1)
+            )[0]?.c
+          : customer;
+      const [advance] = await tx
+        .insert(schema.openingDues)
+        .values({
+          customer: displayName ?? customer,
+          amount: "0",
+          date: payDate,
+          note: "Advance received",
+          createdBy: session.user.id,
+        })
+        .returning({ id: schema.openingDues.id });
+      await tx.insert(schema.openingPayments).values({
+        openingDueId: advance.id,
+        customer: displayName ?? customer,
+        loc: loc === "NM" ? "NM" : "MS",
+        date: payDate,
+        mode,
+        amount: left.toString(),
+        createdBy: session.user.id,
+      });
+    }
   });
 
   revalidatePath("/day");
   revalidatePath("/balances");
   revalidatePath("/ledger");
+  revalidatePath("/recv");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
