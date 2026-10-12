@@ -1,14 +1,21 @@
-import { ShoppingBasket } from "lucide-react";
+import { eq, and } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import { getPattiBillsByDate, getPattiLotNameSuggestions } from "@/lib/queries-patti";
-import { getLotsWithStock } from "@/lib/queries";
+import {
+  customerKey,
+  getCustomerBalances,
+  getLotsWithStock,
+} from "@/lib/queries";
+import { getCurrentLoc } from "@/lib/loc";
+import { db, schema } from "@/db";
 import { money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
+import { SalePattiForm } from "./sale-patti-form";
+import { PattiTabs } from "./patti-tabs";
 import { PattiMarkPaid } from "./patti-mark-paid";
 import { DeletePattiButton } from "./delete-patti-button";
 
@@ -20,40 +27,48 @@ export default async function PattiPage({ searchParams }: Props) {
   await requireOwnerOrEditor();
   const sp = await searchParams;
   const date = sp.d || today();
-  const [bills, lotSuggestions, lots] = await Promise.all([
-    getPattiBillsByDate(date),
-    getPattiLotNameSuggestions(),
-    getLotsWithStock(),
-  ]);
+  const [bills, lotSuggestions, lots, customerBalances, loc, saleBills] =
+    await Promise.all([
+      getPattiBillsByDate(date),
+      getPattiLotNameSuggestions(),
+      getLotsWithStock(),
+      getCustomerBalances(),
+      getCurrentLoc(),
+      db
+        .select()
+        .from(schema.bills)
+        .where(and(eq(schema.bills.kind, "psale"), eq(schema.bills.date, date))),
+    ]);
 
   const total = bills.reduce((s, b) => s + Number(b.net), 0);
   const unpaid = bills
     .filter((b) => !b.paidMode)
     .reduce((s, b) => s + Number(b.net), 0);
 
+  // Sale patti form only shows lots that have stock at the Working-at store.
+  const saleLots = lots
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      left: loc === "NM" ? l.stkN : l.stkM,
+    }))
+    .filter((l) => l.left > 0);
+  const customerNames = Array.from(
+    new Set(customerBalances.map((c) => c.name)),
+  ).sort();
+  void customerKey;
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingBasket className="h-4 w-4 text-primary" />
-            Patti bill (purchase / procurement)
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Record what you buy from a farmer or seller. Deductions (CD / labour /
-            transport) reduce the net; brokerage can either add to or deduct from the
-            net depending on who&apos;s paying
-            depending on who&apos;s paying. Patti payments move your cash/UPI ledger but
-            never affect sales profit.
-          </p>
-        </CardHeader>
-        <CardContent>
+      <PattiTabs
+        purchase={
           <PattiForm
             lotNameSuggestions={lotSuggestions}
             lots={lots.map((l) => ({ id: l.id, name: l.name }))}
           />
-        </CardContent>
-      </Card>
+        }
+        sale={<SalePattiForm lots={saleLots} customers={customerNames} />}
+      />
 
       <Card>
         <CardHeader>
@@ -124,6 +139,46 @@ export default async function PattiPage({ searchParams }: Props) {
                           />
                           <DeletePattiButton id={b.id} />
                         </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sale pattis on this date</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Sales recorded as patti bills (shown as <span className="font-mono">P NN</span>).
+            Stock is deducted from the chosen lot; the buyer owes the net.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {saleBills.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No sale pattis on this date.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4">No.</th>
+                    <th className="py-2 pr-4">Buyer</th>
+                    <th className="py-2 pr-4 text-right">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {saleBills.map((b) => (
+                    <tr key={b.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-mono">P {pad2(b.no)}</td>
+                      <td className="py-2 pr-4">{b.customer}</td>
+                      <td className="py-2 pr-4 text-right font-semibold">
+                        {money(b.total)}
                       </td>
                     </tr>
                   ))}
