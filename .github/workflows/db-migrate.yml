@@ -1,6 +1,26 @@
 name: Migrate production DB
 
+# Runs in two modes:
+#
+#   1. Automatic — on push to main that touches drizzle/**. No typed
+#      confirmation; the merge into main IS the authorisation. If you want a
+#      human approval step before every auto run, add a Required reviewer under
+#      Settings → Environments → production → Deployment protection rules.
+#
+#   2. Manual — workflow_dispatch with a "MIGRATE" typed confirmation. Use it
+#      to re-run after a flaky connection, or to apply migrations that were
+#      already on main before this workflow existed.
+#
+# src/db/migrate.ts reads drizzle/meta/_journal.json, so a re-run against an
+# already-up-to-date database is a no-op.
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'drizzle/**.sql'
+      - 'drizzle/meta/**'
+      - '.github/workflows/db-migrate.yml'
   workflow_dispatch:
     inputs:
       confirm:
@@ -20,11 +40,18 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
     steps:
-      - name: Verify confirmation
-        if: inputs.confirm != 'MIGRATE'
+      - name: Verify confirmation (manual runs only)
+        if: github.event_name == 'workflow_dispatch' && inputs.confirm != 'MIGRATE'
         run: |
           echo "::error::You must type MIGRATE to confirm. Got: '${{ inputs.confirm }}'"
           exit 1
+
+      - name: Guard against missing PROD_DATABASE_URL
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PROD_DATABASE_URL secret is not set. Add it under Settings → Environments → production → Secrets."
+            exit 1
+          fi
 
       - uses: actions/checkout@v4
 
@@ -41,7 +68,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --prefer-offline
 
-      - name: List pending migrations
+      - name: List migration files
         run: ls -la drizzle/*.sql
 
       - name: Run migrations
