@@ -581,3 +581,231 @@ export async function getCustomerBalances(
     })
     .sort((a, b) => b.totalBalance - a.totalBalance);
 }
+
+/** { customerKey -> list of unpaid bills (date, no, kind, loc, balance) }. */
+export async function getPendingBillsByCustomer(): Promise<
+  Map<
+    string,
+    Array<{
+      id: string;
+      no: number;
+      kind: "normal" | "gst" | "psale";
+      loc: "MS" | "NM";
+      date: string;
+      total: number;
+      balance: number;
+    }>
+  >
+> {
+  const rows = await db
+    .select({
+      id: schema.bills.id,
+      no: schema.bills.no,
+      kind: schema.bills.kind,
+      loc: schema.bills.loc,
+      date: schema.bills.date,
+      customer: schema.bills.customer,
+      total: schema.bills.total,
+      paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
+    })
+    .from(schema.bills)
+    .orderBy(asc(schema.bills.date), asc(schema.bills.no));
+
+  const map = new Map<
+    string,
+    Array<{
+      id: string;
+      no: number;
+      kind: "normal" | "gst" | "psale";
+      loc: "MS" | "NM";
+      date: string;
+      total: number;
+      balance: number;
+    }>
+  >();
+  for (const r of rows) {
+    const bal = Number(r.total) - Number(r.paid);
+    if (bal <= 0.005) continue;
+    const k = customerKey(r.customer);
+    const arr = map.get(k) ?? [];
+    arr.push({
+      id: r.id,
+      no: r.no,
+      kind: r.kind as "normal" | "gst" | "psale",
+      loc: r.loc === "NM" ? "NM" : "MS",
+      date: r.date,
+      total: Number(r.total),
+      balance: bal,
+    });
+    map.set(k, arr);
+  }
+  return map;
+}
+
+/** All ledger events for one customer, in time order (oldest first). */
+export type StatementRow =
+  | { kind: "due"; id: string; date: string; amount: number; note: string | null }
+  | {
+      kind: "bill";
+      id: string;
+      billNo: number;
+      billKind: "normal" | "gst" | "psale";
+      date: string;
+      total: number;
+    }
+  | {
+      kind: "receipt-due";
+      id: string;
+      date: string;
+      amount: number;
+      mode: "Cash" | "UPI" | "CJ";
+      dueId: string;
+    }
+  | {
+      kind: "receipt-bill";
+      id: string;
+      date: string;
+      amount: number;
+      mode: "Cash" | "UPI" | "CJ";
+      billId: string;
+      billNo: number;
+      billKind: "normal" | "gst" | "psale";
+    };
+
+export async function getCustomerStatement(name: string): Promise<{
+  customer: string;
+  rows: StatementRow[];
+  totals: {
+    billed: number;
+    openingDue: number;
+    received: number;
+    balance: number;
+  };
+}> {
+  const key = customerKey(name);
+  const billMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
+  const dueMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+
+  const [dues, bills, payments, duePayments] = await Promise.all([
+    db
+      .select({
+        id: schema.openingDues.id,
+        date: schema.openingDues.date,
+        amount: schema.openingDues.amount,
+        note: schema.openingDues.note,
+      })
+      .from(schema.openingDues)
+      .where(dueMatches)
+      .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt)),
+    db
+      .select({
+        id: schema.bills.id,
+        no: schema.bills.no,
+        kind: schema.bills.kind,
+        date: schema.bills.date,
+        total: schema.bills.total,
+        customer: schema.bills.customer,
+      })
+      .from(schema.bills)
+      .where(billMatches)
+      .orderBy(asc(schema.bills.date), asc(schema.bills.no)),
+    db
+      .select({
+        id: schema.payments.id,
+        date: schema.payments.date,
+        amount: schema.payments.amount,
+        mode: schema.payments.mode,
+        billId: schema.payments.billId,
+        billNo: schema.bills.no,
+        billKind: schema.bills.kind,
+      })
+      .from(schema.payments)
+      .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
+      .where(billMatches)
+      .orderBy(asc(schema.payments.date), asc(schema.payments.createdAt)),
+    db
+      .select({
+        id: schema.openingPayments.id,
+        date: schema.openingPayments.date,
+        amount: schema.openingPayments.amount,
+        mode: schema.openingPayments.mode,
+        dueId: schema.openingPayments.openingDueId,
+      })
+      .from(schema.openingPayments)
+      .where(sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`)
+      .orderBy(
+        asc(schema.openingPayments.date),
+        asc(schema.openingPayments.createdAt),
+      ),
+  ]);
+
+  const customer =
+    bills[0]?.customer ?? dues[0]?.id
+      ? (bills[0]?.customer ?? name)
+      : name;
+
+  const rows: StatementRow[] = [];
+  for (const d of dues) {
+    rows.push({
+      kind: "due",
+      id: d.id,
+      date: d.date,
+      amount: Number(d.amount),
+      note: d.note,
+    });
+  }
+  for (const b of bills) {
+    rows.push({
+      kind: "bill",
+      id: b.id,
+      billNo: b.no,
+      billKind: b.kind as "normal" | "gst" | "psale",
+      date: b.date,
+      total: Number(b.total),
+    });
+  }
+  for (const p of payments) {
+    rows.push({
+      kind: "receipt-bill",
+      id: p.id,
+      date: p.date,
+      amount: Number(p.amount),
+      mode: p.mode as "Cash" | "UPI" | "CJ",
+      billId: p.billId,
+      billNo: p.billNo,
+      billKind: p.billKind as "normal" | "gst" | "psale",
+    });
+  }
+  for (const p of duePayments) {
+    rows.push({
+      kind: "receipt-due",
+      id: p.id,
+      date: p.date,
+      amount: Number(p.amount),
+      mode: p.mode as "Cash" | "UPI" | "CJ",
+      dueId: p.dueId,
+    });
+  }
+  rows.sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      (a.kind === "due" ? -2 : a.kind === "bill" ? -1 : 0) -
+        (b.kind === "due" ? -2 : b.kind === "bill" ? -1 : 0),
+  );
+
+  const billedTotal = bills.reduce((s, b) => s + Number(b.total), 0);
+  const openingDueTotal = dues.reduce((s, d) => s + Number(d.amount), 0);
+  const received =
+    payments.reduce((s, p) => s + Number(p.amount), 0) +
+    duePayments.reduce((s, p) => s + Number(p.amount), 0);
+  return {
+    customer,
+    rows,
+    totals: {
+      billed: billedTotal,
+      openingDue: openingDueTotal,
+      received,
+      balance: billedTotal + openingDueTotal - received,
+    },
+  };
+}
