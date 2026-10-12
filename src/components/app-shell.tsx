@@ -73,7 +73,9 @@ export function AppShell({ firm, user, loc, items, children }: Props) {
   const closeMobile = React.useCallback(() => setMobileOpen(false), []);
 
   const activeItem = items.find(
-    (i) => pathname === i.href || (i.href !== "/" && pathname.startsWith(i.href)),
+    (i) =>
+      pathname === i.href ||
+      (i.href !== "/" && pathname.startsWith(`${i.href}/`)),
   );
 
   // Print pages render just the printable content — no sidebar, header, LocBar or footer.
@@ -169,7 +171,8 @@ function SidebarNav({ items, onNavigate }: { items: NavItem[]; onNavigate?: () =
       {items.map((item) => {
         const Icon = ICONS[item.icon];
         const active =
-          pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+          pathname === item.href ||
+          (item.href !== "/" && pathname.startsWith(`${item.href}/`));
         return (
           <Link
             key={item.href}

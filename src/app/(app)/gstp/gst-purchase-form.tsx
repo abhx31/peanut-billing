@@ -7,6 +7,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -16,7 +17,8 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { money, num, r2, today } from "@/lib/format";
+import { INDIA_STATES, stateNameFromCode } from "@/lib/india-states";
+import { money, num, pad2, r2, today } from "@/lib/format";
 import { saveGstPurchase } from "./actions";
 
 type Lot = { id: string; name: string };
@@ -24,6 +26,8 @@ type Lot = { id: string; name: string };
 type Props = {
   lots: Lot[];
   firmStateCode: string;
+  nextNo: number;
+  currentFy: string;
 };
 
 type CartItem = {
@@ -38,14 +42,18 @@ type CartItem = {
   amount: number;
 };
 
-export function GstPurchaseForm({ lots, firmStateCode }: Props) {
+export function GstPurchaseForm({
+  lots,
+  firmStateCode,
+  nextNo,
+  currentFy,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [date, setDate] = useState(today());
   const [party, setParty] = useState("");
   const [gstin, setGstin] = useState("");
-  const [state, setState] = useState("");
   const [stateCode, setStateCode] = useState("");
   const [address, setAddress] = useState("");
   const [invNo, setInvNo] = useState("");
@@ -96,7 +104,8 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
   );
 
   const intra =
-    (firmStateCode ?? "").toString().trim() === (stateCode ?? "").toString().trim();
+    (firmStateCode ?? "").toString().trim() ===
+    (stateCode ?? "").toString().trim();
 
   const calc = useMemo(() => {
     const taxable = r2(items.reduce((s, i) => s + i.amount, 0));
@@ -117,6 +126,7 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
       cgst,
       sgst,
       igst,
+      totalTax,
       roundOff,
       net,
       itc,
@@ -145,7 +155,6 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
   function reset() {
     setParty("");
     setGstin("");
-    setState("");
     setStateCode("");
     setAddress("");
     setInvNo("");
@@ -155,14 +164,13 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
     clearLine();
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(mode: "save" | "save-view") {
     if (!party.trim()) {
       toast.error("Enter supplier name.");
       return;
     }
     if (items.length === 0) {
-      toast.error("Add at least one line.");
+      toast.error("Add at least one lot.");
       return;
     }
     startTransition(async () => {
@@ -172,7 +180,7 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
         supplier: {
           name: party.trim(),
           gstin: gstin.trim(),
-          state: state.trim(),
+          state: stateNameFromCode(stateCode),
           code: stateCode.trim(),
           address: address.trim(),
         },
@@ -196,10 +204,18 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Saved GST purchase GP ${res.no} · ${res.fy}`);
+      toast.success(`Saved GST purchase GP ${pad2(res.no)} · ${res.fy}`);
+      if (mode === "save-view") {
+        // Future: once a GST-purchase print page exists, open it here.
+      }
       reset();
       router.refresh();
     });
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit("save");
   }
 
   return (
@@ -213,15 +229,18 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
             </Badge>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Record a GST purchase from a supplier. Tick <b>Add bags to my stock</b>{" "}
-            to receive the goods into a lot; the stock rises per lot. Tick{" "}
-            <b>Tax can be claimed back</b> if you can claim ITC on this purchase.
+            Records a purchase from a supplier with a GSTIN, adds the bags to
+            your stock, and records the tax you can claim back (input tax
+            credit).
+          </p>
+          <p className="text-sm font-semibold">
+            Purchase entry GP {pad2(nextNo)} · period {currentFy}
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="gp-date">Date (your records)</Label>
+              <Label htmlFor="gp-date">Entry date</Label>
               <Input
                 id="gp-date"
                 type="date"
@@ -248,27 +267,37 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="gp-code">State code</Label>
-              <Input
-                id="gp-code"
+              <Label>Supplier state</Label>
+              <Select
                 value={stateCode}
-                onChange={(e) => setStateCode(e.target.value)}
-                className="font-mono"
-                maxLength={2}
-              />
+                onValueChange={(v) => setStateCode(v ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pick state">
+                    {(v) => {
+                      const s = INDIA_STATES.find((x) => x.code === v);
+                      return s ? `${s.code} — ${s.name}` : "Pick state";
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-h-64 overflow-y-auto">
+                  {INDIA_STATES.map((s) => (
+                    <SelectItem
+                      key={s.code}
+                      value={s.code}
+                      label={`${s.code} — ${s.name}`}
+                    >
+                      {s.code} — {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="gp-state">State</Label>
-              <Input
-                id="gp-state"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2 lg:col-span-2">
+            <div className="space-y-2 sm:col-span-2 lg:col-span-4">
               <Label htmlFor="gp-addr">Supplier address</Label>
-              <Input
+              <Textarea
                 id="gp-addr"
+                rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
@@ -290,11 +319,25 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
                 onChange={(e) => setInvDate(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <Label>GST rate</Label>
+              <Select value={pct} onValueChange={(v) => setPct(v ?? "5")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{(v) => `${v ?? "5"}%`}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5" label="5%">5%</SelectItem>
+                  <SelectItem value="0" label="0%">0%</SelectItem>
+                  <SelectItem value="12" label="12%">12%</SelectItem>
+                  <SelectItem value="18" label="18%">18%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div>
-            <h2 className="text-base font-semibold mb-2">Lots in this invoice</h2>
-            {cart.length > 0 && (
+            <h2 className="text-base font-semibold mb-2">Lots in this purchase</h2>
+            {cart.length > 0 ? (
               <div className="overflow-x-auto mb-3">
                 <table className="w-full text-sm">
                   <thead>
@@ -337,15 +380,20 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
                   </tbody>
                 </table>
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-3">
+                No lot added yet. Fill in a lot below and tap the add button,
+                or just save if the purchase has one lot.
+              </p>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-2">
-                <Label>Lot (stock)</Label>
+                <Label>Lot (bags are added to its stock)</Label>
                 <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
                   <SelectTrigger className="w-full">
-                    <SelectValue>
-                      {(v) => lots.find((l) => l.id === v)?.name ?? "Pick a lot"}
+                    <SelectValue placeholder="Add a lot first">
+                      {(v) => lots.find((l) => l.id === v)?.name ?? "Add a lot first"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -358,7 +406,7 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gp-desc">Description</Label>
+                <Label htmlFor="gp-desc">Description of goods</Label>
                 <Input
                   id="gp-desc"
                   value={description}
@@ -375,7 +423,7 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gp-bags">Bags</Label>
+                <Label htmlFor="gp-bags">No. of bags</Label>
                 <Input
                   id="gp-bags"
                   type="number"
@@ -386,7 +434,7 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gp-kg">Total kg</Label>
+                <Label htmlFor="gp-kg">Total weight (kg)</Label>
                 <Input
                   id="gp-kg"
                   type="number"
@@ -419,43 +467,23 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
-            <div className="space-y-2">
-              <Label>GST rate</Label>
-              <Select value={pct} onValueChange={(v) => setPct(v ?? "5")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>{(v) => `${v ?? "5"}%`}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5" label="5%">5%</SelectItem>
-                  <SelectItem value="0" label="0%">0%</SelectItem>
-                  <SelectItem value="12" label="12%">12%</SelectItem>
-                  <SelectItem value="18" label="18%">18%</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tax</Label>
-              <label className="flex items-center gap-2 text-sm pt-1">
-                <input
-                  type="checkbox"
-                  checked={itcOn}
-                  onChange={(e) => setItcOn(e.target.checked)}
-                />
-                Tax can be claimed back (ITC)
-              </label>
-            </div>
-            <div className="space-y-2">
-              <Label>Stock</Label>
-              <label className="flex items-center gap-2 text-sm pt-1">
-                <input
-                  type="checkbox"
-                  checked={addToStock}
-                  onChange={(e) => setAddToStock(e.target.checked)}
-                />
-                Add bags to my stock
-              </label>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-end">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={itcOn}
+                onChange={(e) => setItcOn(e.target.checked)}
+              />
+              Tax can be claimed back (ITC eligible)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={addToStock}
+                onChange={(e) => setAddToStock(e.target.checked)}
+              />
+              Add the bags to my stock
+            </label>
             <div className="space-y-2">
               <Label>Payment to supplier</Label>
               <Select
@@ -481,24 +509,36 @@ export function GstPurchaseForm({ lots, firmStateCode }: Props) {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            <SumCell label="Bags · kg" value={`${calc.bagsTotal} · ${calc.kgTotal}`} />
-            <SumCell label="Taxable" value={money(calc.taxable)} />
+            <SumCell
+              label="Bags · kg"
+              value={`${calc.bagsTotal} · ${calc.kgTotal}`}
+            />
+            <SumCell label="Taxable value" value={money(calc.taxable)} />
             {intra ? (
-              <>
-                <SumCell label={`CGST ${num(pct) / 2}%`} value={money(calc.cgst)} />
-                <SumCell label={`SGST ${num(pct) / 2}%`} value={money(calc.sgst)} />
-              </>
+              <SumCell
+                label={`CGST + SGST ${pct}%`}
+                value={money(calc.cgst + calc.sgst)}
+              />
             ) : (
               <SumCell label={`IGST ${pct}%`} value={money(calc.igst)} />
             )}
             <SumCell label="Round off" value={money(calc.roundOff)} />
             <SumCell label="Total payable" value={money(calc.net)} strong />
-            <SumCell label="ITC" value={money(calc.itc)} />
+            <SumCell label="Tax I can claim back" value={money(calc.itc)} />
           </div>
 
           <div className="flex gap-2 flex-wrap">
             <Button type="submit" disabled={pending} size="lg">
-              {pending ? "Saving…" : "Save GST purchase"}
+              {pending ? "Saving…" : "Save purchase"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              size="lg"
+              onClick={() => submit("save-view")}
+            >
+              Save &amp; view
             </Button>
           </div>
         </CardContent>
