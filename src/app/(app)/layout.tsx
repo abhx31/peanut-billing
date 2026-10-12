@@ -27,6 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/gcust", label: "GST customers", icon: "gcust" },
     ...(isPrivileged
       ? ([
+          { href: "/gstp", label: "GST purchase", icon: "gst" },
           { href: "/patti", label: "Patti bill", icon: "patti" },
           { href: "/profit", label: "Profit", icon: "profit" },
         ] as NavItem[])
