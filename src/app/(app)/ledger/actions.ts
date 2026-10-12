@@ -21,13 +21,20 @@ export async function setOpeningBalances(
   if (!parsed.success) return { ok: false, error: "Enter valid amounts." };
 
   await db
-    .update(schema.settings)
-    .set({
+    .insert(schema.settings)
+    .values({
+      id: 1,
       openingCash: parsed.data.openingCash.toString(),
       openingBank: parsed.data.openingBank.toString(),
-      updatedAt: new Date(),
     })
-    .where(eq(schema.settings.id, 1));
+    .onConflictDoUpdate({
+      target: schema.settings.id,
+      set: {
+        openingCash: parsed.data.openingCash.toString(),
+        openingBank: parsed.data.openingBank.toString(),
+        updatedAt: new Date(),
+      },
+    });
   revalidatePath("/ledger");
   revalidatePath("/settings");
   return { ok: true };

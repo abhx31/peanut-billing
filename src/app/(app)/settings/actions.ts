@@ -41,16 +41,27 @@ export async function updateSettings(
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Please check your inputs." };
 
+  // Upsert so the first save after a fresh / truncated DB creates the row
+  // instead of silently updating zero rows.
   await db
-    .update(schema.settings)
-    .set({
+    .insert(schema.settings)
+    .values({
+      id: 1,
       firm: parsed.data.firm,
       hamaliDefault: parsed.data.hamaliDefault.toString(),
       openingCash: parsed.data.openingCash.toString(),
       openingBank: parsed.data.openingBank.toString(),
-      updatedAt: new Date(),
     })
-    .where(eq(schema.settings.id, 1));
+    .onConflictDoUpdate({
+      target: schema.settings.id,
+      set: {
+        firm: parsed.data.firm,
+        hamaliDefault: parsed.data.hamaliDefault.toString(),
+        openingCash: parsed.data.openingCash.toString(),
+        openingBank: parsed.data.openingBank.toString(),
+        updatedAt: new Date(),
+      },
+    });
 
   revalidatePath("/");
   revalidatePath("/settings");

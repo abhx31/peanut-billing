@@ -117,9 +117,12 @@ export async function saveFirmGstProfile(
       : existingStart;
 
   await db
-    .update(schema.settings)
-    .set({ gstProfile: profile, gstStart: nextStart, updatedAt: new Date() })
-    .where(eq(schema.settings.id, 1));
+    .insert(schema.settings)
+    .values({ id: 1, gstProfile: profile, gstStart: nextStart })
+    .onConflictDoUpdate({
+      target: schema.settings.id,
+      set: { gstProfile: profile, gstStart: nextStart, updatedAt: new Date() },
+    });
   revalidatePath("/gst");
   revalidatePath("/gcust");
   revalidatePath("/settings");
