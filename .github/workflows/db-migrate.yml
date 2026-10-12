@@ -33,8 +33,13 @@ jobs:
           node-version: 20
           cache: npm
 
+      # Same install flag set the main CI uses — the lock is generated on Windows
+      # and `npm ci` refuses the Linux-only optional deps (@emnapi/*,
+      # @img/sharp-wasm32, @tailwindcss/oxide-wasm32-wasi). `npm install` is
+      # tolerant and resolves them on the fly; the lock still steers resolution
+      # so builds stay reproducible.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund --prefer-offline
 
       - name: List pending migrations
         run: ls -la drizzle/*.sql
