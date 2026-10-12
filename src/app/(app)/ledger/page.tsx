@@ -4,17 +4,23 @@ import {
   cashBalanceBefore,
   getAllPaymentsOnDate,
   getBillsByDate,
+  getCustomerBalances,
   getExpensesByDate,
   getSettings,
 } from "@/lib/queries";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
+import { getCurrentLoc } from "@/lib/loc";
 import { money, pad2, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
 import { Button } from "@/components/ui/button";
 import { OpeningBalanceButton } from "./opening-balance-button";
 import { CloseDayCard } from "./close-day-card";
+import {
+  ExpenseQuickButton,
+  ReceiveQuickButton,
+} from "./quick-entry-buttons";
 import Link from "next/link";
 import { ExcelButton } from "@/components/excel-button";
 
@@ -41,6 +47,8 @@ export default async function LedgerPage({ searchParams }: Props) {
     cjSettlementsToday,
     cjSettlementsBeforeRow,
     cjReceivedBeforeRow,
+    customerBalances,
+    loc,
     pattiPaidToday,
   ] = await Promise.all([
     getBillsByDate(date, isOwner),
@@ -64,6 +72,8 @@ export default async function LedgerPage({ searchParams }: Props) {
       .from(schema.payments)
       .where(sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} < ${date}`)
       .then((r) => r[0]),
+    getCustomerBalances(),
+    getCurrentLoc(),
     isOwner
       ? db
           .select({
@@ -181,6 +191,11 @@ export default async function LedgerPage({ searchParams }: Props) {
             label="Full day report (Excel)"
             variant="default"
           />
+          <ReceiveQuickButton
+            defaultDate={date}
+            customerNames={customerBalances.map((c) => c.name)}
+          />
+          <ExpenseQuickButton defaultDate={date} defaultLoc={loc} />
           {isOwner && (
             <OpeningBalanceButton
               openingCash={Number(settings.openingCash)}
