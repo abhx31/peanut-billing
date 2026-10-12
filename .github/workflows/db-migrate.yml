@@ -1,19 +1,5 @@
 name: Migrate production DB
 
-# Runs in two modes:
-#
-#   1. Automatic — on push to main that touches drizzle/**. No typed
-#      confirmation; the merge into main IS the authorisation. If you want a
-#      human approval step before every auto run, add a Required reviewer under
-#      Settings → Environments → production → Deployment protection rules.
-#
-#   2. Manual — workflow_dispatch with a "MIGRATE" typed confirmation. Use it
-#      to re-run after a flaky connection, or to apply migrations that were
-#      already on main before this workflow existed.
-#
-# src/db/migrate.ts reads drizzle/meta/_journal.json, so a re-run against an
-# already-up-to-date database is a no-op.
-
 on:
   push:
     branches: [main]
@@ -49,7 +35,7 @@ jobs:
       - name: Guard against missing PROD_DATABASE_URL
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::PROD_DATABASE_URL secret is not set. Add it under Settings → Environments → production → Secrets."
+            echo "::error::PROD_DATABASE_URL secret is not set."
             exit 1
           fi
 
@@ -60,16 +46,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Same install flag set the main CI uses — the lock is generated on Windows
-      # and `npm ci` refuses the Linux-only optional deps (@emnapi/*,
-      # @img/sharp-wasm32, @tailwindcss/oxide-wasm32-wasi). `npm install` is
-      # tolerant and resolves them on the fly; the lock still steers resolution
-      # so builds stay reproducible.
       - name: Install dependencies
         run: npm install --no-audit --no-fund --prefer-offline
-
-      - name: List migration files
-        run: ls -la drizzle/*.sql
 
       - name: Run migrations
         run: npm run db:migrate
