@@ -13,7 +13,7 @@ import {
   boolean,
   customType,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 const bytea = customType<{ data: Buffer }>({
   dataType: () => "bytea",
@@ -21,7 +21,7 @@ const bytea = customType<{ data: Buffer }>({
 
 export const roleEnum = pgEnum("user_role", ["owner", "editor", "staff"]);
 export const paymentModeEnum = pgEnum("payment_mode", ["Cash", "UPI", "CJ"]);
-export const billKindEnum = pgEnum("bill_kind", ["normal", "gst"]);
+export const billKindEnum = pgEnum("bill_kind", ["normal", "gst", "psale"]);
 export const xferDirEnum = pgEnum("xfer_dir", ["out", "back"]);
 
 export const users = pgTable("users", {
@@ -98,6 +98,11 @@ export const stockIn = pgTable("stock_in", {
   bags: integer("bags").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   loc: text("loc"), // null = Main store, "NM" = New Mahavir
+  // Where the stock came from. null = opening/manual add, "patti" = purchase
+  // patti with Add-to-stock, "gstp" = GST purchase. `ref` points at that
+  // source doc (patti_bills.id) so deleting the source removes these rows.
+  src: text("src"),
+  ref: uuid("ref"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -140,6 +145,12 @@ export const bills = pgTable(
     sellerSnapshot: jsonb("seller_snapshot"),
     headerExtras: jsonb("header_extras"), // ewb, veh, through, dest, dn, mp, rf, or, bo, bd, dd, dt, lr, td
     taxBreakdown: jsonb("tax_breakdown"), // { intra, pct, cgst, sgst, igst, ro }
+    // Snapshot of what the customer owed before this bill (prev) and what was
+    // collected at the time of billing (paidNow). Printed on the bill.
+    prev: numeric("prev", { precision: 14, scale: 2 }),
+    paidNow: numeric("paid_now", { precision: 14, scale: 2 }),
+    // Sale-patti adjustments. Populated only when kind = "psale".
+    patti: jsonb("patti"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
@@ -261,11 +272,14 @@ export const hamaliPaid = pgTable("hamali_paid", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// Patti (purchase) bills for buying from farmers.
+// Patti (purchase) bills. Also holds GST purchase bills — distinguished by
+// the `kind` column: null = regular purchase patti, "gstp" = GST purchase.
 export const pattiBills = pgTable(
   "patti_bills",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    // null = regular purchase patti, "gstp" = GST purchase bill.
+    kind: text("kind"),
     no: integer("no").notNull(),
     fy: text("fy").notNull(),
     date: date("date", { mode: "string" }).notNull(),
@@ -287,10 +301,29 @@ export const pattiBills = pgTable(
     net: numeric("net", { precision: 14, scale: 2 }).notNull(),
     paidMode: text("paid_mode"), // null = not paid, "Cash" or "UPI" when paid
     paidDate: date("paid_date", { mode: "string" }),
+    // GST-purchase-only fields (null on regular purchase patti).
+    supplier: jsonb("supplier"),
+    invNo: text("inv_no"),
+    invDate: date("inv_date", { mode: "string" }),
+    items: jsonb("items"),
+    pct: numeric("pct", { precision: 5, scale: 2 }),
+    taxable: numeric("taxable", { precision: 14, scale: 2 }),
+    tax: jsonb("tax"), // { inter, cgst, sgst, igst, ro }
+    itcOn: boolean("itc_on"),
+    itc: numeric("itc", { precision: 14, scale: 2 }),
+    // "Add bags to stock" flag used by both purchase patti and GST purchase.
+    stock: boolean("stock"),
+    stockLotId: uuid("stock_lot_id"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("patti_fy_no_uq").on(t.fy, t.no)],
+  (t) => [
+    uniqueIndex("patti_kind_fy_no_uq").on(
+      sql`coalesce(${t.kind}, '')`,
+      t.fy,
+      t.no,
+    ),
+  ],
 );
 
 export const settings = pgTable("settings", {

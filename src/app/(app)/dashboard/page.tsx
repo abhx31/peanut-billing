@@ -227,7 +227,7 @@ export default async function DashboardPage() {
         />
         {isPrivileged && (
           <KPICard
-            title="Patti not yet paid"
+            title="Purchases not yet paid"
             value={money(pattiUnpaid)}
             sub="Purchases pending payment"
             icon={ShoppingBasket}

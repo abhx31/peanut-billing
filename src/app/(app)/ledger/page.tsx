@@ -282,7 +282,7 @@ export default async function LedgerPage({ searchParams }: Props) {
               ["From CJ (settled)", money(cjSettledCash)],
               ["Cash expenses", money(cashOut)],
               ...(isOwner
-                ? ([["Patti paid (cash)", money(pattiPaidCash)]] as [string, string][])
+                ? ([["Purchases paid (cash)", money(pattiPaidCash)]] as [string, string][])
                 : []),
               ["Closing", money(bookCashClose)],
             ]}
@@ -302,7 +302,7 @@ export default async function LedgerPage({ searchParams }: Props) {
               ["From CJ (settled)", money(cjSettledUpi)],
               ["UPI expenses", money(upiOut)],
               ...(isOwner
-                ? ([["Patti paid (UPI)", money(pattiPaidUpi)]] as [string, string][])
+                ? ([["Purchases paid (UPI)", money(pattiPaidUpi)]] as [string, string][])
                 : []),
               ["Closing", money(bookBankClose)],
             ]}
@@ -425,7 +425,7 @@ export default async function LedgerPage({ searchParams }: Props) {
       {isOwner && (
         <Card>
           <CardHeader>
-            <CardTitle>Patti payments (purchases paid)</CardTitle>
+            <CardTitle>Purchases paid (patti + GST purchase)</CardTitle>
           </CardHeader>
           <CardContent>
             {pattiPaidToday.length === 0 ? (
