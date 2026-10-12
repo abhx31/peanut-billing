@@ -20,9 +20,12 @@ import { Segmented } from "@/components/segmented";
 import { money, num, parseBagWeights, pad2, r2, today } from "@/lib/format";
 import { savePatti } from "./actions";
 
-type Props = { lotNameSuggestions: string[] };
+type Props = {
+  lotNameSuggestions: string[];
+  lots: { id: string; name: string }[];
+};
 
-export function PattiForm({ lotNameSuggestions }: Props) {
+export function PattiForm({ lotNameSuggestions, lots }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -44,6 +47,8 @@ export function PattiForm({ lotNameSuggestions }: Props) {
   const [transportOn, setTransportOn] = useState(false);
   const [transport, setTransport] = useState("");
   const [paidMode, setPaidMode] = useState<"" | "Cash" | "UPI">("");
+  const [addToStock, setAddToStock] = useState(false);
+  const [stockLotId, setStockLotId] = useState(lots[0]?.id ?? "");
 
   function onWeights(v: string) {
     setWeights(v);
@@ -87,6 +92,8 @@ export function PattiForm({ lotNameSuggestions }: Props) {
         brSign,
         transport: transportOn ? num(transport) : 0,
         paidMode: paidMode ?? "",
+        addToStock,
+        stockLotId: addToStock ? stockLotId : undefined,
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -109,6 +116,7 @@ export function PattiForm({ lotNameSuggestions }: Props) {
       setTransportOn(false);
       setTransport("");
       setPaidMode("");
+      setAddToStock(false);
       router.refresh();
     });
   }
@@ -260,6 +268,47 @@ export function PattiForm({ lotNameSuggestions }: Props) {
             step="0.01"
             inputId="ptr"
           />
+        </FormGrid>
+      </FormSection>
+
+      <FormSection
+        title="Add to stock"
+        description="Add these bags to a lot so you can sell them from stock. If this patti is later deleted the stock row is removed too."
+        compact
+      >
+        <FormGrid cols={3}>
+          <Field label="Add to stock">
+            <label className="flex items-center gap-2 text-sm pt-1">
+              <input
+                type="checkbox"
+                checked={addToStock}
+                onChange={(e) => setAddToStock(e.target.checked)}
+                disabled={lots.length === 0}
+              />
+              Add these {calc.bagsN || 0} bags to my stock
+            </label>
+          </Field>
+          {addToStock && (
+            <Field label="Lot to add bags to" required span={2}>
+              <Select
+                value={stockLotId}
+                onValueChange={(v) => setStockLotId(v ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pick a lot">
+                    {(v) => lots.find((l) => l.id === v)?.name ?? "Pick a lot"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {lots.map((l) => (
+                    <SelectItem key={l.id} value={l.id} label={l.name}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
         </FormGrid>
       </FormSection>
 

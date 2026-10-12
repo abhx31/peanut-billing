@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import { getPattiBillsByDate, getPattiLotNameSuggestions } from "@/lib/queries-patti";
+import { getLotsWithStock } from "@/lib/queries";
 import { money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
@@ -19,9 +20,10 @@ export default async function PattiPage({ searchParams }: Props) {
   await requireOwnerOrEditor();
   const sp = await searchParams;
   const date = sp.d || today();
-  const [bills, lotSuggestions] = await Promise.all([
+  const [bills, lotSuggestions, lots] = await Promise.all([
     getPattiBillsByDate(date),
     getPattiLotNameSuggestions(),
+    getLotsWithStock(),
   ]);
 
   const total = bills.reduce((s, b) => s + Number(b.net), 0);
@@ -46,7 +48,10 @@ export default async function PattiPage({ searchParams }: Props) {
           </p>
         </CardHeader>
         <CardContent>
-          <PattiForm lotNameSuggestions={lotSuggestions} />
+          <PattiForm
+            lotNameSuggestions={lotSuggestions}
+            lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+          />
         </CardContent>
       </Card>
 

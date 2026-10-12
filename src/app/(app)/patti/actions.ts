@@ -1,11 +1,12 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
+import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
 
 const savePattiSchema = z.object({
@@ -22,6 +23,11 @@ const savePattiSchema = z.object({
   brSign: z.union([z.literal(1), z.literal(-1)]).default(-1),
   transport: z.number().min(0).default(0),
   paidMode: z.enum(["", "Cash", "UPI"]).optional().default(""),
+  // v2: optional "Add these bags to my stock". Requires a lotId to assign the
+  // bags to; the server inserts a stock_in row with src="patti" + ref=pattiId
+  // so deleting the patti bill cleans the stock entry up.
+  addToStock: z.boolean().optional().default(false),
+  stockLotId: z.string().uuid().optional(),
 });
 
 const delPattiSchema = z.object({ id: z.string().uuid() });
@@ -47,6 +53,14 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
   const net = r2(amount - cd - labor + d.brSign * broker - d.transport);
   const paidMode = d.paidMode === "" ? null : d.paidMode;
   const paidDate = paidMode ? d.date : null;
+  const addToStock = d.addToStock && !!d.stockLotId;
+  if (d.addToStock && !d.stockLotId) {
+    return {
+      ok: false,
+      error: "Pick a lot for the bags, or uncheck Add to stock.",
+    };
+  }
+  const loc = await getCurrentLoc();
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -79,14 +93,33 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
           net: net.toString(),
           paidMode,
           paidDate,
+          stock: addToStock,
+          stockLotId: addToStock ? d.stockLotId! : null,
           createdBy: session.user.id,
         })
         .returning({ id: schema.pattiBills.id });
+
+      if (addToStock) {
+        await tx.insert(schema.stockIn).values({
+          lotId: d.stockLotId!,
+          bags: d.bags,
+          date: d.date,
+          loc: loc === "NM" ? "NM" : "MS",
+          src: "patti",
+          ref: row.id,
+          createdBy: session.user.id,
+        });
+      }
+
       return { pattiId: row.id, pattiNo: no };
     });
     revalidatePath("/patti");
     revalidatePath("/ledger");
     revalidatePath("/dashboard");
+    if (addToStock) {
+      revalidatePath("/stock");
+      revalidatePath("/lots");
+    }
     return { ok: true, pattiId: result.pattiId, pattiNo: result.pattiNo, fy };
   } catch (err) {
     return {
@@ -133,9 +166,24 @@ export async function deletePatti(
   await requireOwnerOrEditor();
   const parsed = delPattiSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid patti." };
-  await db.delete(schema.pattiBills).where(eq(schema.pattiBills.id, parsed.data.id));
+  await db.transaction(async (tx) => {
+    // Remove any stock_in rows this patti created via "Add to stock".
+    await tx
+      .delete(schema.stockIn)
+      .where(
+        and(
+          eq(schema.stockIn.src, "patti"),
+          eq(schema.stockIn.ref, parsed.data.id),
+        ),
+      );
+    await tx
+      .delete(schema.pattiBills)
+      .where(eq(schema.pattiBills.id, parsed.data.id));
+  });
   revalidatePath("/patti");
   revalidatePath("/ledger");
   revalidatePath("/dashboard");
+  revalidatePath("/stock");
+  revalidatePath("/lots");
   return { ok: true };
 }
