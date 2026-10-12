@@ -147,7 +147,11 @@ async function copyTable(table) {
       await dst.query(insertSql, values);
       inserted++;
     } catch (err) {
-      console.error(`  [${table}] insert failed on row:`, row, err);
+      console.error(
+        `  [${table}] insert failed on row:`,
+        JSON.stringify(row).slice(0, 500),
+      );
+      console.error("          ", fullError(err));
       throw err;
     }
   }
@@ -167,25 +171,58 @@ async function truncateDestinationTables() {
   );
 }
 
+function fullError(err) {
+  if (!err) return "unknown";
+  const parts = [err.message || String(err)];
+  if (err.detail) parts.push(`detail: ${err.detail}`);
+  if (err.hint) parts.push(`hint: ${err.hint}`);
+  if (err.where) parts.push(`where: ${err.where}`);
+  if (err.code) parts.push(`code: ${err.code}`);
+  return parts.join("\n          ");
+}
+
+async function nukeDestinationSchema() {
+  // Blow away everything in the public schema so drizzle migrate starts
+  // against a truly empty database. This drops any leftover from a half-run
+  // previous attempt (CREATE TABLE "users" fails without this when the table
+  // already exists). The destination is explicitly supposed to be empty, and
+  // the URL guard at the top of the script prevents src == dst, so this is
+  // safe.
+  await dst.query("DROP SCHEMA IF EXISTS public CASCADE");
+  await dst.query("CREATE SCHEMA public");
+  await dst.query("GRANT USAGE ON SCHEMA public TO PUBLIC");
+  await dst.query("GRANT CREATE ON SCHEMA public TO PUBLIC");
+}
+
 async function main() {
   console.log("Migrating from");
   console.log("  OLD:", new URL(OLD).host);
   console.log("  NEW:", new URL(NEW).host);
 
-  console.log("\n[1/3] Running migrations against NEW…");
+  console.log("\n[1/4] Dropping public schema on NEW…");
+  await nukeDestinationSchema();
+  console.log("     Done.");
+
+  console.log("\n[2/4] Running migrations against NEW…");
   // Spin a dedicated drizzle instance against the destination, run migrate(),
   // then throw it away. We still use the regular `dst` pool for row copies.
   const migratePool = poolFor(NEW);
   const d = drizzle(migratePool);
-  await migrate(d, { migrationsFolder: "./drizzle" });
+  try {
+    await migrate(d, { migrationsFolder: "./drizzle" });
+  } catch (err) {
+    console.error("     Migration failed. Full error:\n         ", fullError(err));
+    await migratePool.end();
+    throw err;
+  }
   await migratePool.end();
   console.log("     Done.");
 
-  console.log("\n[2/3] Truncating destination tables…");
+  console.log("\n[3/4] Truncating destination tables (fresh schema, so a no-op)…");
   await truncateDestinationTables();
   console.log("     Done.");
 
-  console.log("\n[3/3] Copying rows…");
+  console.log("\n[4/4] Copying rows…");
   let total = 0;
   for (const t of TABLES) {
     total += await copyTable(t);
@@ -199,7 +236,7 @@ async function main() {
 
 main()
   .catch((err) => {
-    console.error("\nMigration failed:", err.message ?? err);
+    console.error("\nMigration failed:", fullError(err));
     process.exit(1);
   })
   .finally(async () => {
