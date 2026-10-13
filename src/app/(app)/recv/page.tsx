@@ -19,11 +19,16 @@ export default async function ReceivablesPage() {
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
 
-  const [dues, summary, custs] = await Promise.all([
+  const [allDues, summary, custs] = await Promise.all([
     getOldDues(),
     getOldDuesSummary(),
     getCustomerNames(),
   ]);
+  // Hide fully-paid / overpaid dues (and the amount=0 "Advance received"
+  // marker rows). Keep them in the summary tiles so totals still reflect
+  // every row ever entered.
+  const dues = allDues.filter((d) => d.due > 0.5);
+  const hiddenCount = allDues.length - dues.length;
 
   return (
     <div className="space-y-6">
@@ -47,7 +52,14 @@ export default async function ReceivablesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Old dues</CardTitle>
+          <CardTitle className="flex items-center gap-3 flex-wrap">
+            Old dues
+            {hiddenCount > 0 && (
+              <span className="text-xs font-normal text-muted-foreground">
+                ({hiddenCount} paid or advance {hiddenCount === 1 ? "entry" : "entries"} hidden — see Balances → Statement for the full history)
+              </span>
+            )}
+          </CardTitle>
           <ExcelButton report="receivables" />
           <SumGrid
             items={[
@@ -60,7 +72,11 @@ export default async function ReceivablesPage() {
         </CardHeader>
         <CardContent>
           {dues.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No old dues entered yet.</p>
+            <p className="text-sm text-muted-foreground">
+              {allDues.length === 0
+                ? "No old dues entered yet."
+                : "All old dues have been paid. Add a new one above to track more."}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
