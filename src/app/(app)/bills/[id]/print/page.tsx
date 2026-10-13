@@ -10,6 +10,7 @@ import {
   PrintSizeChooser,
   PrintSizeToggle,
 } from "@/components/print-size-toggle";
+import { PrintLetterhead } from "@/components/print-letterhead";
 import { hasPageSize, parsePageSize, type PageSize } from "@/lib/print-size";
 import type {
   GstHeaderExtras,
@@ -54,6 +55,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
         seller={(raw?.sellerSnapshot ?? {}) as GstProfile}
         header={(raw?.headerExtras ?? {}) as GstHeaderExtras}
         tax={(raw?.taxBreakdown ?? {}) as GstTaxBreakdown}
+        letterheadImage={settings.letterheadImage ?? null}
       />
     );
   }
@@ -75,7 +77,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
       )}
       <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header { display: none !important; } }`}</style>
 
-      <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
+      <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="text-sm mb-4">
         Bill no. <b>{pad2(bill.no)}</b> &nbsp;·&nbsp; Period: {bill.fy} &nbsp;·&nbsp; Date:{" "}
         {bill.date}
@@ -193,6 +195,7 @@ function GstInvoicePrint({
   seller,
   header,
   tax,
+  letterheadImage,
 }: {
   size: PageSize;
   chosen: boolean;
@@ -203,6 +206,7 @@ function GstInvoicePrint({
   seller: GstProfile;
   header: GstHeaderExtras;
   tax: GstTaxBreakdown;
+  letterheadImage: string | null;
 }) {
   if (!bill) return null;
   const totalPaid = pays.reduce((s, p) => s + Number(p.amount), 0);
@@ -230,6 +234,14 @@ function GstInvoicePrint({
       table.gs th, table.gs td { padding: 3px 6px; vertical-align: top; }
       `}</style>
 
+      {letterheadImage && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={letterheadImage}
+          alt={seller.name ?? "Firm letterhead"}
+          className="mb-2 w-full max-h-32 object-contain"
+        />
+      )}
       <div className="text-center font-semibold">TAX INVOICE</div>
       <table className="gs w-full mt-1">
         <tbody>

@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/queries";
 import { money, pad2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
+import { PrintLetterhead } from "@/components/print-letterhead";
 import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
       )}
       <style>{`@media print { @page { size: ${size} portrait; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
 
-      <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
+      <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">
         <b>HAMALI STATEMENT</b>
         <br />

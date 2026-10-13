@@ -39,6 +39,7 @@ export default async function SettingsPage() {
             hamaliDefault={Number(settings.hamaliDefault)}
             openingCash={Number(settings.openingCash)}
             openingBank={Number(settings.openingBank)}
+            letterheadImage={settings.letterheadImage ?? null}
           />
         </CardContent>
       </Card>

@@ -12,6 +12,11 @@ const settingsSchema = z.object({
   hamaliDefault: z.number().min(0),
   openingCash: z.number().min(0),
   openingBank: z.number().min(0),
+  letterheadImage: z
+    .string()
+    .max(2_000_000) // ~1.5 MB raw image after base64 overhead
+    .nullable()
+    .optional(),
 });
 
 const createUserSchema = z.object({
@@ -41,8 +46,17 @@ export async function updateSettings(
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Please check your inputs." };
 
-  // Upsert so the first save after a fresh / truncated DB creates the row
-  // instead of silently updating zero rows.
+  const lh = parsed.data.letterheadImage;
+  // undefined = form didn't send the field → leave as-is; "" = explicit clear.
+  const updateSet: Record<string, unknown> = {
+    firm: parsed.data.firm,
+    hamaliDefault: parsed.data.hamaliDefault.toString(),
+    openingCash: parsed.data.openingCash.toString(),
+    openingBank: parsed.data.openingBank.toString(),
+    updatedAt: new Date(),
+  };
+  if (lh !== undefined) updateSet.letterheadImage = lh === "" ? null : lh;
+
   await db
     .insert(schema.settings)
     .values({
@@ -51,16 +65,11 @@ export async function updateSettings(
       hamaliDefault: parsed.data.hamaliDefault.toString(),
       openingCash: parsed.data.openingCash.toString(),
       openingBank: parsed.data.openingBank.toString(),
+      letterheadImage: lh && lh !== "" ? lh : null,
     })
     .onConflictDoUpdate({
       target: schema.settings.id,
-      set: {
-        firm: parsed.data.firm,
-        hamaliDefault: parsed.data.hamaliDefault.toString(),
-        openingCash: parsed.data.openingCash.toString(),
-        openingBank: parsed.data.openingBank.toString(),
-        updatedAt: new Date(),
-      },
+      set: updateSet,
     });
 
   revalidatePath("/");

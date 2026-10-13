@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { Save, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FormActions, FormGrid } from "@/components/form";
@@ -14,7 +14,12 @@ type Props = {
   hamaliDefault: number;
   openingCash: number;
   openingBank: number;
+  letterheadImage: string | null;
 };
+
+// Max raw bytes before base64 overhead; keeps the data URL under ~1.5 MB after
+// base64 (settings is one small row and we send it with every save).
+const MAX_IMAGE_BYTES = 1_000_000;
 
 export function SettingsForm(initial: Props) {
   const router = useRouter();
@@ -23,6 +28,38 @@ export function SettingsForm(initial: Props) {
   const [hamali, setHamali] = useState(String(initial.hamaliDefault));
   const [openCash, setOpenCash] = useState(String(initial.openingCash));
   const [openBank, setOpenBank] = useState(String(initial.openingBank));
+  // `undefined` = unchanged, send nothing; `""` = user cleared it; string = new image.
+  const [letterhead, setLetterhead] = useState<string | undefined>(undefined);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const preview = letterhead === undefined ? initial.letterheadImage : letterhead || null;
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file (JPEG / PNG).");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image is too large. Keep it under 1 MB.");
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") setLetterhead(result);
+    };
+    reader.onerror = () => toast.error("Could not read the image file.");
+    reader.readAsDataURL(file);
+  }
+
+  function clearLetterhead() {
+    setLetterhead("");
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,12 +81,14 @@ export function SettingsForm(initial: Props) {
         hamaliDefault: hamaliN,
         openingCash: openCashN,
         openingBank: openBankN,
+        letterheadImage: letterhead,
       });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
       toast.success("Settings saved");
+      setLetterhead(undefined);
       router.refresh();
     });
   }
@@ -102,6 +141,55 @@ export function SettingsForm(initial: Props) {
           />
         </Field>
       </FormGrid>
+
+      <Field
+        label="Letterhead image"
+        htmlFor="letterhead"
+        hint="Shown as the top banner on every printed bill, patti, hamali and ledger. JPEG or PNG, keep under 1 MB."
+      >
+        <div className="space-y-2">
+          {preview ? (
+            <div className="rounded-md border bg-white p-2">
+              {/* Letterhead preview — stored as a data URL, rendered as-is. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={preview}
+                alt="Letterhead preview"
+                className="max-h-40 w-full object-contain"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No letterhead uploaded — prints will show the firm name as plain text.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              id="letterhead"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onPickFile}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {preview ? "Replace image" : "Upload image"}
+            </Button>
+            {preview && (
+              <Button type="button" variant="ghost" onClick={clearLetterhead}>
+                <X className="mr-2 h-4 w-4" />
+                Remove
+              </Button>
+            )}
+          </div>
+        </div>
+      </Field>
+
       <FormActions>
         <Button type="submit" disabled={pending}>
           <Save className="mr-2 h-4 w-4" />

@@ -111,6 +111,7 @@ export async function getSettings(exec: DbExecutor = db) {
       openingBank: "0",
       cjOpening: "0",
       extras: null,
+      letterheadImage: null,
       updatedAt: new Date(),
     }
   );

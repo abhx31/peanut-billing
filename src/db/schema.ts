@@ -338,6 +338,9 @@ export const settings = pgTable("settings", {
   gstProfile: jsonb("gst_profile"),
   // Map of fy → first GST invoice number (if the firm started mid-FY with paper invoices).
   gstStart: jsonb("gst_start"),
+  // Firm letterhead image as a base64 data URL (e.g. "data:image/jpeg;base64,…").
+  // Shown as the top banner on every printed bill / patti / hamali / ledger.
+  letterheadImage: text("letterhead_image"),
   extras: jsonb("extras"),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });

@@ -9,6 +9,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import { money, pad2, r2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
+import { PrintLetterhead } from "@/components/print-letterhead";
 import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
       )}
       <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header { display: none !important; } }`}</style>
 
-      <h1 className="text-2xl font-bold mb-1">{settings.firm}</h1>
+      <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">Daily ledger — {date}</div>
 
       <Section title="Cash in hand">
