@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,7 +49,7 @@ export function ReceiveQuickButton({
   defaultDate: string;
   customerNames: string[];
 }) {
-  const router = useRouter();
+
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [customer, setCustomer] = useState("");
@@ -80,7 +79,8 @@ export function ReceiveQuickButton({
       setOpen(false);
       setCustomer("");
       setAmount("");
-      router.refresh();
+      // Hard reload so the ledger updates immediately — see ReceiveDueDialog.
+      window.location.reload();
     });
   }
 
@@ -176,7 +176,7 @@ export function ExpenseQuickButton({
   defaultDate: string;
   defaultLoc: Loc;
 }) {
-  const router = useRouter();
+
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [date, setDate] = useState(defaultDate);
@@ -211,7 +211,8 @@ export function ExpenseQuickButton({
       setCategory("");
       setNote("");
       setAmount("");
-      router.refresh();
+      // Hard reload so the ledger updates immediately — see ReceiveDueDialog.
+      window.location.reload();
     });
   }
 

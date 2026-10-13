@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowDownToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,7 +53,6 @@ export function ReceiveDialog({
   size = "sm",
   allowCj = true,
 }: Props) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
@@ -79,10 +77,10 @@ export function ReceiveDialog({
         return;
       }
       toast.success(`Received ${money(n)} (${mode}) on ${date}`);
-      setOpen(false);
-      setAmount("");
-      setDate(today());
-      router.refresh();
+      // Hard reload — see ReceiveDueDialog for why we don't rely on
+      // router.refresh here. The user never sees the dialog's state
+      // mutation because the page reloads immediately.
+      window.location.reload();
     });
   }
 

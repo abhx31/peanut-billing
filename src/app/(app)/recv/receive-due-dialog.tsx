@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowDownToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,6 @@ type Mode = "Cash" | "UPI" | "CJ";
 type Props = { id: string; customer: string; due: number };
 
 export function ReceiveDueDialog({ id, customer, due }: Props) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(String(due));
@@ -54,8 +52,10 @@ export function ReceiveDueDialog({ id, customer, due }: Props) {
           return;
         }
         toast.success(`Received ${money(n)} from ${customer} on ${payDate}`);
-        setOpen(false);
-        router.refresh();
+        // Hard reload so the Received / Still due columns update immediately —
+        // router.refresh() can lag a beat and users click Save again when they
+        // don't see a change, which creates duplicate receipts.
+        window.location.reload();
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Something went wrong — see the console.",
