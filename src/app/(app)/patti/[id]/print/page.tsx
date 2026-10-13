@@ -54,32 +54,86 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
         Seller: <b>{patti.party}</b>
       </div>
 
-      <table className="w-full text-sm border-collapse mb-3">
-        <thead>
-          <tr>
-            <th className="text-left border-b border-gray-500 py-1">Item</th>
-            <th className="text-right border-b border-gray-500 py-1">Bags</th>
-            <th className="text-right border-b border-gray-500 py-1">Weight (kg)</th>
-            <th className="text-right border-b border-gray-500 py-1">Price/kg</th>
-            <th className="text-right border-b border-gray-500 py-1">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="py-1">{patti.lotName ?? "Peanuts"}</td>
-            <td className="text-right py-1">{patti.bags}</td>
-            <td className="text-right py-1">{r2(Number(patti.kg))}</td>
-            <td className="text-right py-1">{money(patti.rate)}</td>
-            <td className="text-right py-1">{money(patti.amount)}</td>
-          </tr>
-        </tbody>
-      </table>
+      {(() => {
+        type Line = {
+          lotName?: string;
+          weightsText?: string;
+          bags: number;
+          kg: number;
+          rate: number;
+          amount: number;
+        };
+        // Prefer the stored items[] (v2 multi-lot patti); fall back to the
+        // top-level fields for older single-line pattis.
+        const lines: Line[] = Array.isArray(patti.items)
+          ? (patti.items as unknown as Line[])
+          : [
+              {
+                lotName: patti.lotName ?? "",
+                weightsText: patti.weightsText ?? "",
+                bags: patti.bags,
+                kg: Number(patti.kg),
+                rate: Number(patti.rate),
+                amount: Number(patti.amount),
+              },
+            ];
+        const linesWithWeights = lines.filter((l) => l.weightsText);
+        const multi = lines.length > 1;
+        return (
+          <>
+            <table className="w-full text-sm border-collapse mb-3">
+              <thead>
+                <tr>
+                  <th className="text-left border-b border-gray-500 py-1">Item</th>
+                  <th className="text-right border-b border-gray-500 py-1">Bags</th>
+                  <th className="text-right border-b border-gray-500 py-1">Weight (kg)</th>
+                  <th className="text-right border-b border-gray-500 py-1">Price/kg</th>
+                  <th className="text-right border-b border-gray-500 py-1">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <tr key={i}>
+                    <td className="py-1">{l.lotName || "Peanuts"}</td>
+                    <td className="text-right py-1">{l.bags}</td>
+                    <td className="text-right py-1">{r2(Number(l.kg))}</td>
+                    <td className="text-right py-1">{money(l.rate)}</td>
+                    <td className="text-right py-1">{money(l.amount)}</td>
+                  </tr>
+                ))}
+                {multi && (
+                  <tr className="font-semibold">
+                    <td className="py-1 border-t border-gray-500">Total</td>
+                    <td className="text-right py-1 border-t border-gray-500">
+                      {patti.bags}
+                    </td>
+                    <td className="text-right py-1 border-t border-gray-500">
+                      {r2(Number(patti.kg))}
+                    </td>
+                    <td className="border-t border-gray-500" />
+                    <td className="text-right py-1 border-t border-gray-500">
+                      {money(patti.amount)}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
 
-      {patti.weightsText && (
-        <p className="text-xs mb-3">
-          <span className="font-semibold">Bag weights (kg):</span> {patti.weightsText}
-        </p>
-      )}
+            {linesWithWeights.length > 0 && (
+              <p className="text-xs mb-3">
+                <span className="font-semibold">Bag weights (kg):</span>
+                <br />
+                {linesWithWeights.map((l, i) => (
+                  <span key={i}>
+                    {l.lotName || "Line " + (i + 1)}: {l.weightsText}
+                    <br />
+                  </span>
+                ))}
+              </p>
+            )}
+          </>
+        );
+      })()}
 
       <div className="text-right text-sm space-y-1">
         <div>Amount: {money(patti.amount)}</div>

@@ -9,23 +9,29 @@ import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
 
-const savePattiSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  party: z.string().trim().min(1).max(120),
+const pattiItemSchema = z.object({
   lotName: z.string().trim().max(120).optional().default(""),
   weightsText: z.string().trim().max(500).optional().default(""),
   bags: z.number().int().positive(),
   kg: z.number().positive(),
   rate: z.number().positive(),
+});
+
+const savePattiSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  party: z.string().trim().min(1).max(120),
+  items: z.array(pattiItemSchema).optional(),
+  lotName: z.string().trim().max(120).optional().default(""),
+  weightsText: z.string().trim().max(500).optional().default(""),
+  bags: z.number().int().positive().optional(),
+  kg: z.number().positive().optional(),
+  rate: z.number().positive().optional(),
   cdPct: z.number().min(0).default(0),
   labRate: z.number().min(0).default(0),
   brRate: z.number().min(0).default(0),
   brSign: z.union([z.literal(1), z.literal(-1)]).default(-1),
   transport: z.number().min(0).default(0),
   paidMode: z.enum(["", "Cash", "UPI"]).optional().default(""),
-  // v2: optional "Add these bags to my stock". Requires a lotId to assign the
-  // bags to; the server inserts a stock_in row with src="patti" + ref=pattiId
-  // so deleting the patti bill cleans the stock entry up.
   addToStock: z.boolean().optional().default(false),
   stockLotId: z.string().uuid().optional(),
 });
@@ -46,10 +52,53 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
   const closed = await closedDateError(d.date);
   if (closed) return { ok: false, error: closed };
   const fy = fyOf(d.date);
-  const amount = r2(d.kg * d.rate);
+
+  // Normalise to a list of line items. The old single-item form (no `items`
+  // array) is treated as a one-element list so the aggregation below is the
+  // only code path downstream.
+  const lines =
+    d.items && d.items.length > 0
+      ? d.items.map((it) => ({
+          lotName: it.lotName || "",
+          weightsText: it.weightsText || "",
+          bags: it.bags,
+          kg: it.kg,
+          rate: it.rate,
+          amount: r2(it.kg * it.rate),
+        }))
+      : d.bags != null && d.kg != null && d.rate != null
+        ? [
+            {
+              lotName: d.lotName || "",
+              weightsText: d.weightsText || "",
+              bags: d.bags,
+              kg: d.kg,
+              rate: d.rate,
+              amount: r2(d.kg * d.rate),
+            },
+          ]
+        : [];
+
+  if (lines.length === 0) {
+    return { ok: false, error: "Add at least one lot with bags, weight and price." };
+  }
+
+  const bagsTotal = lines.reduce((s, l) => s + l.bags, 0);
+  const kgTotal = r2(lines.reduce((s, l) => s + l.kg, 0));
+  const amount = r2(lines.reduce((s, l) => s + l.amount, 0));
+  const avgRate = kgTotal > 0 ? r2(amount / kgTotal) : 0;
+  const topLotName =
+    lines.length === 1
+      ? lines[0].lotName || null
+      : lines.map((l) => l.lotName || "?").join(" + ") || null;
+  const topWeights =
+    lines.length === 1
+      ? lines[0].weightsText || null
+      : null;
+
   const cd = r2((amount * d.cdPct) / 100);
-  const labor = r2(d.bags * d.labRate);
-  const broker = r2(d.bags * d.brRate);
+  const labor = r2(bagsTotal * d.labRate);
+  const broker = r2(bagsTotal * d.brRate);
   const net = r2(amount - cd - labor + d.brSign * broker - d.transport);
   const paidMode = d.paidMode === "" ? null : d.paidMode;
   const paidDate = paidMode ? d.date : null;
@@ -76,11 +125,11 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
           fy,
           date: d.date,
           party: d.party,
-          lotName: d.lotName || null,
-          weightsText: d.weightsText || null,
-          bags: d.bags,
-          kg: d.kg.toString(),
-          rate: d.rate.toString(),
+          lotName: topLotName,
+          weightsText: topWeights,
+          bags: bagsTotal,
+          kg: kgTotal.toString(),
+          rate: avgRate.toString(),
           amount: amount.toString(),
           cdPct: d.cdPct.toString(),
           cd: cd.toString(),
@@ -93,6 +142,7 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
           net: net.toString(),
           paidMode,
           paidDate,
+          items: lines,
           stock: addToStock,
           stockLotId: addToStock ? d.stockLotId! : null,
           createdBy: session.user.id,
@@ -102,7 +152,7 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
       if (addToStock) {
         await tx.insert(schema.stockIn).values({
           lotId: d.stockLotId!,
-          bags: d.bags,
+          bags: bagsTotal,
           date: d.date,
           loc: loc === "NM" ? "NM" : "MS",
           src: "patti",

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Printer, Save, ShoppingBasket, SlidersHorizontal, Wallet } from "lucide-react";
+import { Printer, Save, ShoppingBasket, SlidersHorizontal, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,24 +25,37 @@ type Props = {
   lots: { id: string; name: string }[];
 };
 
+type CartItem = {
+  key: string;
+  lotName: string;
+  weightsText: string;
+  bags: number;
+  kg: number;
+  rate: number;
+  amount: number;
+};
+
 export function PattiForm({ lotNameSuggestions, lots }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [date, setDate] = useState(today());
   const [party, setParty] = useState("");
+
+  // Current line + cart.
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [lotName, setLotName] = useState("");
   const [bags, setBags] = useState("");
   const [weights, setWeights] = useState("");
   const [kg, setKg] = useState("");
   const [rate, setRate] = useState("");
+
   const [cdOn, setCdOn] = useState(false);
   const [cdPct, setCdPct] = useState("1");
   const [labOn, setLabOn] = useState(false);
   const [labRate, setLabRate] = useState("");
   const [brOn, setBrOn] = useState(false);
   const [brRate, setBrRate] = useState("10");
-  // 1 = add to net, -1 = deduct from net.
   const [brSign, setBrSign] = useState<1 | -1>(-1);
   const [transportOn, setTransportOn] = useState(false);
   const [transport, setTransport] = useState("");
@@ -59,33 +72,77 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
     }
   }
 
-  const calc = useMemo(() => {
+  const currentLine = useMemo((): CartItem | null => {
     const bagsN = num(bags);
     const kgN = num(kg);
     const rateN = num(rate);
-    const amount = r2(kgN * rateN);
+    if (bagsN <= 0 || kgN <= 0 || rateN <= 0) return null;
+    return {
+      key: "current",
+      lotName: lotName.trim(),
+      weightsText: weights.trim(),
+      bags: bagsN,
+      kg: kgN,
+      rate: rateN,
+      amount: r2(kgN * rateN),
+    };
+  }, [bags, kg, rate, lotName, weights]);
+
+  // Effective items for preview / save = cart + current line.
+  const items = useMemo(
+    () => (currentLine ? [...cart, currentLine] : cart),
+    [cart, currentLine],
+  );
+
+  const calc = useMemo(() => {
+    const bagsTotal = items.reduce((s, i) => s + i.bags, 0);
+    const kgTotal = r2(items.reduce((s, i) => s + i.kg, 0));
+    const amount = r2(items.reduce((s, i) => s + i.amount, 0));
     const cd = cdOn ? r2((amount * num(cdPct)) / 100) : 0;
-    const labor = labOn ? r2(bagsN * num(labRate)) : 0;
-    const broker = brOn ? r2(bagsN * num(brRate)) : 0;
+    const labor = labOn ? r2(bagsTotal * num(labRate)) : 0;
+    const broker = brOn ? r2(bagsTotal * num(brRate)) : 0;
     const trans = transportOn ? num(transport) : 0;
     const net = r2(amount - cd - labor + brSign * broker - trans);
-    return { bagsN, kgN, rateN, amount, cd, labor, broker, trans, net };
-  }, [bags, kg, rate, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport]);
+    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, net };
+  }, [items, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport]);
+
+  function clearCurrentLine() {
+    setLotName("");
+    setBags("");
+    setWeights("");
+    setKg("");
+    setRate("");
+  }
+
+  function addToCart() {
+    if (!currentLine) {
+      toast.error("Fill in bags, weight and price before adding this lot.");
+      return;
+    }
+    setCart((xs) => [...xs, { ...currentLine, key: crypto.randomUUID() }]);
+    clearCurrentLine();
+  }
+
+  function removeFromCart(key: string) {
+    setCart((xs) => xs.filter((x) => x.key !== key));
+  }
 
   function submit(mode: "save" | "save-print") {
-    if (!party.trim() || calc.bagsN <= 0 || calc.kgN <= 0 || calc.rateN <= 0) {
-      toast.error("Enter seller name, bags, weight and price.");
+    if (!party.trim() || items.length === 0) {
+      toast.error("Enter seller name and at least one lot with bags, weight and price.");
       return;
     }
     startTransition(async () => {
       const res = await savePatti({
         date,
         party: party.trim(),
-        lotName: lotName.trim(),
-        weightsText: weights.trim(),
-        bags: calc.bagsN,
-        kg: calc.kgN,
-        rate: calc.rateN,
+        items: items.map((it) => ({
+          lotName: it.lotName,
+          weightsText: it.weightsText,
+          bags: it.bags,
+          kg: it.kg,
+          rate: it.rate,
+        })),
         cdPct: cdOn ? num(cdPct) : 0,
         labRate: labOn ? num(labRate) : 0,
         brRate: brOn ? num(brRate) : 0,
@@ -104,11 +161,8 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
         window.open(`/patti/${res.pattiId}/print`, "_blank");
       }
       setParty("");
-      setLotName("");
-      setBags("");
-      setWeights("");
-      setKg("");
-      setRate("");
+      setCart([]);
+      clearCurrentLine();
       setCdOn(false);
       setLabOn(false);
       setBrOn(false);
@@ -131,9 +185,9 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
       <FormSection
         icon={ShoppingBasket}
         title="Seller & goods"
-        description="Who you bought from, which lot, and what they delivered. Price per kg × total weight = amount."
+        description="Who you bought from. Add one or more lots to this bill. The current line is included automatically on save; use + Add this lot when you have another lot for the same seller."
       >
-        <FormGrid>
+        <FormGrid cols={2}>
           <Field label="Date" htmlFor="pd" required>
             <Input
               id="pd"
@@ -145,6 +199,51 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
           <Field label="Seller / party name" htmlFor="pn" required>
             <Input id="pn" value={party} onChange={(e) => setParty(e.target.value)} />
           </Field>
+        </FormGrid>
+
+        {cart.length > 0 && (
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-4">Lot / quality</th>
+                  <th className="py-2 pr-4 text-right">Bags</th>
+                  <th className="py-2 pr-4 text-right">Kg</th>
+                  <th className="py-2 pr-4 text-right">Rate</th>
+                  <th className="py-2 pr-4 text-right">Amount</th>
+                  <th className="py-2 pr-0" />
+                </tr>
+              </thead>
+              <tbody>
+                {cart.map((it) => (
+                  <tr key={it.key} className="border-b last:border-0">
+                    <td className="py-2 pr-4">{it.lotName || "—"}</td>
+                    <td className="py-2 pr-4 text-right">{it.bags}</td>
+                    <td className="py-2 pr-4 text-right">{it.kg}</td>
+                    <td className="py-2 pr-4 text-right">{money(it.rate)}</td>
+                    <td className="py-2 pr-4 text-right font-semibold">
+                      {money(it.amount)}
+                    </td>
+                    <td className="py-2 pr-0 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeFromCart(it.key)}
+                        className="text-destructive"
+                        aria-label="Remove lot"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <FormGrid cols={3}>
           <Field label="Lot / quality (optional)" htmlFor="pq">
             <Input
               id="pq"
@@ -159,7 +258,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
               ))}
             </datalist>
           </Field>
-          <Field label="No. of bags" htmlFor="pb" required>
+          <Field label="No. of bags" htmlFor="pb">
             <Input
               id="pb"
               type="number"
@@ -169,7 +268,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
               onChange={(e) => setBags(e.target.value)}
             />
           </Field>
-          <Field label="Total weight (kg)" htmlFor="pk" required>
+          <Field label="Total weight (kg)" htmlFor="pk">
             <Input
               id="pk"
               type="number"
@@ -179,7 +278,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
               onChange={(e) => setKg(e.target.value)}
             />
           </Field>
-          <Field label="Price per kg (₹)" htmlFor="pp" required>
+          <Field label="Price per kg (₹)" htmlFor="pp">
             <Input
               id="pp"
               type="number"
@@ -192,7 +291,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
           <Field
             label="Each bag's weight (optional)"
             htmlFor="pw"
-            span="full"
+            span={2}
             hint="Space / comma / newline separated. `50x40.5` means 50 bags of 40.5 kg. Fills bags + total kg for you."
           >
             <Textarea
@@ -204,6 +303,17 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
             />
           </Field>
         </FormGrid>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={addToCart}
+          disabled={!currentLine}
+        >
+          + Add this lot to the patti bill (another lot for the same seller)
+        </Button>
       </FormSection>
 
       <FormSection
@@ -273,7 +383,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
 
       <FormSection
         title="Add to stock"
-        description="Add these bags to a lot so you can sell them from stock. If this patti is later deleted the stock row is removed too."
+        description="Receive the bags into one of your lots. If the patti is later deleted the stock row is removed too. For a multi-lot patti bill the whole quantity goes into the single lot you pick here."
         compact
       >
         <FormGrid cols={3}>
@@ -285,7 +395,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
                 onChange={(e) => setAddToStock(e.target.checked)}
                 disabled={lots.length === 0}
               />
-              Add these {calc.bagsN || 0} bags to my stock
+              Add these {calc.bagsTotal || 0} bags to my stock
             </label>
           </Field>
           {addToStock && (
@@ -338,6 +448,10 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
 
       <FormSection title="Preview" compact>
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <SumCell
+            label="Bags · kg"
+            value={`${calc.bagsTotal} · ${calc.kgTotal}`}
+          />
           <SumCell label="Amount" value={money(calc.amount)} />
           {cdOn && <SumCell label={`CD ${cdPct}% (−)`} value={money(calc.cd)} />}
           {labOn && <SumCell label="Labour (−)" value={money(calc.labor)} />}
