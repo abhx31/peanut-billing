@@ -41,23 +41,28 @@ export function ReceiveDueDialog({ id, customer, due }: Props) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const n = Number(amount);
-    if (!n || n <= 0) {
+    if (!Number.isFinite(n) || n <= 0) {
       toast.error("Enter a positive amount.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      toast.error("Pick a valid date.");
-      return;
-    }
+    const payDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today();
     startTransition(async () => {
-      const res = await receiveOnDue({ id, amount: n, mode, date });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
+      try {
+        const res = await receiveOnDue({ id, amount: n, mode, date: payDate });
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(`Received ${money(n)} from ${customer} on ${payDate}`);
+        setOpen(false);
+        router.refresh();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Something went wrong — see the console.",
+        );
+        // Log the full error so the dev tools shows what Postgres returned.
+        console.error("receiveOnDue failed:", err);
       }
-      toast.success(`Received ${money(n)} from ${customer} on ${date}`);
-      setOpen(false);
-      router.refresh();
     });
   }
 
