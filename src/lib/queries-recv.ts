@@ -1,6 +1,14 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db, schema, type DbExecutor } from "@/db";
 
+// Note: `getOldDues` previously used a correlated subquery
+//   coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)
+// Drizzle's sql`` template doesn't always rewrite the column reference inside
+// the nested subquery against the outer alias, so the inner query matched 0
+// rows for every outer row and returned 0 paid everywhere. The LEFT JOIN +
+// GROUP BY form below avoids the correlation entirely and is identical in
+// cost on an indexed FK.
+
 export type OldDue = {
   id: string;
   customer: string;
@@ -21,9 +29,14 @@ export async function getOldDues(exec: DbExecutor = db): Promise<OldDue[]> {
       date: schema.openingDues.date,
       note: schema.openingDues.note,
       createdAt: schema.openingDues.createdAt,
-      paid: sql<string>`coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)`,
+      paid: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)`,
     })
     .from(schema.openingDues)
+    .leftJoin(
+      schema.openingPayments,
+      eq(schema.openingPayments.openingDueId, schema.openingDues.id),
+    )
+    .groupBy(schema.openingDues.id)
     .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt));
 
   return rows.map((r) => {
