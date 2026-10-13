@@ -21,6 +21,7 @@ import {
   ExpenseQuickButton,
   ReceiveQuickButton,
 } from "./quick-entry-buttons";
+import { DeleteReceiptButton } from "./delete-receipt-button";
 import Link from "next/link";
 import { ExcelButton } from "@/components/excel-button";
 
@@ -416,6 +417,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                     <th className="py-2 pr-4">Customer</th>
                     <th className="py-2 pr-4">Mode</th>
                     <th className="py-2 pr-4 text-right">Amount</th>
+                    {canEditClosing && <th className="py-2 pr-0" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -427,6 +429,16 @@ export default async function LedgerPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{p.customer}</td>
                       <td className="py-2 pr-4">{p.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                      {canEditClosing && (
+                        <td className="py-2 pr-0 text-right">
+                          <DeleteReceiptButton
+                            id={p.id}
+                            kind="bill"
+                            label={`Bill ${pad2(p.billNo)} · ${p.customer}`}
+                            amount={p.amount}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {openingPaymentsToday.map((p) => {
@@ -446,6 +458,16 @@ export default async function LedgerPage({ searchParams }: Props) {
                         <td className="py-2 pr-4">{p.customer}</td>
                         <td className="py-2 pr-4">{p.mode}</td>
                         <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                        {canEditClosing && (
+                          <td className="py-2 pr-0 text-right">
+                            <DeleteReceiptButton
+                              id={p.id}
+                              kind="opening"
+                              label={`${isAdvance ? "Advance" : "Old due"} · ${p.customer}`}
+                              amount={p.amount}
+                            />
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
