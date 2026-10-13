@@ -49,6 +49,7 @@ export default async function LedgerPage({ searchParams }: Props) {
     cjReceivedBeforeRow,
     customerBalances,
     loc,
+    openingPaymentsToday,
     pattiPaidToday,
   ] = await Promise.all([
     getBillsByDate(date, isOwner),
@@ -74,6 +75,22 @@ export default async function LedgerPage({ searchParams }: Props) {
       .then((r) => r[0]),
     getCustomerBalances(),
     getCurrentLoc(),
+    db
+      .select({
+        id: schema.openingPayments.id,
+        customer: schema.openingPayments.customer,
+        mode: schema.openingPayments.mode,
+        amount: schema.openingPayments.amount,
+        loc: schema.openingPayments.loc,
+        dueNote: schema.openingDues.note,
+        dueAmount: schema.openingDues.amount,
+      })
+      .from(schema.openingPayments)
+      .leftJoin(
+        schema.openingDues,
+        eq(schema.openingDues.id, schema.openingPayments.openingDueId),
+      )
+      .where(eq(schema.openingPayments.date, date)),
     isOwner
       ? db
           .select({
@@ -97,20 +114,36 @@ export default async function LedgerPage({ searchParams }: Props) {
         ),
   ]);
 
-  const cashIn = pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0);
-  const upiIn = pays.filter((p) => p.mode === "UPI").reduce((s, p) => s + Number(p.amount), 0);
-  const cjIn = pays.filter((p) => p.mode === "CJ").reduce((s, p) => s + Number(p.amount), 0);
+  const cashIn =
+    pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0) +
+    openingPaymentsToday
+      .filter((p) => p.mode === "Cash")
+      .reduce((s, p) => s + Number(p.amount), 0);
+  const upiIn =
+    pays.filter((p) => p.mode === "UPI").reduce((s, p) => s + Number(p.amount), 0) +
+    openingPaymentsToday
+      .filter((p) => p.mode === "UPI")
+      .reduce((s, p) => s + Number(p.amount), 0);
+  const cjIn =
+    pays.filter((p) => p.mode === "CJ").reduce((s, p) => s + Number(p.amount), 0) +
+    openingPaymentsToday
+      .filter((p) => p.mode === "CJ")
+      .reduce((s, p) => s + Number(p.amount), 0);
 
   function statsFor(loc: "MS" | "NM") {
     const bs = bills.filter((b) => b.loc === loc);
     const ps = pays.filter(
       (p) => (p.billLoc === "NM" ? "NM" : "MS") === loc,
     );
+    const op = openingPaymentsToday.filter(
+      (p) => (p.loc === "NM" ? "NM" : "MS") === loc,
+    );
     const ex = expenses.filter(
       (e) => (e.loc === "NM" ? "NM" : "MS") === loc,
     );
     const sumPay = (m: "Cash" | "UPI" | "CJ") =>
-      ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
+      ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0) +
+      op.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
     const sumExp = (m: "Cash" | "UPI") =>
       ex.filter((e) => e.mode === m).reduce((s, e) => s + Number(e.amount), 0);
     const sIn = sumPay("Cash");
@@ -372,14 +405,14 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>Money received</CardTitle>
         </CardHeader>
         <CardContent>
-          {pays.length === 0 ? (
+          {pays.length === 0 && openingPaymentsToday.length === 0 ? (
             <p className="text-sm text-muted-foreground">No money received on this date.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-muted-foreground border-b">
-                    <th className="py-2 pr-4">Bill no.</th>
+                    <th className="py-2 pr-4">Applied to</th>
                     <th className="py-2 pr-4">Customer</th>
                     <th className="py-2 pr-4">Mode</th>
                     <th className="py-2 pr-4 text-right">Amount</th>
@@ -387,13 +420,35 @@ export default async function LedgerPage({ searchParams }: Props) {
                 </thead>
                 <tbody>
                   {pays.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-mono">{pad2(p.billNo)}</td>
+                    <tr key={`p-${p.id}`} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-mono">
+                        Bill {pad2(p.billNo)}
+                      </td>
                       <td className="py-2 pr-4">{p.customer}</td>
                       <td className="py-2 pr-4">{p.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
                     </tr>
                   ))}
+                  {openingPaymentsToday.map((p) => {
+                    // Opening-payments cover two cases:
+                    //   1. Real receipt against a pre-app old due (dueAmount > 0,
+                    //      note usually blank or user-provided).
+                    //   2. Overpayment cascade — the parent opening_due was created
+                    //      with amount=0 and note="Advance received".
+                    const isAdvance =
+                      Number(p.dueAmount ?? 0) === 0 ||
+                      (p.dueNote ?? "").toLowerCase().includes("advance");
+                    return (
+                      <tr key={`op-${p.id}`} className="border-b last:border-0">
+                        <td className="py-2 pr-4 text-muted-foreground">
+                          {isAdvance ? "Advance" : "Old due"}
+                        </td>
+                        <td className="py-2 pr-4">{p.customer}</td>
+                        <td className="py-2 pr-4">{p.mode}</td>
+                        <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
