@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, Receipt } from "lucide-react";
+import { Save, Receipt, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,17 +25,32 @@ type Props = {
   customers: string[];
 };
 
+type CartItem = {
+  key: string;
+  lotId: string;
+  lotName: string;
+  weightsText: string;
+  bags: number;
+  kg: number;
+  rate: number;
+  amount: number;
+};
+
 export function SalePattiForm({ lots, customers }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [date, setDate] = useState(today());
   const [buyer, setBuyer] = useState("");
+
+  // Current line + cart.
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [lotId, setLotId] = useState(lots[0]?.id ?? "");
   const [bags, setBags] = useState("");
   const [weights, setWeights] = useState("");
   const [kg, setKg] = useState("");
   const [rate, setRate] = useState("");
+
   const [cdOn, setCdOn] = useState(false);
   const [cdPct, setCdPct] = useState("1");
   const [labOn, setLabOn] = useState(false);
@@ -59,34 +74,95 @@ export function SalePattiForm({ lots, customers }: Props) {
     }
   }
 
-  const calc = useMemo(() => {
+  const currentLine = useMemo((): CartItem | null => {
     const bagsN = num(bags);
     const kgN = num(kg);
     const rateN = num(rate);
-    const amount = r2(kgN * rateN);
+    if (!lotId || bagsN <= 0 || kgN <= 0 || rateN <= 0) return null;
+    const lot = lots.find((l) => l.id === lotId);
+    return {
+      key: "current",
+      lotId,
+      lotName: lot?.name ?? "",
+      weightsText: weights.trim(),
+      bags: bagsN,
+      kg: kgN,
+      rate: rateN,
+      amount: r2(kgN * rateN),
+    };
+  }, [bags, kg, rate, weights, lotId, lots]);
+
+  // Effective items for preview / save = cart + current line.
+  const items = useMemo(
+    () => (currentLine ? [...cart, currentLine] : cart),
+    [cart, currentLine],
+  );
+
+  const calc = useMemo(() => {
+    const bagsTotal = items.reduce((s, i) => s + i.bags, 0);
+    const kgTotal = r2(items.reduce((s, i) => s + i.kg, 0));
+    const amount = r2(items.reduce((s, i) => s + i.amount, 0));
     const cd = cdOn ? r2((amount * num(cdPct)) / 100) : 0;
-    const labor = labOn ? r2(bagsN * num(labRate)) : 0;
-    const broker = brOn ? r2(bagsN * num(brRate)) : 0;
+    const labor = labOn ? r2(bagsTotal * num(labRate)) : 0;
+    const broker = brOn ? r2(bagsTotal * num(brRate)) : 0;
     const trans = transportOn ? num(transport) : 0;
     const net = r2(amount - cd - labor + brSign * broker - trans);
     const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(net - paid);
-    return { bagsN, kgN, rateN, amount, cd, labor, broker, trans, net, paid, balance };
-  }, [bags, kg, rate, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport, credit, cash, upi, cj]);
+    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, net, paid, balance };
+  }, [items, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport, credit, cash, upi, cj]);
+
+  function clearCurrentLine() {
+    setBags("");
+    setWeights("");
+    setKg("");
+    setRate("");
+    // Keep the lotId so the common "same lot twice" case is slightly faster;
+    // user can still switch it on the next line.
+  }
+
+  function addToCart() {
+    if (!currentLine) {
+      toast.error("Pick a lot and fill in bags, weight and price before adding this lot.");
+      return;
+    }
+    setCart((xs) => [...xs, { ...currentLine, key: crypto.randomUUID() }]);
+    clearCurrentLine();
+  }
+
+  function removeFromCart(key: string) {
+    setCart((xs) => xs.filter((x) => x.key !== key));
+  }
+
+  // Catch any lot where the total bags across every cart line (plus the
+  // current line) would exceed what's in stock at the Working-at store.
+  const stockWarnings = useMemo(() => {
+    const perLot = new Map<string, number>();
+    for (const it of items) {
+      perLot.set(it.lotId, (perLot.get(it.lotId) ?? 0) + it.bags);
+    }
+    const warnings: { lotName: string; wanted: number; left: number }[] = [];
+    for (const [id, wanted] of perLot) {
+      const lot = lots.find((l) => l.id === id);
+      if (!lot) continue;
+      if (wanted > lot.left) {
+        warnings.push({ lotName: lot.name, wanted, left: lot.left });
+      }
+    }
+    return warnings;
+  }, [items, lots]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!buyer.trim() || calc.bagsN <= 0 || calc.kgN <= 0 || calc.rateN <= 0) {
-      toast.error("Enter buyer, bags, weight and price.");
+    if (!buyer.trim() || items.length === 0) {
+      toast.error("Enter buyer and at least one lot with bags, weight and price.");
       return;
     }
-    const lot = lots.find((l) => l.id === lotId);
-    if (lot && calc.bagsN > lot.left) {
-      if (
-        !confirm(
-          `Only ${lot.left} bags of "${lot.name}" at the current store. Save anyway?`,
-        )
-      ) {
+    if (stockWarnings.length > 0) {
+      const msg = stockWarnings
+        .map((w) => `  • ${w.lotName}: ${w.wanted} wanted, only ${w.left} in stock`)
+        .join("\n");
+      if (!confirm(`Some lots don't have enough stock:\n${msg}\n\nSave anyway?`)) {
         return;
       }
     }
@@ -94,11 +170,13 @@ export function SalePattiForm({ lots, customers }: Props) {
       const res = await saveSalePatti({
         date,
         buyer: buyer.trim(),
-        lotId,
-        weightsText: weights.trim(),
-        bags: calc.bagsN,
-        kg: calc.kgN,
-        rate: calc.rateN,
+        items: items.map((it) => ({
+          lotId: it.lotId,
+          weightsText: it.weightsText,
+          bags: it.bags,
+          kg: it.kg,
+          rate: it.rate,
+        })),
         cdPct: cdOn ? num(cdPct) : 0,
         labRate: labOn ? num(labRate) : 0,
         brRate: brOn ? num(brRate) : 0,
@@ -114,10 +192,8 @@ export function SalePattiForm({ lots, customers }: Props) {
       }
       toast.success(`Saved sale patti P ${pad2(res.no)} · net ${money(calc.net)}`);
       setBuyer("");
-      setBags("");
-      setWeights("");
-      setKg("");
-      setRate("");
+      setCart([]);
+      clearCurrentLine();
       setCdOn(false);
       setLabOn(false);
       setBrOn(false);
@@ -136,8 +212,8 @@ export function SalePattiForm({ lots, customers }: Props) {
     <form onSubmit={submit} className="space-y-6">
       <FormSection
         icon={Receipt}
-        title="Buyer & lot"
-        description="Sell from stock using patti-style adjustments. The bags come off the lot you pick."
+        title="Buyer & lots"
+        description="Sell from stock using patti-style adjustments. Add one or more lots for this buyer; the current line is included automatically on save."
       >
         <FormGrid>
           <Field label="Date" htmlFor="sp-date" required>
@@ -162,6 +238,51 @@ export function SalePattiForm({ lots, customers }: Props) {
               ))}
             </datalist>
           </Field>
+        </FormGrid>
+
+        {cart.length > 0 && (
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="py-2 pr-4">Lot</th>
+                  <th className="py-2 pr-4 text-right">Bags</th>
+                  <th className="py-2 pr-4 text-right">Kg</th>
+                  <th className="py-2 pr-4 text-right">Rate</th>
+                  <th className="py-2 pr-4 text-right">Amount</th>
+                  <th className="py-2 pr-0" />
+                </tr>
+              </thead>
+              <tbody>
+                {cart.map((it) => (
+                  <tr key={it.key} className="border-b last:border-0">
+                    <td className="py-2 pr-4">{it.lotName || "—"}</td>
+                    <td className="py-2 pr-4 text-right">{it.bags}</td>
+                    <td className="py-2 pr-4 text-right">{it.kg}</td>
+                    <td className="py-2 pr-4 text-right">{money(it.rate)}</td>
+                    <td className="py-2 pr-4 text-right font-semibold">
+                      {money(it.amount)}
+                    </td>
+                    <td className="py-2 pr-0 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeFromCart(it.key)}
+                        className="text-destructive"
+                        aria-label="Remove lot"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <FormGrid>
           <Field label="Lot (stock)" required>
             <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
               <SelectTrigger className="w-full">
@@ -194,9 +315,20 @@ export function SalePattiForm({ lots, customers }: Props) {
             <Textarea id="sp-w" rows={2} value={weights} onChange={(e) => onWeights(e.target.value)} />
           </Field>
         </FormGrid>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={addToCart}
+          disabled={!currentLine}
+        >
+          + Add this lot to the sale patti (another lot for the same buyer)
+        </Button>
       </FormSection>
 
-      <FormSection title="Adjustments" description="Tick only what applies.">
+      <FormSection title="Adjustments" description="Tick only what applies. CD, labour and transport apply to the whole bill; broker can be added or deducted.">
         <FormGrid>
           <Field label="CD % (−)">
             <label className="flex items-center gap-2 text-sm pt-1">
@@ -261,6 +393,7 @@ export function SalePattiForm({ lots, customers }: Props) {
 
       <FormSection title="Preview" compact>
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <SumCell label="Bags · kg" value={`${calc.bagsTotal} · ${calc.kgTotal}`} />
           <SumCell label="Amount" value={money(calc.amount)} />
           {cdOn && <SumCell label={`CD ${cdPct}% (−)`} value={money(calc.cd)} />}
           {labOn && <SumCell label="Labour (−)" value={money(calc.labor)} />}

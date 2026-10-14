@@ -38,7 +38,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
   ]);
   if (!bill) notFound();
 
-  if ((bill as { kind?: string }).kind === "gst") {
+  if (bill.kind === "gst") {
     const raw = await db.query.bills.findFirst({
       where: eq(schema.bills.id, id),
     });
@@ -211,15 +211,23 @@ function GstInvoicePrint({
   if (!bill) return null;
   const totalPaid = pays.reduce((s, p) => s + Number(p.amount), 0);
   const balance = bill.total - totalPaid;
-  const totalBags = bill.items.reduce((s, i) => s + i.bags, 0);
   const totalKg = bill.items.reduce((s, i) => s + i.kg, 0);
   const words = moneyInWords(bill.total);
-  const fontPx = size === "A5" ? 10 : 12;
+  const half = tax.pct / 2;
+  const totalTax = (tax.cgst ?? 0) + (tax.sgst ?? 0) + (tax.igst ?? 0);
+  const taxWords = moneyInWords(totalTax);
+  const fmtDate = (d?: string | null) => {
+    if (!d) return "";
+    const parts = d.split("-");
+    if (parts.length !== 3) return d;
+    const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${Number(parts[2])}-${MO[Number(parts[1]) - 1]}-${parts[0].slice(2)}`;
+  };
+  const hsn = bill.items[0]?.hsn ?? "12023090";
 
   return (
     <div
-      className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 mx-auto max-w-5xl"
-      style={{ fontSize: `${fontPx}px` }}
+      className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 mx-auto max-w-5xl gi"
     >
       {chosen ? (
         <>
@@ -229,9 +237,26 @@ function GstInvoicePrint({
       ) : (
         <PrintSizeChooser recommended="A4" />
       )}
-      <style>{`@media print { @page { size: ${size} portrait; margin: 8mm } nav, header { display: none !important; } }
-      table.gs, table.gs td, table.gs th { border: 1px solid #000; border-collapse: collapse; }
-      table.gs th, table.gs td { padding: 3px 6px; vertical-align: top; }
+      <style>{`
+        @media print { @page { size: ${size} portrait; margin: 8mm } nav, header { display: none !important; } }
+        .gi { font: 12px/1.35 Arial, Helvetica, sans-serif; color: #000; }
+        .gi table { width: 100%; border-collapse: collapse; }
+        .gi > table + table { margin-top: -1px; }
+        .gi td, .gi th {
+          border: 1px solid #000 !important;
+          padding: 2px 5px;
+          vertical-align: top;
+          color: #000 !important;
+          text-align: left;
+          font-weight: 400;
+        }
+        .gi .r { text-align: right !important; }
+        .gi .c { text-align: center !important; }
+        .gi .b { font-weight: 700; }
+        .gi .i { font-style: italic; }
+        .gi .np { padding: 0 !important; }
+        .gi .bt { border-top: 1px solid #000; padding: 3px 5px; }
+        .gi .nb { border: 0 !important; }
       `}</style>
 
       {letterheadImage && (
@@ -242,288 +267,386 @@ function GstInvoicePrint({
           className="mb-2 w-full max-h-32 object-contain"
         />
       )}
-      <div className="text-center font-semibold">TAX INVOICE</div>
-      <table className="gs w-full mt-1">
+      <div className="text-center font-bold text-base mb-2">Tax Invoice</div>
+
+      {/* Top block: seller + consignee + buyer on the left, header grid on the right. */}
+      <table>
         <tbody>
           <tr>
-            <td className="w-1/2">
-              <div className="font-semibold text-sm">{seller.name ?? ""}</div>
-              <div className="whitespace-pre-line">{seller.address ?? ""}</div>
-              <div>GSTIN/UIN: {seller.gstin ?? ""}</div>
-              <div>
-                State Name: {seller.state ?? ""}
-                {seller.stateCode ? `, Code: ${seller.stateCode}` : ""}
+            <td className="np" style={{ width: "50%" }}>
+              <div style={{ padding: "3px 5px" }}>
+                <b style={{ fontSize: 13 }}>{seller.name ?? ""}</b>
+                {seller.address && (
+                  <>
+                    <br />
+                    <span className="whitespace-pre-line">{seller.address}</span>
+                  </>
+                )}
+                {seller.fssai && (
+                  <>
+                    <br />
+                    FSSAI No. : {seller.fssai}
+                  </>
+                )}
+                <br />
+                GSTIN/UIN: {seller.gstin ?? ""}
+                <br />
+                State Name : {seller.state ?? ""}
+                {seller.stateCode ? `, Code : ${seller.stateCode}` : ""}
+                {seller.email && (
+                  <>
+                    <br />
+                    E-Mail : {seller.email}
+                  </>
+                )}
               </div>
-              {seller.fssai && <div>FSSAI: {seller.fssai}</div>}
-              {seller.email && <div>E-Mail: {seller.email}</div>}
+              <div className="bt">
+                Consignee (Ship to)
+                <br />
+                <b>{consignee.name}</b>
+                {consignee.address && (
+                  <>
+                    <br />
+                    <span className="whitespace-pre-line">{consignee.address}</span>
+                  </>
+                )}
+                <br />
+                GSTIN/UIN : {consignee.gstin ?? ""}
+                <br />
+                State Name : {consignee.state ?? ""}
+                {consignee.stateCode ? `, Code : ${consignee.stateCode}` : ""}
+              </div>
+              <div className="bt">
+                Buyer (Bill to)
+                <br />
+                <b>{buyer.name}</b>
+                {buyer.address && (
+                  <>
+                    <br />
+                    <span className="whitespace-pre-line">{buyer.address}</span>
+                  </>
+                )}
+                <br />
+                GSTIN/UIN : {buyer.gstin ?? ""}
+                <br />
+                State Name : {buyer.state ?? ""}
+                {buyer.stateCode ? `, Code : ${buyer.stateCode}` : ""}
+              </div>
             </td>
-            <td className="w-1/2 p-0">
-              <table className="w-full">
+            <td className="np">
+              <table>
                 <tbody>
                   <tr>
-                    <td className="border-b border-black">
-                      <b>Invoice No.</b>
-                      <br />
-                      {pad2(bill.no)}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Dated</b>
-                      <br />
-                      {bill.date}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border-b border-black">
-                      <b>Delivery Note</b>
-                      <br />
-                      {header.dn ?? ""}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Mode/Terms of Payment</b>
-                      <br />
-                      {header.mp ?? ""}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border-b border-black">
-                      <b>Reference No. &amp; Date</b>
-                      <br />
-                      {header.rf ?? ""}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Other References</b>
-                      <br />
-                      {header.or ?? ""}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border-b border-black">
-                      <b>Buyer&apos;s Order No.</b>
-                      <br />
-                      {header.bo ?? ""}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Dated</b>
-                      <br />
-                      {header.bd ?? ""}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border-b border-black">
-                      <b>Dispatch Doc No.</b>
-                      <br />
-                      {header.dd ?? ""}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Delivery Note Date</b>
-                      <br />
-                      {header.dt ?? ""}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border-b border-black">
-                      <b>Dispatched through</b>
-                      <br />
-                      {header.through ?? ""}
-                    </td>
-                    <td className="border-b border-l border-black">
-                      <b>Destination</b>
-                      <br />
-                      {header.destination ?? ""}
-                    </td>
-                  </tr>
-                  <tr>
                     <td colSpan={2}>
-                      <b>Vehicle no:</b> {header.veh ?? ""}
-                      {header.ewb ? ` · e-Way Bill: ${header.ewb}` : ""}
+                      Invoice No.<br />
+                      <b>{pad2(bill.no)}</b>
+                    </td>
+                    <td colSpan={2}>
+                      e-Way Bill No.<br />
+                      <b>{header.ewb ?? ""}</b>
+                    </td>
+                    <td colSpan={2}>
+                      Dated<br />
+                      <b>{fmtDate(bill.date)}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Delivery Note<br />
+                      <b>{header.dn ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Mode/Terms of Payment<br />
+                      <b>{header.mp ?? ""}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Reference No. &amp; Date.<br />
+                      <b>{header.rf ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Other References<br />
+                      <b>{header.or ?? ""}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Buyer&apos;s Order No.<br />
+                      <b>{header.bo ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Dated<br />
+                      <b>{fmtDate(header.bd)}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Dispatch Doc No.<br />
+                      <b>{header.dd ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Delivery Note Date<br />
+                      <b>{fmtDate(header.dt)}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Dispatched through<br />
+                      <b>{header.through ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Destination<br />
+                      <b>{header.destination ?? ""}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3}>
+                      Bill of Lading/LR-RR No.<br />
+                      <b>{header.lr ?? ""}</b>
+                    </td>
+                    <td colSpan={3}>
+                      Motor Vehicle No.<br />
+                      <b>{header.veh ?? ""}</b>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} style={{ height: 60 }}>
+                      Terms of Delivery<br />
+                      <b>{header.td ?? ""}</b>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </td>
           </tr>
-          <tr>
-            <td>
-              <div className="font-semibold">Consignee (Ship to)</div>
-              <div className="font-semibold">{consignee.name}</div>
-              <div className="whitespace-pre-line">{consignee.address ?? ""}</div>
-              {consignee.gstin && <div>GSTIN/UIN: {consignee.gstin}</div>}
-              <div>
-                State Name: {consignee.state ?? ""}
-                {consignee.stateCode ? `, Code: ${consignee.stateCode}` : ""}
-              </div>
-            </td>
-            <td>
-              <div className="font-semibold">Buyer (Bill to)</div>
-              <div className="font-semibold">{buyer.name}</div>
-              <div className="whitespace-pre-line">{buyer.address ?? ""}</div>
-              {buyer.gstin && <div>GSTIN/UIN: {buyer.gstin}</div>}
-              <div>
-                State Name: {buyer.state ?? ""}
-                {buyer.stateCode ? `, Code: ${buyer.stateCode}` : ""}
-              </div>
-            </td>
-          </tr>
         </tbody>
       </table>
 
-      <table className="gs w-full mt-2">
+      {/* Items table — 7 columns matching the inspiration layout. */}
+      <table>
         <thead>
           <tr>
-            <th className="w-8">Sl</th>
+            <th className="c" style={{ width: "4%" }}>Sl No.</th>
             <th>Description of Goods</th>
-            <th>HSN/SAC</th>
-            <th className="text-right">Bags</th>
-            <th className="text-right">Weight (kg)</th>
-            <th className="text-right">Rate (per kg)</th>
-            <th className="text-right">Amount</th>
+            <th style={{ width: "13%" }}>HSN/SAC</th>
+            <th className="r" style={{ width: "15%" }}>Quantity</th>
+            <th className="r" style={{ width: "11%" }}>Rate</th>
+            <th style={{ width: "6%" }}>per</th>
+            <th className="r" style={{ width: "16%" }}>Amount</th>
           </tr>
         </thead>
         <tbody>
           {bill.items.map((it, idx) => (
             <tr key={it.id}>
-              <td className="text-center">{idx + 1}</td>
+              <td className="r">{idx + 1}</td>
               <td>
-                <b>{it.description ?? "Ground Nuts"}</b>
-                <br />
-                <span className="text-[11px]">Lot: {it.lotName}</span>
+                <b>{it.description ?? it.lotName ?? "Ground Nuts"}</b>
               </td>
-              <td className="font-mono">{it.hsn ?? "12023090"}</td>
-              <td className="text-right">{it.bags}</td>
-              <td className="text-right">{r2(it.kg)}</td>
-              <td className="text-right">{money(it.rate)}</td>
-              <td className="text-right">{money(it.amount)}</td>
+              <td>{it.hsn ?? hsn}</td>
+              <td className="r">
+                <b>{r2(it.kg)} kgs</b>
+                <br />
+                <i>({it.bags} Bag)</i>
+              </td>
+              <td className="r">{money(it.rate)}</td>
+              <td>kgs</td>
+              <td className="r b">{money(it.amount)}</td>
             </tr>
           ))}
           {tax.intra ? (
             <>
               <tr>
-                <td colSpan={6} className="text-right font-semibold">
-                  Output CGST @ {(tax.pct / 2).toFixed(2)}%
-                </td>
-                <td className="text-right">{money(tax.cgst ?? 0)}</td>
+                <td></td>
+                <td className="r b"><i>CGST</i></td>
+                <td></td>
+                <td></td>
+                <td className="r"><i>{half.toFixed(2)}</i></td>
+                <td>%</td>
+                <td className="r b">{money(tax.cgst ?? 0)}</td>
               </tr>
               <tr>
-                <td colSpan={6} className="text-right font-semibold">
-                  Output SGST @ {(tax.pct / 2).toFixed(2)}%
-                </td>
-                <td className="text-right">{money(tax.sgst ?? 0)}</td>
+                <td></td>
+                <td className="r b"><i>SGST</i></td>
+                <td></td>
+                <td></td>
+                <td className="r"><i>{half.toFixed(2)}</i></td>
+                <td>%</td>
+                <td className="r b">{money(tax.sgst ?? 0)}</td>
               </tr>
             </>
           ) : (
             <tr>
-              <td colSpan={6} className="text-right font-semibold">
-                Output IGST @ {tax.pct.toFixed(2)}%
-              </td>
-              <td className="text-right">{money(tax.igst ?? 0)}</td>
+              <td></td>
+              <td className="r b"><i>IGST</i></td>
+              <td></td>
+              <td></td>
+              <td className="r"><i>{tax.pct.toFixed(2)}</i></td>
+              <td>%</td>
+              <td className="r b">{money(tax.igst ?? 0)}</td>
             </tr>
           )}
           {Math.abs(tax.roundOff) > 0.005 && (
             <tr>
-              <td colSpan={6} className="text-right">
-                Round Off
+              <td></td>
+              <td className="r b"><i>Round Off</i></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td className="r b">
+                {tax.roundOff < 0 ? "(-)" : ""}
+                {money(Math.abs(tax.roundOff))}
               </td>
-              <td className="text-right">{money(tax.roundOff)}</td>
             </tr>
           )}
-          <tr className="font-bold">
-            <td colSpan={3} className="text-right">
-              Total
-            </td>
-            <td className="text-right">{totalBags}</td>
-            <td className="text-right">{r2(totalKg)}</td>
-            <td />
-            <td className="text-right">{money(bill.total)}</td>
+          <tr style={{ height: 40 }}>
+            <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+          </tr>
+          <tr>
+            <td></td>
+            <td className="r">Total</td>
+            <td></td>
+            <td className="r b">{r2(totalKg)} kgs</td>
+            <td></td>
+            <td></td>
+            <td className="r b" style={{ fontSize: 14 }}>₹ {money(bill.total)}</td>
           </tr>
         </tbody>
       </table>
 
-      <div className="mt-2">
-        <b>Amount Chargeable (in words): </b>
-        {words} E. &amp; O.E
-      </div>
+      {/* Amount in words — full-width single row. */}
+      <table>
+        <tbody>
+          <tr>
+            <td>
+              Amount Chargeable (in words)
+              <span style={{ float: "right" }}><i>E. &amp; O.E</i></span>
+              <br />
+              <b style={{ fontSize: 13 }}>{words}</b>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <table className="gs w-full mt-2">
+      {/* HSN tax summary table with rowspan/colspan headers matching inspiration. */}
+      <table>
         <thead>
           <tr>
-            <th>HSN/SAC</th>
-            <th className="text-right">Taxable Value</th>
-            <th className="text-right">
-              {tax.intra ? "Central Tax" : "Integrated Tax"}
-            </th>
-            {tax.intra && <th className="text-right">State Tax</th>}
-            <th className="text-right">Total Tax Amount</th>
+            <th rowSpan={2}>HSN/SAC</th>
+            <th className="r" rowSpan={2}>Taxable Value</th>
+            {tax.intra ? (
+              <>
+                <th className="c" colSpan={2}>CGST</th>
+                <th className="c" colSpan={2}>SGST/UTGST</th>
+              </>
+            ) : (
+              <th className="c" colSpan={2}>IGST</th>
+            )}
+            <th className="r" rowSpan={2}>Total Tax Amount</th>
+          </tr>
+          <tr>
+            {tax.intra ? (
+              <>
+                <th className="r">Rate</th>
+                <th className="r">Amount</th>
+                <th className="r">Rate</th>
+                <th className="r">Amount</th>
+              </>
+            ) : (
+              <>
+                <th className="r">Rate</th>
+                <th className="r">Amount</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td className="font-mono">{bill.items[0]?.hsn ?? "12023090"}</td>
-            <td className="text-right">{money(tax.taxable)}</td>
+            <td>{hsn}</td>
+            <td className="r">{money(tax.taxable)}</td>
             {tax.intra ? (
               <>
-                <td className="text-right">{money(tax.cgst ?? 0)}</td>
-                <td className="text-right">{money(tax.sgst ?? 0)}</td>
+                <td className="r">{half.toFixed(2)}%</td>
+                <td className="r">{money(tax.cgst ?? 0)}</td>
+                <td className="r">{half.toFixed(2)}%</td>
+                <td className="r">{money(tax.sgst ?? 0)}</td>
               </>
             ) : (
-              <td className="text-right">{money(tax.igst ?? 0)}</td>
+              <>
+                <td className="r">{tax.pct.toFixed(2)}%</td>
+                <td className="r">{money(tax.igst ?? 0)}</td>
+              </>
             )}
-            <td className="text-right">
-              {money((tax.cgst ?? 0) + (tax.sgst ?? 0) + (tax.igst ?? 0))}
-            </td>
+            <td className="r">{money(totalTax)}</td>
           </tr>
-          <tr className="font-bold">
-            <td className="text-right">Total</td>
-            <td className="text-right">{money(tax.taxable)}</td>
+          <tr>
+            <td className="r b">Total</td>
+            <td className="r b">{money(tax.taxable)}</td>
             {tax.intra ? (
               <>
-                <td className="text-right">{money(tax.cgst ?? 0)}</td>
-                <td className="text-right">{money(tax.sgst ?? 0)}</td>
+                <td></td>
+                <td className="r b">{money(tax.cgst ?? 0)}</td>
+                <td></td>
+                <td className="r b">{money(tax.sgst ?? 0)}</td>
               </>
             ) : (
-              <td className="text-right">{money(tax.igst ?? 0)}</td>
+              <>
+                <td></td>
+                <td className="r b">{money(tax.igst ?? 0)}</td>
+              </>
             )}
-            <td className="text-right">
-              {money((tax.cgst ?? 0) + (tax.sgst ?? 0) + (tax.igst ?? 0))}
+            <td className="r b">{money(totalTax)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Tax amount in words. */}
+      <table>
+        <tbody>
+          <tr>
+            <td>
+              Tax Amount (in words) : <b>{taxWords}</b>
             </td>
           </tr>
         </tbody>
       </table>
-      <div className="mt-1">
-        <b>Tax Amount (in words): </b>
-        {moneyInWords((tax.cgst ?? 0) + (tax.sgst ?? 0) + (tax.igst ?? 0))}
-      </div>
 
-      <div className="grid grid-cols-2 gap-2 mt-3">
-        <div className="border border-black p-2">
-          {seller.declaration && (
-            <>
-              <div className="font-semibold">Declaration</div>
-              <div className="whitespace-pre-line">{seller.declaration}</div>
-            </>
-          )}
-          {(seller.bankHolder || seller.bankName || seller.bankAccount || seller.bankIfsc) && (
-            <>
-              <div className="font-semibold mt-2">Company&apos;s Bank Details</div>
-              {seller.bankHolder && <div>A/c Holder&apos;s Name: {seller.bankHolder}</div>}
-              {seller.bankName && <div>Bank Name: {seller.bankName}</div>}
-              {seller.bankAccount && <div>A/c No.: {seller.bankAccount}</div>}
-              {seller.bankIfsc && <div>Branch &amp; IFS Code: {seller.bankIfsc}</div>}
-            </>
-          )}
-        </div>
-        <div className="border border-black p-2 text-right">
-          <div className="font-semibold">for {seller.name ?? "the firm"}</div>
-          <div className="mt-16">Authorised Signatory</div>
-        </div>
-      </div>
+      {/* Declaration (left) + Company's Bank Details with signatory (right). */}
+      <table>
+        <tbody>
+          <tr>
+            <td style={{ width: "50%", height: 80, verticalAlign: "bottom" }}>
+              <u>Declaration</u>
+              <br />
+              <span className="whitespace-pre-line">{seller.declaration ?? ""}</span>
+            </td>
+            <td>
+              Company&apos;s Bank Details
+              <br />
+              A/c Holder&apos;s Name : {seller.bankHolder ?? ""}
+              <br />
+              Bank Name : {seller.bankName ?? ""}
+              <br />
+              A/c No. : {seller.bankAccount ?? ""}
+              <br />
+              Branch &amp; IFS Code : {seller.bankIfsc ?? ""}
+              <div className="r b" style={{ marginTop: 8 }}>
+                for {seller.name ?? "the firm"}
+              </div>
+              <div className="r" style={{ marginTop: 18 }}>Authorised Signatory</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       {balance > 0.5 && (
-        <div className="mt-2 text-right text-xs">
+        <div className="text-right text-xs mt-1">
           Paid: {money(totalPaid)} · <b>Balance: {money(balance)}</b>
         </div>
       )}
 
-      <div className="text-center text-[10px] mt-2">
+      <div className="text-center mt-2" style={{ fontSize: 11 }}>
         This is a Computer Generated Invoice
       </div>
     </div>

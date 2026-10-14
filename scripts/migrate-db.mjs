@@ -182,13 +182,14 @@ function fullError(err) {
 }
 
 async function nukeDestinationSchema() {
-  // Blow away everything in the public schema so drizzle migrate starts
-  // against a truly empty database. This drops any leftover from a half-run
-  // previous attempt (CREATE TABLE "users" fails without this when the table
-  // already exists). The destination is explicitly supposed to be empty, and
-  // the URL guard at the top of the script prevents src == dst, so this is
-  // safe.
+  // Blow away everything in both the public schema AND the drizzle schema so
+  // the migrator starts against a truly empty database. drizzle keeps its
+  // bookkeeping in a separate `drizzle` schema — if we only drop public, the
+  // migrator sees `drizzle.__drizzle_migrations` already lists every migration
+  // and silently skips them, leaving the destination with no tables. The URL
+  // guard at the top of the script prevents src == dst so this is safe.
   await dst.query("DROP SCHEMA IF EXISTS public CASCADE");
+  await dst.query("DROP SCHEMA IF EXISTS drizzle CASCADE");
   await dst.query("CREATE SCHEMA public");
   await dst.query("GRANT USAGE ON SCHEMA public TO PUBLIC");
   await dst.query("GRANT CREATE ON SCHEMA public TO PUBLIC");
