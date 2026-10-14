@@ -1,6 +1,6 @@
 "use server";
 
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -9,14 +9,18 @@ import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
 
-const saveSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  buyer: z.string().trim().min(1).max(160),
+const saleItemSchema = z.object({
   lotId: z.string().uuid(),
   weightsText: z.string().max(500).optional().default(""),
   bags: z.number().int().positive(),
   kg: z.number().positive(),
   rate: z.number().positive(),
+});
+
+const saveSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  buyer: z.string().trim().min(1).max(160),
+  items: z.array(saleItemSchema).min(1).max(50),
   cdPct: z.number().min(0).default(0),
   labRate: z.number().min(0).default(0),
   brRate: z.number().min(0).default(0),
@@ -45,20 +49,30 @@ export async function saveSalePatti(
   const fy = fyOf(d.date);
   const loc = await getCurrentLoc();
 
-  const amount = r2(d.kg * d.rate);
+  // Totals across every lot line. CD / labour / broker apply to the whole bill.
+  const bagsTotal = d.items.reduce((s, i) => s + i.bags, 0);
+  const amount = r2(d.items.reduce((s, i) => s + i.kg * i.rate, 0));
   const cd = r2((amount * d.cdPct) / 100);
-  const labor = r2(d.bags * d.labRate);
-  const broker = r2(d.bags * d.brRate);
+  const labor = r2(bagsTotal * d.labRate);
+  const broker = r2(bagsTotal * d.brRate);
   const net = r2(amount - cd - labor + d.brSign * broker - d.transport);
   const total = net;
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [lot] = await tx
+      // Fetch every referenced lot once, so we can snapshot their names into
+      // bill_items without one query per line.
+      const lotIds = Array.from(new Set(d.items.map((i) => i.lotId)));
+      const lotRows = await tx
         .select()
         .from(schema.lots)
-        .where(sql`${schema.lots.id} = ${d.lotId}`);
-      if (!lot) throw new Error("Selected lot was not found.");
+        .where(inArray(schema.lots.id, lotIds));
+      const lotById = new Map(lotRows.map((l) => [l.id, l]));
+      for (const it of d.items) {
+        if (!lotById.has(it.lotId)) {
+          throw new Error("A selected lot was not found.");
+        }
+      }
 
       // Sale patti uses its OWN 01..NN series per FY (kind='psale').
       const noRes = await tx.execute<{ no: number }>(
@@ -96,17 +110,18 @@ export async function saveSalePatti(
         })
         .returning({ id: schema.bills.id });
 
-      await tx.insert(schema.billItems).values({
+      const itemRows = d.items.map((it, idx) => ({
         billId: bill.id,
-        position: 0,
-        lotId: d.lotId,
-        lotNameSnapshot: lot.name,
-        weightsText: d.weightsText || null,
-        bags: d.bags,
-        kg: d.kg.toString(),
-        rate: d.rate.toString(),
-        amount: amount.toString(),
-      });
+        position: idx,
+        lotId: it.lotId,
+        lotNameSnapshot: lotById.get(it.lotId)!.name,
+        weightsText: it.weightsText ? it.weightsText : null,
+        bags: it.bags,
+        kg: it.kg.toString(),
+        rate: it.rate.toString(),
+        amount: r2(it.kg * it.rate).toString(),
+      }));
+      await tx.insert(schema.billItems).values(itemRows);
 
       const payRows: (typeof schema.payments.$inferInsert)[] = [];
       if (d.payCash > 0) {
