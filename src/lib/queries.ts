@@ -157,6 +157,7 @@ export type BillLineRow = {
 export type BillRow = {
   id: string;
   no: number;
+  kind: "normal" | "gst" | "psale";
   fy: string;
   date: string;
   customer: string;
@@ -254,6 +255,7 @@ async function enrichBills(
     return {
       id: b.id,
       no: b.no,
+      kind: b.kind,
       fy: b.fy,
       date: b.date,
       customer: b.customer,

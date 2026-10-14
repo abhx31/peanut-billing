@@ -38,7 +38,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
   ]);
   if (!bill) notFound();
 
-  if ((bill as { kind?: string }).kind === "gst") {
+  if (bill.kind === "gst") {
     const raw = await db.query.bills.findFirst({
       where: eq(schema.bills.id, id),
     });
