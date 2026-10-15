@@ -60,6 +60,25 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
     );
   }
 
+  if (bill.kind === "psale") {
+    const raw = await db.query.bills.findFirst({
+      where: eq(schema.bills.id, id),
+    });
+    const size = parsePageSize(sp.size, "A5");
+    const chosen = hasPageSize(sp.size);
+    return (
+      <SalePattiPrint
+        size={size}
+        chosen={chosen}
+        bill={bill}
+        pays={pays}
+        patti={(raw?.patti ?? {}) as SalePattiAdjustments}
+        letterheadImage={settings.letterheadImage ?? null}
+        firm={settings.firm}
+      />
+    );
+  }
+
   const size = parsePageSize(sp.size, "A5");
   const chosen = hasPageSize(sp.size);
   const multiLine = bill.items.length > 1;
@@ -648,6 +667,147 @@ function GstInvoicePrint({
 
       <div className="text-center mt-2" style={{ fontSize: 11 }}>
         This is a Computer Generated Invoice
+      </div>
+    </div>
+  );
+}
+
+// Patti-style adjustments snapshotted on sale-patti bills in bills.patti.
+type SalePattiAdjustments = {
+  cdPct?: number;
+  cd?: number;
+  labRate?: number;
+  labor?: number;
+  brRate?: number;
+  broker?: number;
+  brSign?: 1 | -1;
+  transport?: number;
+};
+
+function SalePattiPrint({
+  size,
+  chosen,
+  bill,
+  pays,
+  patti,
+  letterheadImage,
+  firm,
+}: {
+  size: PageSize;
+  chosen: boolean;
+  bill: NonNullable<Awaited<ReturnType<typeof getBillById>>>;
+  pays: Awaited<ReturnType<typeof getPaymentsByBill>>;
+  patti: SalePattiAdjustments;
+  letterheadImage: string | null;
+  firm: string;
+}) {
+  const bagsTotal = bill.items.reduce((s, i) => s + i.bags, 0);
+  const totalPaid = pays.reduce((s, p) => s + Number(p.amount), 0);
+  const balance = bill.total - totalPaid;
+  const multi = bill.items.length > 1;
+  const linesWithWeights = bill.items.filter((it) => it.weightsText);
+  const brSign = patti.brSign === 1 ? "+" : "−";
+  const brokerLine =
+    patti.broker && patti.broker > 0
+      ? `Brokerage ₹${patti.brRate ?? 0} × ${bagsTotal} bags (${brSign})`
+      : null;
+
+  return (
+    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
+      {chosen ? (
+        <>
+          <PrintSizeToggle current={size} />
+          <PrintTrigger />
+        </>
+      ) : (
+        <PrintSizeChooser recommended="A5" />
+      )}
+      <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header, aside { display: none !important; } }`}</style>
+
+      <PrintLetterhead letterheadImage={letterheadImage} firm={firm} />
+      <div className="mb-4">
+        <b>PATTI BILL (Sale)</b>
+        <br />
+        Patti no. <b>P {pad2(bill.no)}</b> &nbsp;·&nbsp; Period: {bill.fy} &nbsp;·&nbsp;
+        Date: {bill.date}
+        <br />
+        Buyer: <b>{bill.customer}</b>
+      </div>
+
+      <table className="w-full text-sm border-collapse mb-3">
+        <thead>
+          <tr>
+            <th className="text-left border-b border-gray-500 py-1">Lot</th>
+            <th className="text-right border-b border-gray-500 py-1">Bags</th>
+            <th className="text-right border-b border-gray-500 py-1">Weight (kg)</th>
+            <th className="text-right border-b border-gray-500 py-1">Price/kg</th>
+            <th className="text-right border-b border-gray-500 py-1">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bill.items.map((it) => (
+            <tr key={it.id}>
+              <td className="py-1">{it.lotName}</td>
+              <td className="text-right py-1">{it.bags}</td>
+              <td className="text-right py-1">{r2(it.kg)}</td>
+              <td className="text-right py-1">{money(it.rate)}</td>
+              <td className="text-right py-1">{money(it.amount)}</td>
+            </tr>
+          ))}
+          {multi && (
+            <tr className="font-semibold">
+              <td className="py-1 border-t border-gray-500">Total</td>
+              <td className="text-right py-1 border-t border-gray-500">{bagsTotal}</td>
+              <td className="text-right py-1 border-t border-gray-500">{r2(bill.kg)}</td>
+              <td className="border-t border-gray-500" />
+              <td className="text-right py-1 border-t border-gray-500">
+                {money(bill.amount)}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {linesWithWeights.length > 0 && (
+        <p className="text-xs mb-3">
+          <span className="font-semibold">Bag weights (kg):</span>
+          <br />
+          {linesWithWeights.map((it) => (
+            <span key={it.id}>
+              {it.lotName}: {it.weightsText}
+              <br />
+            </span>
+          ))}
+        </p>
+      )}
+
+      <div className="text-right text-sm space-y-1">
+        <div>Amount: {money(bill.amount)}</div>
+        {patti.cd != null && patti.cd > 0 && (
+          <div>
+            CD {patti.cdPct ?? 0}% (−): {money(patti.cd)}
+          </div>
+        )}
+        {patti.labor != null && patti.labor > 0 && (
+          <div>
+            Labour ₹{patti.labRate ?? 0} × {bagsTotal} bags (−): {money(patti.labor)}
+          </div>
+        )}
+        {brokerLine && patti.broker != null && (
+          <div>
+            {brokerLine}: {money(patti.broker)}
+          </div>
+        )}
+        {patti.transport != null && patti.transport > 0 && (
+          <div>Transportation (−): {money(patti.transport)}</div>
+        )}
+        <div className="font-bold text-base pt-1">
+          Net receivable: {money(bill.total)}
+        </div>
+        {totalPaid > 0.5 && <div>Paid: {money(totalPaid)}</div>}
+        {balance > 0.5 && (
+          <div className="font-semibold">Balance: {money(balance)}</div>
+        )}
       </div>
     </div>
   );
