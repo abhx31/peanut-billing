@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Save, Receipt, Trash2 } from "lucide-react";
+import { Save, Receipt, Trash2, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -152,8 +152,7 @@ export function SalePattiForm({ lots, customers }: Props) {
     return warnings;
   }, [items, lots]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(mode: "save" | "save-print") {
     if (!buyer.trim() || items.length === 0) {
       toast.error("Enter buyer and at least one lot with bags, weight and price.");
       return;
@@ -191,6 +190,9 @@ export function SalePattiForm({ lots, customers }: Props) {
         return;
       }
       toast.success(`Saved sale patti P ${pad2(res.no)} · net ${money(calc.net)}`);
+      if (mode === "save-print") {
+        window.open(`/bills/${res.billId}/print`, "_blank");
+      }
       setBuyer("");
       setCart([]);
       clearCurrentLine();
@@ -208,8 +210,13 @@ export function SalePattiForm({ lots, customers }: Props) {
     });
   }
 
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    submit("save");
+  }
+
   return (
-    <form onSubmit={submit} className="space-y-6">
+    <form onSubmit={onSubmit} className="space-y-6">
       <FormSection
         icon={Receipt}
         title="Buyer & lots"
@@ -407,6 +414,16 @@ export function SalePattiForm({ lots, customers }: Props) {
       </FormSection>
 
       <FormActions>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          size="lg"
+          onClick={() => submit("save-print")}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Save &amp; print
+        </Button>
         <Button type="submit" disabled={pending} size="lg">
           <Save className="mr-2 h-4 w-4" />
           {pending ? "Saving…" : "Save sale patti"}
