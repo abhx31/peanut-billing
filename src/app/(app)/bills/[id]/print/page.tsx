@@ -158,6 +158,15 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
             GST {bill.gstPercent}%: {money(bill.gst)}
           </div>
         )}
+        {(() => {
+          const ro = bill.total - (bill.amount + bill.hamali + bill.gst);
+          return Math.abs(ro) >= 0.005 ? (
+            <div>
+              Round Off: {ro < 0 ? "(−) " : ""}
+              {money(Math.abs(ro))}
+            </div>
+          ) : null;
+        })()}
         <div className="font-bold text-base">Total: {money(bill.total)}</div>
         {bill.paidNow != null && (
           <div>Paid now: {money(bill.paidNow)}</div>
@@ -801,6 +810,21 @@ function SalePattiPrint({
         {patti.transport != null && patti.transport > 0 && (
           <div>Transportation (−): {money(patti.transport)}</div>
         )}
+        {(() => {
+          const rawNet =
+            bill.amount -
+            (patti.cd ?? 0) -
+            (patti.labor ?? 0) +
+            (patti.brSign ?? 1) * (patti.broker ?? 0) -
+            (patti.transport ?? 0);
+          const ro = bill.total - rawNet;
+          return Math.abs(ro) >= 0.005 ? (
+            <div>
+              Round Off: {ro < 0 ? "(−) " : ""}
+              {money(Math.abs(ro))}
+            </div>
+          ) : null;
+        })()}
         <div className="font-bold text-base pt-1">
           Net receivable: {money(bill.total)}
         </div>

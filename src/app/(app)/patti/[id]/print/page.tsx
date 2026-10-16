@@ -156,6 +156,21 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
         {Number(patti.transport) > 0 && (
           <div>Transportation (−): {money(patti.transport)}</div>
         )}
+        {(() => {
+          const rawNet =
+            Number(patti.amount) -
+            Number(patti.cd) -
+            Number(patti.labor) +
+            patti.brSign * Number(patti.broker) -
+            Number(patti.transport);
+          const ro = Number(patti.net) - rawNet;
+          return Math.abs(ro) >= 0.005 ? (
+            <div>
+              Round Off: {ro < 0 ? "(−) " : ""}
+              {money(Math.abs(ro))}
+            </div>
+          ) : null;
+        })()}
         <div className="font-bold text-base pt-1">Net payable: {money(patti.net)}</div>
         {patti.paidMode && (
           <div className="text-xs text-gray-700">

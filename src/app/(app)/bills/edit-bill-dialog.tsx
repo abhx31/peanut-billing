@@ -40,18 +40,28 @@ type Line = {
 type Props = {
   billId: string;
   billNo: number;
+  billDate: string;
   customer: string;
   items: Line[];
   lots: Lot[];
 };
 
-export function EditBillDialog({ billId, billNo, customer, items, lots }: Props) {
+export function EditBillDialog({
+  billId,
+  billNo,
+  billDate,
+  customer,
+  items,
+  lots,
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [rows, setRows] = useState(
     items.map((it) => ({ ...it, rateStr: String(it.rate), lotIdCur: it.lotId })),
   );
+  const [date, setDate] = useState(billDate);
+  const [customerName, setCustomerName] = useState(customer);
 
   function update(id: string, patch: { rateStr?: string; lotIdCur?: string }) {
     setRows((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
@@ -59,6 +69,15 @@ export function EditBillDialog({ billId, billNo, customer, items, lots }: Props)
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedCustomer = customerName.trim();
+    if (!trimmedCustomer) {
+      toast.error("Customer name cannot be empty.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date.");
+      return;
+    }
     for (const r of rows) {
       const n = Number(r.rateStr);
       if (!n || n <= 0) {
@@ -69,6 +88,8 @@ export function EditBillDialog({ billId, billNo, customer, items, lots }: Props)
     startTransition(async () => {
       const res = await editBill({
         billId,
+        date,
+        customer: trimmedCustomer,
         items: rows.map((r) => ({
           itemId: r.id,
           lotId: r.lotIdCur,
@@ -106,6 +127,25 @@ export function EditBillDialog({ billId, billNo, customer, items, lots }: Props)
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="eb-date">Date</Label>
+              <Input
+                id="eb-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="eb-cust">Customer</Label>
+              <Input
+                id="eb-cust"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
             {rows.map((r) => (
               <div key={r.id} className="rounded-lg border bg-muted/30 p-3 space-y-2">

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
-import { r2 } from "@/lib/format";
+import { fyOf, r2 } from "@/lib/format";
+import { closedDateError } from "@/lib/year-close";
 
 const editItemSchema = z.object({
   itemId: z.string().uuid(),
@@ -15,6 +16,9 @@ const editItemSchema = z.object({
 
 const editBillSchema = z.object({
   billId: z.string().uuid(),
+  // Optional so legacy callers that only sent items still work.
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  customer: z.string().trim().min(1).max(120).optional(),
   items: z.array(editItemSchema).min(1),
 });
 
@@ -38,6 +42,19 @@ export async function editBill(
   if (!bill) return { ok: false, error: "Bill not found." };
   if (bill.kind !== "normal") {
     return { ok: false, error: "GST invoices cannot be edited here." };
+  }
+
+  // If the user moved the bill to a different date, make sure both the old
+  // date's and the new date's FYs are still open. Only the bill row's own date
+  // moves — payments on the bill keep their own date because that's when the
+  // money actually changed hands.
+  const nextDate = parsed.data.date;
+  const nextCustomer = parsed.data.customer?.trim();
+  if (nextDate && nextDate !== bill.date) {
+    const closedOld = await closedDateError(bill.date);
+    if (closedOld) return { ok: false, error: closedOld };
+    const closedNew = await closedDateError(nextDate);
+    if (closedNew) return { ok: false, error: closedNew };
   }
 
   const itemsOnBill = new Map(bill.items.map((i) => [i.id, i]));
@@ -80,14 +97,23 @@ export async function editBill(
     newAmount = r2(newAmount);
     const gstPct = Number(bill.gstPercent);
     const newGst = r2((newAmount * gstPct) / 100);
-    const newTotal = r2(newAmount + Number(bill.hamali) + newGst);
+    // Match the create path: round the invoice total to the nearest rupee.
+    const newTotal = Math.round(newAmount + Number(bill.hamali) + newGst);
+    const update: Record<string, unknown> = {
+      amount: newAmount.toString(),
+      gst: newGst.toString(),
+      total: newTotal.toString(),
+    };
+    if (nextDate && nextDate !== bill.date) {
+      update.date = nextDate;
+      update.fy = fyOf(nextDate);
+    }
+    if (nextCustomer && nextCustomer !== bill.customer) {
+      update.customer = nextCustomer;
+    }
     await tx
       .update(schema.bills)
-      .set({
-        amount: newAmount.toString(),
-        gst: newGst.toString(),
-        total: newTotal.toString(),
-      })
+      .set(update)
       .where(eq(schema.bills.id, parsed.data.billId));
   });
 
