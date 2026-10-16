@@ -119,6 +119,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                             <EditBillDialog
                               billId={b.id}
                               billNo={b.no}
+                              billDate={b.date}
                               customer={b.customer}
                               items={b.items.map((it) => ({
                                 id: it.id,
