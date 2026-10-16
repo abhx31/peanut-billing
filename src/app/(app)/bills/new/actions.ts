@@ -53,7 +53,9 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
   const totalAmount = r2(items.reduce((s, it) => s + it.amount, 0));
   const hamali = r2(totalBags * d.hamaliPerBag);
   const gst = r2((totalAmount * d.gstPercent) / 100);
-  const total = r2(totalAmount + hamali + gst);
+  // Round the invoice total to the nearest rupee; the ±paise difference shows
+  // on the print as a Round Off line.
+  const total = Math.round(totalAmount + hamali + gst);
 
   const paidNow = r2((d.payCash ?? 0) + (d.payUpi ?? 0) + (d.payCj ?? 0));
 

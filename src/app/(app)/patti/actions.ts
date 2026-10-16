@@ -99,7 +99,9 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
   const cd = r2((amount * d.cdPct) / 100);
   const labor = r2(bagsTotal * d.labRate);
   const broker = r2(bagsTotal * d.brRate);
-  const net = r2(amount - cd - labor + d.brSign * broker - d.transport);
+  // Round the patti net to the nearest rupee; the ±paise difference surfaces
+  // on the print as a Round Off line.
+  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
   const paidMode = d.paidMode === "" ? null : d.paidMode;
   const paidDate = paidMode ? d.date : null;
   const addToStock = d.addToStock && !!d.stockLotId;

@@ -55,7 +55,9 @@ export async function saveSalePatti(
   const cd = r2((amount * d.cdPct) / 100);
   const labor = r2(bagsTotal * d.labRate);
   const broker = r2(bagsTotal * d.brRate);
-  const net = r2(amount - cd - labor + d.brSign * broker - d.transport);
+  // Round the sale-patti net to the nearest rupee; the ±paise difference
+  // surfaces on the print as a Round Off line.
+  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
   const total = net;
 
   try {
