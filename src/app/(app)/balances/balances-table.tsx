@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { money, pad2 } from "@/lib/format";
 import { ReceiveFromCustomerButton } from "./receive-from-customer-button";
 import { StatementDialog } from "./statement-dialog";
+import { CustomerNoteDialog } from "./customer-note-dialog";
 
 type Pending = {
   id: string;
@@ -25,6 +26,7 @@ type Row = {
   paid: number;
   totalBalance: number;
   pending: Pending[];
+  note: string;
 };
 
 function billLabel(p: Pending) {
@@ -33,18 +35,26 @@ function billLabel(p: Pending) {
   return `${prefix}${pad2(p.no)}${p.loc === "NM" ? " (NM)" : ""}`;
 }
 
-export function BalancesTable({ rows }: { rows: Row[] }) {
+export function BalancesTable({
+  rows,
+  canEditNotes,
+}: {
+  rows: Row[];
+  canEditNotes: boolean;
+}) {
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return rows;
     // If it looks like a bill number ("12", "GST 05", "P 03"), match the row
-    // whose pending list contains that bill number.
+    // whose pending list contains that bill number OR whose note contains
+    // the text — handy for finding a customer by a note like "monthly".
     const numMatch = needle.match(/\d+/)?.[0];
     const n = numMatch ? Number(numMatch) : null;
     return rows.filter((r) => {
       if (r.name.toLowerCase().includes(needle)) return true;
+      if (r.note && r.note.toLowerCase().includes(needle)) return true;
       if (n !== null && r.pending.some((p) => p.no === n)) return true;
       return false;
     });
@@ -85,6 +95,7 @@ export function BalancesTable({ rows }: { rows: Row[] }) {
             <thead>
               <tr className="text-left text-muted-foreground border-b">
                 <th className="py-2 pr-4">Customer</th>
+                <th className="py-2 pr-4">Note</th>
                 <th className="py-2 pr-4 text-right">Old due</th>
                 <th className="py-2 pr-4 text-right">Billed</th>
                 <th className="py-2 pr-4 text-right">Paid</th>
@@ -99,6 +110,20 @@ export function BalancesTable({ rows }: { rows: Row[] }) {
                 return (
                   <tr key={c.name} className="border-b last:border-0">
                     <td className="py-2 pr-4">{c.name}</td>
+                    <td className="py-2 pr-4 text-xs text-muted-foreground align-top">
+                      <div className="flex items-start gap-1">
+                        {c.note ? (
+                          <span className="whitespace-pre-wrap max-w-[18ch] break-words">
+                            {c.note}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                        {canEditNotes && (
+                          <CustomerNoteDialog customer={c.name} note={c.note} />
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 pr-4 text-right">
                       {c.openingDue > 0.005 ? money(c.openingDue) : "—"}
                     </td>
@@ -144,6 +169,7 @@ export function BalancesTable({ rows }: { rows: Row[] }) {
                 <td className="py-2 pr-4">
                   {q ? "Matching customers" : "All customers"}
                 </td>
+                <td />
                 <td className="py-2 pr-4 text-right">
                   {money(totals.openingDue)}
                 </td>

@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import {
   customerKey,
   getCustomerBalances,
+  getCustomerNotes,
   getPendingBillsByCustomer,
 } from "@/lib/queries";
 import { BackupButtons } from "./backup-buttons";
@@ -14,9 +15,12 @@ export const dynamic = "force-dynamic";
 export default async function BalancesPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
-  const [all, pending] = await Promise.all([
+  // Only owner/editor can save a note; staff see them read-only.
+  const canEditNotes = session.user.role === "owner" || session.user.role === "editor";
+  const [all, pending, notes] = await Promise.all([
     getCustomerBalances(),
     getPendingBillsByCustomer(),
+    getCustomerNotes(),
   ]);
 
   const rows = all.map((c) => ({
@@ -27,6 +31,7 @@ export default async function BalancesPage() {
     paid: c.paid,
     totalBalance: c.totalBalance,
     pending: pending.get(customerKey(c.name)) ?? [],
+    note: notes.get(customerKey(c.name)) ?? "",
   }));
 
   return (
@@ -54,7 +59,7 @@ export default async function BalancesPage() {
               add an old due in Receivables.
             </p>
           ) : (
-            <BalancesTable rows={rows} />
+            <BalancesTable rows={rows} canEditNotes={canEditNotes} />
           )}
         </CardContent>
       </Card>
