@@ -507,6 +507,14 @@ export function customerKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Sticky-note text keyed by customerKey(name). Empty map if none exist. */
+export async function getCustomerNotes(
+  exec: DbExecutor = db,
+): Promise<Map<string, string>> {
+  const rows = await exec.select().from(schema.customerNotes);
+  return new Map(rows.map((r) => [r.customerKey, r.note]));
+}
+
 export async function getCustomerBalances(
   exec: DbExecutor = db,
 ): Promise<CustomerBalance[]> {

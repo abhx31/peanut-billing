@@ -411,3 +411,15 @@ export const hamaliPaidRelations = relations(hamaliPaid, ({ one }) => ({
     references: [expenses.id],
   }),
 }));
+
+// Per-customer sticky notes shown on the Balances page. Keyed by customerKey()
+// so the same note shows up regardless of casing / whitespace drift in how the
+// name is typed on bills.
+export const customerNotes = pgTable("customer_notes", {
+  customerKey: text("customer_key").primaryKey(),
+  note: text("note").notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
