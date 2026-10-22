@@ -12,6 +12,7 @@ import { db, schema } from "@/db";
 import { fyOf, money, pad2, today } from "@/lib/format";
 import { GstPurchaseForm } from "./gst-purchase-form";
 import { DeleteGstPurchaseButton } from "./delete-gst-purchase-button";
+import { GstPurchaseMarkPaid } from "./gst-purchase-mark-paid";
 import { MonthPicker } from "./month-picker";
 import type { GstProfile } from "@/lib/gst-types";
 
@@ -174,7 +175,15 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                         )}
                       </td>
                       <td className="py-2 pr-0 text-right">
-                        <DeleteGstPurchaseButton id={p.id} />
+                        <div className="flex gap-1 justify-end flex-wrap">
+                          <GstPurchaseMarkPaid
+                            id={p.id}
+                            party={p.party}
+                            net={Number(p.net)}
+                            paidMode={p.paidMode as "Cash" | "UPI" | null}
+                          />
+                          <DeleteGstPurchaseButton id={p.id} />
+                        </div>
                       </td>
                     </tr>
                   ))}
