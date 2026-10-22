@@ -5,7 +5,7 @@ import {
   getAllPattiPayments,
   getOutstandingPattiBills,
 } from "@/lib/queries-patti";
-import { money, pad2 } from "@/lib/format";
+import { fmtDate, money, pad2 } from "@/lib/format";
 import { PayPattiDialog } from "./pay-patti-dialog";
 import { DeletePattiPaymentButton } from "./delete-patti-payment-button";
 
@@ -60,7 +60,7 @@ export default async function PattiPaymentsPage() {
                         {billLabel(b.kind, b.no)}
                       </td>
                       <td className="py-2 pr-4">{b.party}</td>
-                      <td className="py-2 pr-4">{b.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(b.date)}</td>
                       <td className="py-2 pr-4 text-right">{money(b.net)}</td>
                       <td className="py-2 pr-4 text-right">{money(b.paid)}</td>
                       <td className="py-2 pr-4 text-right font-semibold text-destructive">
@@ -121,7 +121,7 @@ export default async function PattiPaymentsPage() {
                 <tbody>
                   {allPayments.map((p) => (
                     <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{p.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(p.date)}</td>
                       <td className="py-2 pr-4 font-mono">
                         {billLabel(p.pattiKind, p.pattiNo)}
                       </td>

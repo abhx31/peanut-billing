@@ -6,7 +6,7 @@ import {
   getLotsWithStock,
 } from "@/lib/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { money, r2, today } from "@/lib/format";
+import { fmtDate, money, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { BillRowActions } from "../bills/bill-row-actions";
 import { EditBillDialog } from "../bills/edit-bill-dialog";
@@ -66,7 +66,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Bills on {date}</CardTitle>
+          <CardTitle>Bills on {fmtDate(date)}</CardTitle>
         </CardHeader>
         <CardContent>
           {bills.length === 0 ? (

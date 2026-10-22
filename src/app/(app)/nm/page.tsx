@@ -11,7 +11,7 @@ import {
   getBillsByDate,
   getLotsWithStock,
 } from "@/lib/queries";
-import { money, pad2, today } from "@/lib/format";
+import { fmtDate, money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
 import { TransferForm } from "./transfer-form";
@@ -183,7 +183,7 @@ export default async function NewMahavirPage({ searchParams }: Props) {
                 <tbody>
                   {transfers.map((t) => (
                     <tr key={t.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{t.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(t.date)}</td>
                       <td className="py-2 pr-4">{t.lotName}</td>
                       <td className="py-2 pr-4 text-right">{t.bags}</td>
                       <td className="py-2 pr-4">

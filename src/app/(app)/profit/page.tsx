@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOwner } from "@/lib/auth-helpers";
 import { getAllBills } from "@/lib/queries";
 import { db, schema } from "@/db";
-import { fyOf, money, pad2, r2, today } from "@/lib/format";
+import { fmtDate, fyOf, money, pad2, r2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { FYFilter } from "./fy-filter";
 
@@ -147,7 +147,7 @@ export default async function ProfitPage({ searchParams }: Props) {
                 <tbody>
                   {byDay.map((r) => (
                     <tr key={r.date} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{r.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(r.date)}</td>
                       <td className="py-2 pr-4 text-right">{r.bills}</td>
                       <td className="py-2 pr-4 text-right">{r.bags}</td>
                       <td className="py-2 pr-4 text-right">{money(r.sales)}</td>
@@ -273,7 +273,7 @@ export default async function ProfitPage({ searchParams }: Props) {
                   {[...bills].reverse().map((b) => (
                     <tr key={b.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
-                      <td className="py-2 pr-4">{b.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(b.date)}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
                       <td className="py-2 pr-4">{b.lotSummary}</td>
                       <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>

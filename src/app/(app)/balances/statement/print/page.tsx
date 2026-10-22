@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCustomerStatement, getSettings } from "@/lib/queries";
-import { money, pad2 } from "@/lib/format";
+import { fmtDate, money, pad2 } from "@/lib/format";
 import { PrintTrigger } from "../../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
@@ -72,7 +72,7 @@ export default async function PrintStatementPage({ searchParams }: Props) {
             if (r.kind === "due") {
               return (
                 <tr key={`due-${r.id}`}>
-                  <td className="py-1">{r.date}</td>
+                  <td className="py-1">{fmtDate(r.date)}</td>
                   <td className="py-1">Old due</td>
                   <td className="py-1 text-gray-500">{r.note ?? ""}</td>
                   <td className="py-1" />
@@ -83,7 +83,7 @@ export default async function PrintStatementPage({ searchParams }: Props) {
             if (r.kind === "bill") {
               return (
                 <tr key={`bill-${r.id}`}>
-                  <td className="py-1">{r.date}</td>
+                  <td className="py-1">{fmtDate(r.date)}</td>
                   <td className="py-1 font-mono">
                     Bill {r.billKind === "gst" ? "GST " : ""}
                     {r.billKind === "psale" ? "P " : ""}
@@ -97,7 +97,7 @@ export default async function PrintStatementPage({ searchParams }: Props) {
             }
             return (
               <tr key={`rcpt-${r.id}`}>
-                <td className="py-1">{r.date}</td>
+                <td className="py-1">{fmtDate(r.date)}</td>
                 <td className="py-1">Receipt</td>
                 <td className="py-1 text-gray-500">
                   {r.appliedTo}

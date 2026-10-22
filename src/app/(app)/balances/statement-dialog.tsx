@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { money, pad2 } from "@/lib/format";
+import { fmtDate, money, pad2 } from "@/lib/format";
 import { fetchStatement } from "./statement-actions";
 
 type Row = Awaited<ReturnType<typeof fetchStatement>>;
@@ -104,7 +104,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                     if (r.kind === "due") {
                       return (
                         <tr key={`due-${r.id}`} className="border-b last:border-0">
-                          <td className="py-2 pr-4">{r.date}</td>
+                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
                           <td className="py-2 pr-4">Old due</td>
                           <td className="py-2 pr-4 text-muted-foreground">
                             {r.note ?? ""}
@@ -120,7 +120,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                     if (r.kind === "bill") {
                       return (
                         <tr key={`bill-${r.id}`} className="border-b last:border-0">
-                          <td className="py-2 pr-4">{r.date}</td>
+                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
                           <td className="py-2 pr-4">
                             Bill{" "}
                             <span className="font-mono">
@@ -145,7 +145,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                         key={`rcpt-${r.id}`}
                         className="border-b last:border-0 text-success"
                       >
-                        <td className="py-2 pr-4">{r.date}</td>
+                        <td className="py-2 pr-4">{fmtDate(r.date)}</td>
                         <td className="py-2 pr-4">Receipt</td>
                         <td className="py-2 pr-4 font-mono text-xs">
                           {r.appliedTo}

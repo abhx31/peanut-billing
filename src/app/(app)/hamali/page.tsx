@@ -9,7 +9,7 @@ import {
   getHamaliPaidForDate,
   getRecentHamaliDays,
 } from "@/lib/queries-hamali";
-import { money, pad2, today } from "@/lib/format";
+import { fmtDate, money, pad2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { DateFilter } from "@/components/date-filter";
 import { HamaliPayDialog, HamaliUndoButton } from "./hamali-pay";
@@ -168,7 +168,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                           href={`/hamali?d=${r.date}`}
                           className="block underline-offset-2 hover:underline"
                         >
-                          {r.date}
+                          {fmtDate(r.date)}
                         </Link>
                       </td>
                       <td className="py-2 pr-4 text-right">{r.bags}</td>

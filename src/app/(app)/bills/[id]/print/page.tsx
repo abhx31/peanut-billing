@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/auth-helpers";
 import { getBillById, getPaymentsByBill, getSettings } from "@/lib/queries";
 import { db, schema } from "@/db";
-import { expandBagWeights, money, pad2, r2 } from "@/lib/format";
+import { expandBagWeights, fmtDate, money, pad2, r2 } from "@/lib/format";
 import { moneyInWords } from "@/lib/words";
 import { PrintTrigger } from "./print-trigger";
 import {
@@ -99,7 +99,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="text-sm mb-4">
         Bill no. <b>{pad2(bill.no)}</b> &nbsp;·&nbsp; Period: {bill.fy} &nbsp;·&nbsp; Date:{" "}
-        {bill.date}
+        {fmtDate(bill.date)}
         <br />
         Customer: <b>{bill.customer}</b>
         {bill.customerPhone && <> &nbsp;·&nbsp; Ph: {bill.customerPhone}</>}
@@ -195,7 +195,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
             <tbody>
               {pays.map((p) => (
                 <tr key={p.id}>
-                  <td className="py-1">{p.date}</td>
+                  <td className="py-1">{fmtDate(p.date)}</td>
                   <td className="py-1">{p.mode}</td>
                   <td className="text-right py-1">{money(p.amount)}</td>
                 </tr>
@@ -239,13 +239,6 @@ function GstInvoicePrint({
   const half = tax.pct / 2;
   const totalTax = (tax.cgst ?? 0) + (tax.sgst ?? 0) + (tax.igst ?? 0);
   const taxWords = moneyInWords(totalTax);
-  const fmtDate = (d?: string | null) => {
-    if (!d) return "";
-    const parts = d.split("-");
-    if (parts.length !== 3) return d;
-    const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${Number(parts[2])}-${MO[Number(parts[1]) - 1]}-${parts[0].slice(2)}`;
-  };
   const hsn = bill.items[0]?.hsn ?? "12023090";
 
   return (
@@ -732,7 +725,7 @@ function SalePattiPrint({
         <b>PATTI BILL (Sale)</b>
         <br />
         Patti no. <b>P {pad2(bill.no)}</b> &nbsp;·&nbsp; Period: {bill.fy} &nbsp;·&nbsp;
-        Date: {bill.date}
+        Date: {fmtDate(bill.date)}
         <br />
         Buyer: <b>{bill.customer}</b>
       </div>

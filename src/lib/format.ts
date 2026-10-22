@@ -15,6 +15,16 @@ export const pad2 = (v: number) => String(v).padStart(2, "0");
 export const today = () =>
   new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 
+// Display-only: "YYYY-MM-DD" -> "DD-MM-YYYY". Never use this on a value that
+// feeds back into an <input type="date"> or a server action — those need the
+// raw ISO string. Blank/invalid input passes through unchanged.
+export const fmtDate = (d: string | null | undefined): string => {
+  if (!d) return "";
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return d;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+};
+
 // Indian financial year 1 Apr – 31 Mar. Date must be YYYY-MM-DD.
 export const fyOf = (d: string) => {
   const y = Number(d.slice(0, 4));

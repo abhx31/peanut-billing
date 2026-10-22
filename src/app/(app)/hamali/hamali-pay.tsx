@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { money } from "@/lib/format";
+import { fmtDate, money } from "@/lib/format";
 import { payHamali, undoHamaliPayment } from "./actions";
 
 type PayProps = { date: string; bags: number; amount: number };
@@ -69,7 +69,7 @@ export function HamaliPayDialog({ date, bags, amount }: PayProps) {
         <DialogHeader>
           <DialogTitle>Hamali payment</DialogTitle>
           <DialogDescription>
-            {bags} bags · hamali {money(amount)} on {date}
+            {bags} bags · hamali {money(amount)} on {fmtDate(date)}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AmountInput } from "@/components/ui/amount-input";
-import { money, today } from "@/lib/format";
+import { fmtDate, money, today } from "@/lib/format";
 
 type Mode = "Cash" | "UPI" | "CJ";
 type Action = (input: {
@@ -79,7 +79,7 @@ export function ReceiveDialog({
         toast.error(res.error);
         return;
       }
-      toast.success(`Received ${money(n)} (${mode}) on ${date}`);
+      toast.success(`Received ${money(n)} (${mode}) on ${fmtDate(date)}`);
       // Hard reload — see ReceiveDueDialog for why we don't rely on
       // router.refresh here. The user never sees the dialog's state
       // mutation because the page reloads immediately.
