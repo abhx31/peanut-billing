@@ -10,7 +10,7 @@ import {
 } from "@/lib/queries-patti";
 import { getLotsWithStock, getSettings } from "@/lib/queries";
 import { db, schema } from "@/db";
-import { fyOf, money, pad2, today } from "@/lib/format";
+import { fmtDate, fyOf, money, pad2, today } from "@/lib/format";
 import { GstPurchaseForm } from "./gst-purchase-form";
 import { DeleteGstPurchaseButton } from "./delete-gst-purchase-button";
 import { EditGstPurchaseDialog } from "./edit-gst-purchase-dialog";
@@ -148,7 +148,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                           {p.invNo ? (
                             <>
                               <span className="font-mono">{p.invNo}</span>
-                              {p.invDate ? ` · ${p.invDate}` : ""}
+                              {p.invDate ? ` · ${fmtDate(p.invDate)}` : ""}
                             </>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -172,7 +172,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                               className="text-xs border-success/40 text-success bg-success/10"
                             >
                               Paid
-                              {p.paidDate ? ` · ${p.paidDate}` : ""}
+                              {p.paidDate ? ` · ${fmtDate(p.paidDate)}` : ""}
                             </Badge>
                           ) : paid > 0.5 ? (
                             <Badge variant="outline" className="text-xs">

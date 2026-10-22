@@ -29,7 +29,7 @@ import { getCjTotals } from "@/lib/queries-cj";
 import { getOldDuesSummary } from "@/lib/queries-recv";
 import { db, schema } from "@/db";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
-import { money, pad2, today } from "@/lib/format";
+import { fmtDate, money, pad2, today } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -459,7 +459,7 @@ export default async function DashboardPage() {
                         <PaymentBadge balance={b.balance} total={b.total} />
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {b.date} · {b.lotSummary} · {b.bags} bags · {b.kg} kg
+                        {fmtDate(b.date)} · {b.lotSummary} · {b.bags} bags · {b.kg} kg
                       </div>
                     </div>
                   </div>

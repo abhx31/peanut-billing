@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
 import { getGstBillsForMonth, getLotCosts, getLotsWithStock } from "@/lib/queries";
-import { fyOf, money, pad2, r2, today } from "@/lib/format";
+import { fmtDate, fyOf, money, pad2, r2, today } from "@/lib/format";
 import { GstBillForm } from "./gst-bill-form";
 import { ExcelButton } from "@/components/excel-button";
 import { MonthPicker } from "../gstp/month-picker";
@@ -156,7 +156,7 @@ export default async function GstBillPage({ searchParams }: Props) {
                   {monthBills.map((b) => (
                     <tr key={b.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-mono">GST {pad2(b.no)}</td>
-                      <td className="py-2 pr-4">{b.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(b.date)}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
                       <td className="py-2 pr-4 text-right">{b.bags}</td>
                       <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>

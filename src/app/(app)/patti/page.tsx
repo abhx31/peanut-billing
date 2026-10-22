@@ -14,7 +14,7 @@ import {
   getLotsWithStock,
 } from "@/lib/queries";
 import { getCurrentLoc } from "@/lib/loc";
-import { money, pad2, today } from "@/lib/format";
+import { fmtDate, money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
 import { SalePattiForm } from "./sale-patti-form";
@@ -131,7 +131,7 @@ export default async function PattiPage({ searchParams }: Props) {
                               className="text-xs border-success/40 text-success bg-success/10"
                             >
                               Paid
-                              {b.paidDate ? ` · ${b.paidDate}` : ""}
+                              {b.paidDate ? ` · ${fmtDate(b.paidDate)}` : ""}
                             </Badge>
                           ) : paid > 0.5 ? (
                             <Badge variant="outline" className="text-xs">

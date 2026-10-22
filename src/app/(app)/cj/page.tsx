@@ -8,7 +8,7 @@ import {
   getCjSettlementsLatest,
   getCjTotals,
 } from "@/lib/queries-cj";
-import { money, pad2 } from "@/lib/format";
+import { fmtDate, money, pad2 } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { CjSettlementForm } from "./cj-settlement-form";
 import { DeleteCjSettlementButton } from "./delete-cj-settlement-button";
@@ -78,7 +78,7 @@ export default async function CJPage() {
                 <tbody>
                   {settlements.map((s) => (
                     <tr key={s.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{s.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(s.date)}</td>
                       <td className="py-2 pr-4 text-right font-semibold">
                         {money(s.amount)}
                       </td>
@@ -127,7 +127,7 @@ export default async function CJPage() {
                 <tbody>
                   {received.map((p) => (
                     <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{p.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(p.date)}</td>
                       <td className="py-2 pr-4 font-mono">
                         {p.billKind === "gst" ? "GST " : ""}
                         {pad2(p.billNo)}

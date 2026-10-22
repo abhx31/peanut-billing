@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import { getOldDues, getOldDuesSummary } from "@/lib/queries-recv";
 import { getCustomerNames } from "@/lib/queries";
-import { money } from "@/lib/format";
+import { fmtDate, money } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { AddOldDueForm } from "./add-old-due-form";
 import { ReceiveDueDialog } from "./receive-due-dialog";
@@ -95,7 +95,7 @@ export default async function ReceivablesPage() {
                   {dues.map((d) => (
                     <tr key={d.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">{d.customer}</td>
-                      <td className="py-2 pr-4">{d.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(d.date)}</td>
                       <td className="py-2 pr-4 text-right">{money(d.amount)}</td>
                       <td className="py-2 pr-4 text-right">{money(d.paid)}</td>
                       <td

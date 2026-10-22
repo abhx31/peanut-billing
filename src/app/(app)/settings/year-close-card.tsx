@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { money } from "@/lib/format";
+import { fmtDate, money } from "@/lib/format";
 import type { CloseResult } from "@/lib/year-close";
 import {
   confirmArchiveAction,
@@ -102,7 +102,7 @@ export function YearCloseCard({ next, cash, bank, archives }: Props) {
                       <Badge variant="secondary">Closed</Badge>
                     )}
                   </td>
-                  <td className="py-2 pr-4">{a.createdAt.slice(0, 10)}</td>
+                  <td className="py-2 pr-4">{fmtDate(a.createdAt.slice(0, 10))}</td>
                   <td className="py-2 pr-4 text-right">{a.bills}</td>
                   <td className="py-2 pr-4 text-right">{kb(a.archiveBytes)}</td>
                   <td className="py-2 pr-0">
@@ -277,7 +277,7 @@ function PendingArchive({ a }: { a: ArchiveRow }) {
     <div className="space-y-3 rounded-md border border-amber-500/50 bg-amber-500/5 p-4 text-sm">
       <div className="font-medium">Step 2 of 2: check the {a.fy} archive</div>
       <p className="text-muted-foreground">
-        Archived on {a.createdAt.slice(0, 10)}. Nothing has been removed from the live data yet,
+        Archived on {fmtDate(a.createdAt.slice(0, 10))}. Nothing has been removed from the live data yet,
         and entries dated in {a.fy} are locked until you finish.
       </p>
       <ol className="list-decimal pl-5 text-muted-foreground space-y-1">

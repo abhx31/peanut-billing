@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
-import { money } from "@/lib/format";
+import { fmtDate, money } from "@/lib/format";
 import { removeClosing, saveClosing } from "./close-day-actions";
 
 type Props = {
@@ -118,7 +118,7 @@ export function CloseDayCard({
           </Button>
           {hasAny && (
             <ConfirmDestructive
-              title={`Remove closing for ${date}?`}
+              title={`Remove closing for ${fmtDate(date)}?`}
               description="The next day's opening will fall back to a computed value."
               confirmLabel="Remove closing"
               successMessage="Closing removed"

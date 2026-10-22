@@ -11,7 +11,7 @@ import {
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCurrentLoc } from "@/lib/loc";
-import { money, pad2, r2, today } from "@/lib/format";
+import { fmtDate, money, pad2, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
 import { Button } from "@/components/ui/button";
@@ -267,7 +267,7 @@ export default async function LedgerPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle>Close the day</CardTitle>
           <p className="text-sm text-muted-foreground">
-            After entering all bills and expenses for {date}, count your cash and (if you
+            After entering all bills and expenses for {fmtDate(date)}, count your cash and (if you
             can) check the bank balance, then save it as the closing. Tomorrow&apos;s
             opening uses this number.
           </p>

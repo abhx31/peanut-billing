@@ -1,7 +1,7 @@
 import { requireSession } from "@/lib/auth-helpers";
 import { getHamaliForDate, getHamaliPaidForDate } from "@/lib/queries-hamali";
 import { getSettings } from "@/lib/queries";
-import { money, pad2, today } from "@/lib/format";
+import { fmtDate, money, pad2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
@@ -39,7 +39,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
       <div className="mb-4">
         <b>HAMALI STATEMENT</b>
         <br />
-        Date: <b>{date}</b>
+        Date: <b>{fmtDate(date)}</b>
       </div>
 
       {h.bills.length === 0 ? (
@@ -88,7 +88,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
         {paid ? (
           <div>
             Paid: <b>{money(paid.amount)}</b> ({paid.mode})
-            {paid.date ? ` on ${paid.date}` : ""}
+            {paid.date ? ` on ${fmtDate(paid.date)}` : ""}
           </div>
         ) : (
           h.totalAmount > 0 && <div className="font-semibold">Not paid yet</div>

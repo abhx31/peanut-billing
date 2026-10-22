@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { getLotsWithStock, getStockHistory, getLotCosts } from "@/lib/queries";
-import { money, r2 } from "@/lib/format";
+import { fmtDate, money, r2 } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +112,7 @@ export default async function StockPage() {
                 <tbody>
                   {history.map((h) => (
                     <tr key={h.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{h.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(h.date)}</td>
                       <td className="py-2 pr-4">{h.lotName ?? "(deleted lot)"}</td>
                       <td className="py-2 pr-4">
                         {h.loc === "NM" ? "New Mahavir" : "Main store"}

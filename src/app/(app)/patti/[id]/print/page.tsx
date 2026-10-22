@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
 import { getSettings } from "@/lib/queries";
-import { money, pad2, r2 } from "@/lib/format";
+import { fmtDate, money, pad2, r2 } from "@/lib/format";
 import { PrintTrigger } from "../../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
@@ -51,7 +51,7 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
         <b>PATTI BILL (Purchase)</b>
         <br />
         Patti no. <b>{pad2(patti.no)}</b> &nbsp;·&nbsp; Period: {patti.fy} &nbsp;·&nbsp;
-        Date: {patti.date}
+        Date: {fmtDate(patti.date)}
         <br />
         Seller: <b>{patti.party}</b>
       </div>
@@ -169,7 +169,7 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
         {patti.paidMode && (
           <div className="text-xs text-gray-700">
             Paid in {patti.paidMode}
-            {patti.paidDate ? ` on ${patti.paidDate}` : ""}
+            {patti.paidDate ? ` on ${fmtDate(patti.paidDate)}` : ""}
           </div>
         )}
       </div>

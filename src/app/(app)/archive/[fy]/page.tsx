@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireOwner } from "@/lib/auth-helpers";
-import { money, pad2 } from "@/lib/format";
+import { fmtDate, money, pad2 } from "@/lib/format";
 import { FY_RE, archiveBills, readArchive } from "@/lib/year-close";
 import { ArchiveDownloads } from "./archive-downloads";
 
@@ -130,7 +130,7 @@ export default async function ArchivePage({ params, searchParams }: Props) {
                           <span className="text-muted-foreground"> ({b.fy})</span>
                         )}
                       </td>
-                      <td className="py-2 pr-4">{b.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(b.date)}</td>
                       <td className="py-2 pr-4">{b.customer}</td>
                       <td className="py-2 pr-4">{b.lots}</td>
                       <td className="py-2 pr-4 text-right">{money(b.total)}</td>
@@ -179,7 +179,7 @@ export default async function ArchivePage({ params, searchParams }: Props) {
                 <tbody>
                   {expenseRows.slice(0, SHOW).map((e) => (
                     <tr key={e.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{e.date}</td>
+                      <td className="py-2 pr-4">{fmtDate(e.date)}</td>
                       <td className="py-2 pr-4">{e.category}</td>
                       <td className="py-2 pr-4">{e.note}</td>
                       <td className="py-2 pr-4">{e.mode}</td>
