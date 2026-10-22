@@ -46,3 +46,25 @@ export const parseBagWeights = (input: string) => {
     });
   return { count, totalKg: r2(total) };
 };
+
+// Same tokenizer as parseBagWeights, but returns one entry per bag (expanding
+// "50x40.5" into 50 entries of 40.5) — used to print a numbered, vertical
+// bag-weight list instead of the raw typed text.
+export const expandBagWeights = (input: string): number[] => {
+  const out: number[] = [];
+  input
+    .split(/[\s,;]+/)
+    .filter(Boolean)
+    .forEach((t) => {
+      const m = t.match(/^(\d+)[x*×](\d*\.?\d+)$/i);
+      if (m) {
+        const count = Number(m[1]);
+        const w = Number(m[2]);
+        for (let i = 0; i < count; i++) out.push(w);
+      } else {
+        const n = num(t);
+        if (n > 0) out.push(n);
+      }
+    });
+  return out;
+};

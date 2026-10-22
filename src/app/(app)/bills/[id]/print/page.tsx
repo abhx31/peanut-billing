@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/auth-helpers";
 import { getBillById, getPaymentsByBill, getSettings } from "@/lib/queries";
 import { db, schema } from "@/db";
-import { money, pad2, r2 } from "@/lib/format";
+import { expandBagWeights, money, pad2, r2 } from "@/lib/format";
 import { moneyInWords } from "@/lib/words";
 import { PrintTrigger } from "./print-trigger";
 import {
@@ -11,6 +11,7 @@ import {
   PrintSizeToggle,
 } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
+import { BagWeightsList } from "@/components/bag-weights-list";
 import { hasPageSize, parsePageSize, type PageSize } from "@/lib/print-size";
 import type {
   GstHeaderExtras,
@@ -82,7 +83,6 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
   const size = parsePageSize(sp.size, "A5");
   const chosen = hasPageSize(sp.size);
   const multiLine = bill.items.length > 1;
-  const linesWithWeights = bill.items.filter((it) => it.weightsText);
 
   return (
     <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl">
@@ -102,6 +102,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
         {bill.date}
         <br />
         Customer: <b>{bill.customer}</b>
+        {bill.customerPhone && <> &nbsp;·&nbsp; Ph: {bill.customerPhone}</>}
       </div>
 
       <table className="w-full text-sm border-collapse mb-3">
@@ -138,18 +139,12 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
         </tbody>
       </table>
 
-      {linesWithWeights.length > 0 && (
-        <p className="text-xs mb-3">
-          <span className="font-semibold">Bag weights (kg):</span>
-          <br />
-          {linesWithWeights.map((it) => (
-            <span key={it.id}>
-              {it.lotName}: {it.weightsText}
-              <br />
-            </span>
-          ))}
-        </p>
-      )}
+      <BagWeightsList
+        lines={bill.items.map((it) => ({
+          label: it.lotName,
+          weightsText: it.weightsText ?? "",
+        }))}
+      />
 
       <div className="text-right text-sm space-y-1">
         <div>Hamali: {money(bill.hamali)}</div>
@@ -714,7 +709,6 @@ function SalePattiPrint({
   const totalPaid = pays.reduce((s, p) => s + Number(p.amount), 0);
   const balance = bill.total - totalPaid;
   const multi = bill.items.length > 1;
-  const linesWithWeights = bill.items.filter((it) => it.weightsText);
   const brSign = patti.brSign === 1 ? "+" : "−";
   const brokerLine =
     patti.broker && patti.broker > 0
@@ -777,18 +771,12 @@ function SalePattiPrint({
         </tbody>
       </table>
 
-      {linesWithWeights.length > 0 && (
-        <p className="text-xs mb-3">
-          <span className="font-semibold">Bag weights (kg):</span>
-          <br />
-          {linesWithWeights.map((it) => (
-            <span key={it.id}>
-              {it.lotName}: {it.weightsText}
-              <br />
-            </span>
-          ))}
-        </p>
-      )}
+      <BagWeightsList
+        lines={bill.items.map((it) => ({
+          label: it.lotName,
+          weightsText: it.weightsText ?? "",
+        }))}
+      />
 
       <div className="text-right text-sm space-y-1">
         <div>Amount: {money(bill.amount)}</div>

@@ -7,6 +7,7 @@ import { money, pad2, r2 } from "@/lib/format";
 import { PrintTrigger } from "../../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
+import { BagWeightsList } from "@/components/bag-weights-list";
 import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +79,6 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
                 amount: Number(patti.amount),
               },
             ];
-        const linesWithWeights = lines.filter((l) => l.weightsText);
         const multi = lines.length > 1;
         return (
           <>
@@ -120,18 +120,12 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
               </tbody>
             </table>
 
-            {linesWithWeights.length > 0 && (
-              <p className="text-xs mb-3">
-                <span className="font-semibold">Bag weights (kg):</span>
-                <br />
-                {linesWithWeights.map((l, i) => (
-                  <span key={i}>
-                    {l.lotName || "Line " + (i + 1)}: {l.weightsText}
-                    <br />
-                  </span>
-                ))}
-              </p>
-            )}
+            <BagWeightsList
+              lines={lines.map((l, i) => ({
+                label: l.lotName || "Line " + (i + 1),
+                weightsText: l.weightsText ?? "",
+              }))}
+            />
           </>
         );
       })()}
