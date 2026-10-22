@@ -338,6 +338,25 @@ export const pattiBills = pgTable(
   ],
 );
 
+// Partial-payment ledger for purchases (regular Patti + GST Purchase — both
+// rows in pattiBills). Mirrors `payments` on the sales side: a purchase bill
+// is paid across however many days/modes it actually takes, instead of one
+// all-or-nothing paidMode/paidDate flag. pattiBills.paidMode/paidDate stay as
+// a cached "fully settled" snapshot (latest payment's mode/date, or null),
+// recomputed whenever a row here is added or removed.
+export const pattiPayments = pgTable("patti_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pattiId: uuid("patti_id")
+    .notNull()
+    .references(() => pattiBills.id, { onDelete: "cascade" }),
+  date: date("date", { mode: "string" }).notNull(),
+  mode: paymentModeEnum("mode").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const settings = pgTable("settings", {
   id: integer("id").primaryKey().default(1),
   firm: text("firm").notNull().default("Peanut Traders"),
@@ -435,3 +454,11 @@ export const customerNotes = pgTable("customer_notes", {
     .defaultNow(),
   updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
 });
+
+export const pattiBillsRelations = relations(pattiBills, ({ many }) => ({
+  payments: many(pattiPayments),
+}));
+
+export const pattiPaymentsRelations = relations(pattiPayments, ({ one }) => ({
+  patti: one(pattiBills, { fields: [pattiPayments.pattiId], references: [pattiBills.id] }),
+}));

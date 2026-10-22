@@ -49,9 +49,11 @@ export default async function LedgerPage({ searchParams }: Props) {
     cjSettlementsToday,
     cjSettlementsBeforeRow,
     cjReceivedBeforeRow,
+    pattiPaidCJBeforeRow,
     customerBalances,
     loc,
     openingPaymentsToday,
+    pattiPaidTodayByMode,
     pattiPaidToday,
   ] = await Promise.all([
     getBillsByDate(date, isOwner),
@@ -75,6 +77,11 @@ export default async function LedgerPage({ searchParams }: Props) {
       .from(schema.payments)
       .where(sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} < ${date}`)
       .then((r) => r[0]),
+    db
+      .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
+      .from(schema.pattiPayments)
+      .where(sql`${schema.pattiPayments.mode} = 'CJ' AND ${schema.pattiPayments.date} < ${date}`)
+      .then((r) => r[0]),
     getCustomerBalances(),
     getCurrentLoc(),
     db
@@ -94,25 +101,37 @@ export default async function LedgerPage({ searchParams }: Props) {
         eq(schema.openingDues.id, schema.openingPayments.openingDueId),
       )
       .where(eq(schema.openingPayments.date, date)),
+    // Aggregate only — always fetched regardless of role, so the Cash/Bank/CJ
+    // closing balances stay correct for everyone. Who got paid (the detailed
+    // breakdown below) stays owner-only.
+    db
+      .select({
+        mode: schema.pattiPayments.mode,
+        s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)`,
+      })
+      .from(schema.pattiPayments)
+      .where(eq(schema.pattiPayments.date, date))
+      .groupBy(schema.pattiPayments.mode),
     isOwner
       ? db
           .select({
-            id: schema.pattiBills.id,
-            no: schema.pattiBills.no,
+            id: schema.pattiPayments.id,
+            pattiNo: schema.pattiBills.no,
             party: schema.pattiBills.party,
-            paidMode: schema.pattiBills.paidMode,
-            net: schema.pattiBills.net,
+            mode: schema.pattiPayments.mode,
+            amount: schema.pattiPayments.amount,
           })
-          .from(schema.pattiBills)
-          .where(eq(schema.pattiBills.paidDate, date))
+          .from(schema.pattiPayments)
+          .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
+          .where(eq(schema.pattiPayments.date, date))
           .orderBy(schema.pattiBills.no)
       : Promise.resolve(
           [] as {
             id: string;
-            no: number;
+            pattiNo: number;
             party: string;
-            paidMode: string | null;
-            net: string;
+            mode: string;
+            amount: string;
           }[],
         ),
   ]);
@@ -191,16 +210,19 @@ export default async function LedgerPage({ searchParams }: Props) {
   const cjSettledUpi = cjSettlementsToday
     .filter((x) => x.mode === "UPI")
     .reduce((s, x) => s + Number(x.amount), 0);
-  const pattiPaidCash = pattiPaidToday
-    .filter((p) => p.paidMode === "Cash")
-    .reduce((s, p) => s + Number(p.net), 0);
-  const pattiPaidUpi = pattiPaidToday
-    .filter((p) => p.paidMode === "UPI")
-    .reduce((s, p) => s + Number(p.net), 0);
+  const pattiPaidByMode = new Map(
+    pattiPaidTodayByMode.map((r) => [r.mode, Number(r.s)]),
+  );
+  const pattiPaidCash = pattiPaidByMode.get("Cash") ?? 0;
+  const pattiPaidUpi = pattiPaidByMode.get("UPI") ?? 0;
+  // CJ paying a supplier directly on our behalf — reduces CJ's held balance,
+  // never touches our own Cash/Bank.
+  const pattiPaidCJ = pattiPaidByMode.get("CJ") ?? 0;
   const cjOpening =
     Number(settings.cjOpening ?? 0) +
     Number(cjReceivedBeforeRow?.s ?? 0) -
-    Number(cjSettlementsBeforeRow?.s ?? 0);
+    Number(cjSettlementsBeforeRow?.s ?? 0) -
+    Number(pattiPaidCJBeforeRow?.s ?? 0);
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
@@ -377,9 +399,12 @@ export default async function LedgerPage({ searchParams }: Props) {
             ]}
             credits={[
               { label: "By CJ paid you", amount: cjSettledCash + cjSettledUpi },
+              ...(isOwner
+                ? [{ label: "By Paid to supplier via CJ", amount: pattiPaidCJ }]
+                : []),
               {
                 label: "By Closing balance c/d",
-                amount: cjOpening + cjIn - cjSettledCash - cjSettledUpi,
+                amount: cjOpening + cjIn - cjSettledCash - cjSettledUpi - pattiPaidCJ,
               },
             ]}
           />
@@ -553,20 +578,21 @@ export default async function LedgerPage({ searchParams }: Props) {
                   <tbody>
                     {pattiPaidToday.map((p) => (
                       <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-mono">{pad2(p.no)}</td>
+                        <td className="py-2 pr-4 font-mono">{pad2(p.pattiNo)}</td>
                         <td className="py-2 pr-4">{p.party}</td>
-                        <td className="py-2 pr-4">{p.paidMode ?? ""}</td>
-                        <td className="py-2 pr-4 text-right">{money(p.net)}</td>
+                        <td className="py-2 pr-4">{p.mode}</td>
+                        <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
                       </tr>
                     ))}
                     <tr className="font-semibold">
                       <td className="py-2 pr-4">Total</td>
                       <td />
                       <td className="py-2 pr-4 text-xs text-muted-foreground">
-                        Cash {money(pattiPaidCash)} · UPI {money(pattiPaidUpi)}
+                        Cash {money(pattiPaidCash)} · UPI {money(pattiPaidUpi)} · CJ{" "}
+                        {money(pattiPaidCJ)}
                       </td>
                       <td className="py-2 pr-4 text-right">
-                        {money(pattiPaidCash + pattiPaidUpi)}
+                        {money(pattiPaidCash + pattiPaidUpi + pattiPaidCJ)}
                       </td>
                     </tr>
                   </tbody>

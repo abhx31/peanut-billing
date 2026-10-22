@@ -29,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? ([
           { href: "/gstp", label: "GST purchase", icon: "gst" },
           { href: "/patti", label: "Patti bill", icon: "patti" },
+          { href: "/patti-payments", label: "Payments recorded", icon: "pattiPayments" },
           { href: "/profit", label: "Profit", icon: "profit" },
         ] as NavItem[])
       : []),

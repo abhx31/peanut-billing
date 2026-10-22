@@ -3,7 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
-import { getPattiBillsByDate, getPattiLotNameSuggestions } from "@/lib/queries-patti";
+import {
+  getPattiBillsByDate,
+  getPattiLotNameSuggestions,
+  getPattiPaidMap,
+} from "@/lib/queries-patti";
 import {
   customerKey,
   getCustomerBalances,
@@ -16,7 +20,7 @@ import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
 import { SalePattiForm } from "./sale-patti-form";
 import { PattiTabs } from "./patti-tabs";
-import { PattiMarkPaid } from "./patti-mark-paid";
+import { PayPattiDialog } from "../patti-payments/pay-patti-dialog";
 import { DeletePattiButton } from "./delete-patti-button";
 
 export const dynamic = "force-dynamic";
@@ -39,11 +43,13 @@ export default async function PattiPage({ searchParams }: Props) {
         .from(schema.bills)
         .where(and(eq(schema.bills.kind, "psale"), eq(schema.bills.date, date))),
     ]);
+  const paidMap = await getPattiPaidMap(bills.map((b) => b.id));
 
   const total = bills.reduce((s, b) => s + Number(b.net), 0);
-  const unpaid = bills
-    .filter((b) => !b.paidMode)
-    .reduce((s, b) => s + Number(b.net), 0);
+  const unpaid = bills.reduce((s, b) => {
+    const paid = paidMap.get(b.id) ?? 0;
+    return s + Math.max(0, Number(b.net) - paid);
+  }, 0);
 
   // Sale patti form only shows lots that have stock at the Working-at store.
   const saleLots = lots
@@ -102,46 +108,54 @@ export default async function PattiPage({ searchParams }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {bills.map((b) => (
-                    <tr key={b.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
-                      <td className="py-2 pr-4">{b.party}</td>
-                      <td className="py-2 pr-4">{b.lotName ?? ""}</td>
-                      <td className="py-2 pr-4 text-right">{b.bags}</td>
-                      <td className="py-2 pr-4 text-right">{Number(b.kg)}</td>
-                      <td className="py-2 pr-4 text-right">{money(b.rate)}</td>
-                      <td className="py-2 pr-4 text-right">{money(b.amount)}</td>
-                      <td className="py-2 pr-4 text-right font-semibold">
-                        {money(b.net)}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {b.paidMode ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs border-success/40 text-success bg-success/10"
-                          >
-                            {b.paidMode}
-                            {b.paidDate ? ` · ${b.paidDate}` : ""}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-xs">
-                            Not paid
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
-                          <PattiMarkPaid
-                            id={b.id}
-                            party={b.party}
-                            net={Number(b.net)}
-                            paidMode={b.paidMode as "Cash" | "UPI" | null}
-                          />
-                          <DeletePattiButton id={b.id} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {bills.map((b) => {
+                    const paid = paidMap.get(b.id) ?? 0;
+                    const balance = Math.max(0, Number(b.net) - paid);
+                    return (
+                      <tr key={b.id} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
+                        <td className="py-2 pr-4">{b.party}</td>
+                        <td className="py-2 pr-4">{b.lotName ?? ""}</td>
+                        <td className="py-2 pr-4 text-right">{b.bags}</td>
+                        <td className="py-2 pr-4 text-right">{Number(b.kg)}</td>
+                        <td className="py-2 pr-4 text-right">{money(b.rate)}</td>
+                        <td className="py-2 pr-4 text-right">{money(b.amount)}</td>
+                        <td className="py-2 pr-4 text-right font-semibold">
+                          {money(b.net)}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {balance <= 0.5 ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-success/40 text-success bg-success/10"
+                            >
+                              Paid
+                              {b.paidDate ? ` · ${b.paidDate}` : ""}
+                            </Badge>
+                          ) : paid > 0.5 ? (
+                            <Badge variant="outline" className="text-xs">
+                              {money(paid)} paid · {money(balance)} owed
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-xs">
+                              Not paid
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-2 pr-0 text-right">
+                          <div className="flex gap-1 justify-end flex-wrap">
+                            <PayPattiDialog
+                              pattiId={b.id}
+                              party={b.party}
+                              net={Number(b.net)}
+                              paid={paid}
+                            />
+                            <DeletePattiButton id={b.id} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

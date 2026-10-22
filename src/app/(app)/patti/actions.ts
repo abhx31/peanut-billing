@@ -163,6 +163,18 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
         });
       }
 
+      // "Paid at creation" is just the first entry in the purchase-payments
+      // ledger, same as any other payment recorded later.
+      if (paidMode && paidDate) {
+        await tx.insert(schema.pattiPayments).values({
+          pattiId: row.id,
+          date: paidDate,
+          mode: paidMode,
+          amount: net.toString(),
+          createdBy: session.user.id,
+        });
+      }
+
       return { pattiId: row.id, pattiNo: no };
     });
     revalidatePath("/patti");
@@ -179,37 +191,6 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
       error: err instanceof Error ? err.message : "Could not save the patti bill.",
     };
   }
-}
-
-export async function markPattiPaid(input: {
-  id: string;
-  mode: "Cash" | "UPI";
-  date?: string;
-}): Promise<Result | { ok: true }> {
-  await requireOwnerOrEditor();
-  const paidDate = input.date ?? new Date().toISOString().slice(0, 10);
-  const closed = await closedDateError(paidDate);
-  if (closed) return { ok: false, error: closed };
-  await db
-    .update(schema.pattiBills)
-    .set({ paidMode: input.mode, paidDate })
-    .where(eq(schema.pattiBills.id, input.id));
-  revalidatePath("/patti");
-  revalidatePath("/ledger");
-  revalidatePath("/dashboard");
-  return { ok: true };
-}
-
-export async function unmarkPattiPaid(input: { id: string }): Promise<Result | { ok: true }> {
-  await requireOwnerOrEditor();
-  await db
-    .update(schema.pattiBills)
-    .set({ paidMode: null, paidDate: null })
-    .where(eq(schema.pattiBills.id, input.id));
-  revalidatePath("/patti");
-  revalidatePath("/ledger");
-  revalidatePath("/dashboard");
-  return { ok: true };
 }
 
 export async function deletePatti(

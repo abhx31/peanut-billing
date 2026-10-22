@@ -444,8 +444,8 @@ export async function cashBalanceBefore(
     ? sql`${schema.cjSettlements.date} > ${after} AND ${schema.cjSettlements.date} < ${before}`
     : sql`${schema.cjSettlements.date} < ${before}`;
   const pattiCond = after
-    ? sql`${schema.pattiBills.paidDate} IS NOT NULL AND ${schema.pattiBills.paidDate} > ${after} AND ${schema.pattiBills.paidDate} < ${before}`
-    : sql`${schema.pattiBills.paidDate} IS NOT NULL AND ${schema.pattiBills.paidDate} < ${before}`;
+    ? sql`${schema.pattiPayments.date} > ${after} AND ${schema.pattiPayments.date} < ${before}`
+    : sql`${schema.pattiPayments.date} < ${before}`;
 
   const [pr] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
@@ -459,10 +459,13 @@ export async function cashBalanceBefore(
     .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
     .from(schema.cjSettlements)
     .where(and(eq(schema.cjSettlements.mode, mode), cjCond));
+  // Purchase payments made in this mode (Cash/UPI only here — CJ-mode
+  // payments never touch our own cash/bank, see cjBalanceBefore-equivalent
+  // handling in the Daily ledger page).
   const [patti] = await exec
-    .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
-    .from(schema.pattiBills)
-    .where(and(eq(schema.pattiBills.paidMode, mode), pattiCond));
+    .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
+    .from(schema.pattiPayments)
+    .where(and(eq(schema.pattiPayments.mode, mode), pattiCond));
 
   // Also credit opening-due payments received in this mode.
   const opayCond = after

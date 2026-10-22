@@ -6,13 +6,14 @@ import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import {
   getGstMonthlySummary,
   getGstPurchasesForMonth,
+  getPattiPaidMap,
 } from "@/lib/queries-patti";
 import { getLotsWithStock, getSettings } from "@/lib/queries";
 import { db, schema } from "@/db";
 import { fyOf, money, pad2, today } from "@/lib/format";
 import { GstPurchaseForm } from "./gst-purchase-form";
 import { DeleteGstPurchaseButton } from "./delete-gst-purchase-button";
-import { GstPurchaseMarkPaid } from "./gst-purchase-mark-paid";
+import { PayPattiDialog } from "../patti-payments/pay-patti-dialog";
 import { MonthPicker } from "./month-picker";
 import type { GstProfile } from "@/lib/gst-types";
 
@@ -46,6 +47,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
   ]);
   const profile = (settingsRow.gstProfile ?? null) as GstProfile | null;
   const nextNo = Number(nextNoRow?.max ?? 0) + 1;
+  const paidMap = await getPattiPaidMap(purchases.map((p) => p.id));
 
   if (!profile?.name || !profile?.stateCode) {
     return (
@@ -135,58 +137,66 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {purchases.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-mono">GP {pad2(p.no)}</td>
-                      <td className="py-2 pr-4">
-                        {p.invNo ? (
-                          <>
-                            <span className="font-mono">{p.invNo}</span>
-                            {p.invDate ? ` · ${p.invDate}` : ""}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4">{p.party}</td>
-                      <td className="py-2 pr-4 text-right">
-                        {money(p.taxable ?? "0")}
-                      </td>
-                      <td className="py-2 pr-4 text-right">
-                        {money(p.itc ?? "0")}
-                        {p.itcOn === false && (
-                          <span className="text-muted-foreground"> (no ITC)</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4 text-right">{money(p.net)}</td>
-                      <td className="py-2 pr-4">
-                        {p.paidMode ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs border-success/40 text-success bg-success/10"
-                          >
-                            {p.paidMode}
-                            {p.paidDate ? ` · ${p.paidDate}` : ""}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-xs">
-                            Not paid
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
-                          <GstPurchaseMarkPaid
-                            id={p.id}
-                            party={p.party}
-                            net={Number(p.net)}
-                            paidMode={p.paidMode as "Cash" | "UPI" | null}
-                          />
-                          <DeleteGstPurchaseButton id={p.id} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {purchases.map((p) => {
+                    const paid = paidMap.get(p.id) ?? 0;
+                    const balance = Math.max(0, Number(p.net) - paid);
+                    return (
+                      <tr key={p.id} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-mono">GP {pad2(p.no)}</td>
+                        <td className="py-2 pr-4">
+                          {p.invNo ? (
+                            <>
+                              <span className="font-mono">{p.invNo}</span>
+                              {p.invDate ? ` · ${p.invDate}` : ""}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">{p.party}</td>
+                        <td className="py-2 pr-4 text-right">
+                          {money(p.taxable ?? "0")}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {money(p.itc ?? "0")}
+                          {p.itcOn === false && (
+                            <span className="text-muted-foreground"> (no ITC)</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4 text-right">{money(p.net)}</td>
+                        <td className="py-2 pr-4">
+                          {balance <= 0.5 ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-success/40 text-success bg-success/10"
+                            >
+                              Paid
+                              {p.paidDate ? ` · ${p.paidDate}` : ""}
+                            </Badge>
+                          ) : paid > 0.5 ? (
+                            <Badge variant="outline" className="text-xs">
+                              {money(paid)} paid · {money(balance)} owed
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-xs">
+                              Not paid
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-2 pr-0 text-right">
+                          <div className="flex gap-1 justify-end flex-wrap">
+                            <PayPattiDialog
+                              pattiId={p.id}
+                              party={p.party}
+                              net={Number(p.net)}
+                              paid={paid}
+                            />
+                            <DeleteGstPurchaseButton id={p.id} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

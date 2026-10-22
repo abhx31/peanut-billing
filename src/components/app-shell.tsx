@@ -7,6 +7,7 @@ import {
   BarChart3,
   Boxes,
   CalendarRange,
+  CircleDollarSign,
   CreditCard,
   FileText,
   HandCoins,
@@ -55,6 +56,7 @@ const ICONS = {
   gst: FileText,
   gcust: UsersIcon,
   patti: ShoppingBasket,
+  pattiPayments: CircleDollarSign,
   profit: TrendingUp,
   settings: SettingsIcon,
 };
