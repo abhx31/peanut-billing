@@ -121,6 +121,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                               billNo={b.no}
                               billDate={b.date}
                               customer={b.customer}
+                              hamaliPerBag={b.hamaliPerBag}
                               items={b.items.map((it) => ({
                                 id: it.id,
                                 lotId: it.lotId,
@@ -128,8 +129,13 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                                 bags: it.bags,
                                 kg: it.kg,
                                 rate: it.rate,
+                                weightsText: it.weightsText,
                               }))}
-                              lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+                              lots={lots.map((l) => ({
+                                id: l.id,
+                                name: l.name,
+                                left: l.left,
+                              }))}
                             />
                           )}
                           <BillRowActions billId={b.id} billNo={b.no} balance={b.balance} />
