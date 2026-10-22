@@ -83,6 +83,7 @@ export default async function LedgerPage({ searchParams }: Props) {
         mode: schema.openingPayments.mode,
         amount: schema.openingPayments.amount,
         loc: schema.openingPayments.loc,
+        note: schema.openingPayments.note,
         dueNote: schema.openingDues.note,
         dueAmount: schema.openingDues.amount,
       })
@@ -417,6 +418,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                     <th className="py-2 pr-4">Customer</th>
                     <th className="py-2 pr-4">Mode</th>
                     <th className="py-2 pr-4 text-right">Amount</th>
+                    <th className="py-2 pr-4">Note</th>
                     {canEditClosing && <th className="py-2 pr-0" />}
                   </tr>
                 </thead>
@@ -429,6 +431,9 @@ export default async function LedgerPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{p.customer}</td>
                       <td className="py-2 pr-4">{p.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground">
+                        {p.note || "—"}
+                      </td>
                       {canEditClosing && (
                         <td className="py-2 pr-0 text-right">
                           <DeleteReceiptButton
@@ -458,6 +463,9 @@ export default async function LedgerPage({ searchParams }: Props) {
                         <td className="py-2 pr-4">{p.customer}</td>
                         <td className="py-2 pr-4">{p.mode}</td>
                         <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                        <td className="py-2 pr-4 text-xs text-muted-foreground">
+                          {p.note || "—"}
+                        </td>
                         {canEditClosing && (
                           <td className="py-2 pr-0 text-right">
                             <DeleteReceiptButton

@@ -15,6 +15,7 @@ const receiveForBillSchema = z.object({
   amount: z.number().positive(),
   mode: z.enum(["Cash", "UPI", "CJ"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  note: z.string().max(300).optional(),
 });
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -45,6 +46,7 @@ export async function receivePaymentForBill(
     amount: parsed.data.amount.toString(),
     mode: parsed.data.mode,
     date: parsed.data.date ?? today(),
+    note: parsed.data.note || null,
     createdBy: session.user.id,
   });
   revalidatePath("/day");
@@ -58,6 +60,7 @@ const receiveFromCustomerSchema = z.object({
   amount: z.number().positive(),
   mode: z.enum(["Cash", "UPI", "CJ"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  note: z.string().max(300).optional(),
 });
 
 /**
@@ -77,8 +80,9 @@ export async function receiveFromCustomer(
   const parsed = receiveFromCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid amount." };
 
-  const { customer, amount, mode, date } = parsed.data;
+  const { customer, amount, mode, date, note } = parsed.data;
   const payDate = date ?? today();
+  const noteVal = note || null;
   const loc = await getCurrentLoc();
 
   await db.transaction(async (tx) => {
@@ -112,6 +116,7 @@ export async function receiveFromCustomer(
         date: payDate,
         mode,
         amount: take.toString(),
+        note: noteVal,
         createdBy: session.user.id,
       });
       left -= take;
@@ -138,6 +143,7 @@ export async function receiveFromCustomer(
         amount: take.toString(),
         mode,
         date: payDate,
+        note: noteVal,
         createdBy: session.user.id,
       });
       left -= take;
@@ -176,6 +182,7 @@ export async function receiveFromCustomer(
         date: payDate,
         mode,
         amount: left.toString(),
+        note: noteVal,
         createdBy: session.user.id,
       });
     }

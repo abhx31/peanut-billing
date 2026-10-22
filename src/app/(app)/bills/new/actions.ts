@@ -21,6 +21,8 @@ const itemSchema = z.object({
 const saveBillSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
   customer: z.string().trim().min(1).max(120),
+  // Optional contact number — never required to generate a bill.
+  customerPhone: z.string().trim().max(20).optional().default(""),
   items: z.array(itemSchema).min(1, "Add at least one lot."),
   hamaliPerBag: z.number().min(0),
   gstPercent: z.number().min(0).max(100),
@@ -114,6 +116,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
           fy,
           date: d.date,
           customer: d.customer,
+          customerPhone: d.customerPhone || null,
           loc: loc === "NM" ? "NM" : "MS",
           hamaliPerBag: d.hamaliPerBag.toString(),
           hamali: hamali.toString(),

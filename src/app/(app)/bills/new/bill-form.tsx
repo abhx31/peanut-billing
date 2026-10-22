@@ -48,6 +48,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
 
   const [date, setDate] = useState(today());
   const [customer, setCustomer] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [hamaliPerBag, setHamaliPerBag] = useState(String(hamaliDefault));
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -163,6 +164,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
 
   function reset() {
     setCustomer("");
+    setCustomerPhone("");
     setCart([]);
     clearCurrentLine();
     setCash("");
@@ -209,6 +211,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
       const res = await saveBill({
         date,
         customer: customer.trim(),
+        customerPhone: customerPhone.trim(),
         items: items.map((it) => ({
           lotId: it.lotId,
           weightsText: it.weights,
@@ -277,6 +280,17 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
                   <option key={c.name} value={c.name} />
                 ))}
               </datalist>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="customer-phone">Contact number (optional)</Label>
+              <Input
+                id="customer-phone"
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="Phone"
+                autoComplete="off"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="hamali">Hamali per bag (₹)</Label>

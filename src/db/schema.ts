@@ -131,6 +131,8 @@ export const bills = pgTable(
     fy: text("fy").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     customer: text("customer").notNull(),
+    // Optional contact number collected on the New Bill form. Never required.
+    customerPhone: text("customer_phone"),
     loc: text("loc"), // null = Main store, "NM" = New Mahavir
     hamaliPerBag: numeric("hamali_per_bag", { precision: 14, scale: 2 }).notNull(),
     hamali: numeric("hamali", { precision: 14, scale: 2 }).notNull(),
@@ -185,6 +187,9 @@ export const payments = pgTable("payments", {
   date: date("date", { mode: "string" }).notNull(),
   mode: paymentModeEnum("mode").notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  // Optional free-text note entered on the Receive dialog (e.g. "part payment
+  // via driver"). Shown alongside the entry in the Daily ledger.
+  note: text("note"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -223,6 +228,8 @@ export const openingPayments = pgTable("opening_payments", {
   date: date("date", { mode: "string" }).notNull(),
   mode: paymentModeEnum("mode").notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  // Optional free-text note entered on the Receive dialog.
+  note: text("note"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });

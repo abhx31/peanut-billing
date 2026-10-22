@@ -92,6 +92,13 @@
       "when": 1792300000000,
       "tag": "0012_customer_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0013_receipt_notes_and_bill_phone",
+      "breakpoints": true
     }
   ]
 }

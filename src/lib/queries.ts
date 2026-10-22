@@ -161,6 +161,7 @@ export type BillRow = {
   fy: string;
   date: string;
   customer: string;
+  customerPhone: string | null;
   loc: "MS" | "NM";
   bags: number;
   kg: number;
@@ -259,6 +260,7 @@ async function enrichBills(
       fy: b.fy,
       date: b.date,
       customer: b.customer,
+      customerPhone: b.customerPhone,
       loc: b.loc === "NM" ? "NM" : "MS",
       bags: totalBags,
       kg: totalKg,
@@ -328,6 +330,7 @@ export async function getAllPaymentsOnDate(date: string) {
       mode: schema.payments.mode,
       amount: schema.payments.amount,
       date: schema.payments.date,
+      note: schema.payments.note,
     })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.payments.billId, schema.bills.id))
