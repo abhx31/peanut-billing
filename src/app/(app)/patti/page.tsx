@@ -1,4 +1,3 @@
-import { eq, and } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
@@ -10,11 +9,11 @@ import {
 } from "@/lib/queries-patti";
 import {
   customerKey,
+  getBillsByDate,
   getCustomerBalances,
   getLotsWithStock,
 } from "@/lib/queries";
 import { getCurrentLoc } from "@/lib/loc";
-import { db, schema } from "@/db";
 import { money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
@@ -22,27 +21,29 @@ import { SalePattiForm } from "./sale-patti-form";
 import { PattiTabs } from "./patti-tabs";
 import { PayPattiDialog } from "../patti-payments/pay-patti-dialog";
 import { DeletePattiButton } from "./delete-patti-button";
+import { BillRowActions } from "../bills/bill-row-actions";
+import { EditSalePattiDialog } from "./edit-sale-patti-dialog";
+import { EditPattiDialog } from "./edit-patti-dialog";
 
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ d?: string }> };
 
 export default async function PattiPage({ searchParams }: Props) {
-  await requireOwnerOrEditor();
+  const session = await requireOwnerOrEditor();
+  const isOwner = session.user.role === "owner";
   const sp = await searchParams;
   const date = sp.d || today();
-  const [bills, lotSuggestions, lots, customerBalances, loc, saleBills] =
+  const [bills, lotSuggestions, lots, customerBalances, loc, dayBills] =
     await Promise.all([
       getPattiBillsByDate(date),
       getPattiLotNameSuggestions(),
       getLotsWithStock(),
       getCustomerBalances(),
       getCurrentLoc(),
-      db
-        .select()
-        .from(schema.bills)
-        .where(and(eq(schema.bills.kind, "psale"), eq(schema.bills.date, date))),
+      getBillsByDate(date, isOwner),
     ]);
+  const saleBills = dayBills.filter((b) => b.kind === "psale");
   const paidMap = await getPattiPaidMap(bills.map((b) => b.id));
 
   const total = bills.reduce((s, b) => s + Number(b.net), 0);
@@ -144,6 +145,11 @@ export default async function PattiPage({ searchParams }: Props) {
                         </td>
                         <td className="py-2 pr-0 text-right">
                           <div className="flex gap-1 justify-end flex-wrap">
+                            <EditPattiDialog
+                              pattiId={b.id}
+                              pattiNo={b.no}
+                              lotNameSuggestions={lotSuggestions}
+                            />
                             <PayPattiDialog
                               pattiId={b.id}
                               party={b.party}
@@ -184,6 +190,8 @@ export default async function PattiPage({ searchParams }: Props) {
                     <th className="py-2 pr-4">No.</th>
                     <th className="py-2 pr-4">Buyer</th>
                     <th className="py-2 pr-4 text-right">Net</th>
+                    <th className="py-2 pr-4 text-right">Balance</th>
+                    <th className="py-2 pr-0" />
                   </tr>
                 </thead>
                 <tbody>
@@ -193,6 +201,27 @@ export default async function PattiPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{b.customer}</td>
                       <td className="py-2 pr-4 text-right font-semibold">
                         {money(b.total)}
+                      </td>
+                      <td
+                        className={`py-2 pr-4 text-right ${b.balance > 0.5 ? "text-destructive" : ""}`}
+                      >
+                        {money(b.balance)}
+                      </td>
+                      <td className="py-2 pr-0 text-right">
+                        <div className="flex gap-1 justify-end flex-wrap">
+                          <EditSalePattiDialog
+                            billId={b.id}
+                            billNo={b.no}
+                            lots={saleLots}
+                          />
+                          <BillRowActions
+                            billId={b.id}
+                            billNo={b.no}
+                            balance={b.balance}
+                            labelPrefix="P "
+                            noun="sale patti"
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -13,6 +13,7 @@ import { db, schema } from "@/db";
 import { fyOf, money, pad2, today } from "@/lib/format";
 import { GstPurchaseForm } from "./gst-purchase-form";
 import { DeleteGstPurchaseButton } from "./delete-gst-purchase-button";
+import { EditGstPurchaseDialog } from "./edit-gst-purchase-dialog";
 import { PayPattiDialog } from "../patti-payments/pay-patti-dialog";
 import { MonthPicker } from "./month-picker";
 import type { GstProfile } from "@/lib/gst-types";
@@ -185,6 +186,12 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                         </td>
                         <td className="py-2 pr-0 text-right">
                           <div className="flex gap-1 justify-end flex-wrap">
+                            <EditGstPurchaseDialog
+                              id={p.id}
+                              no={p.no}
+                              lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+                              firmStateCode={String(profile.stateCode ?? "")}
+                            />
                             <PayPattiDialog
                               pattiId={p.id}
                               party={p.party}

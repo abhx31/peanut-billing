@@ -1,6 +1,6 @@
 "use server";
 
-import { sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -170,6 +170,207 @@ export async function saveSalePatti(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not save the sale patti.",
+    };
+  }
+}
+
+type SalePattiAdjustments = {
+  cdPct?: number;
+  labRate?: number;
+  brRate?: number;
+  brSign?: 1 | -1;
+  transport?: number;
+};
+
+export async function getSalePattiForEdit(billId: string) {
+  await requireOwnerOrEditor();
+  const bill = await db.query.bills.findFirst({
+    where: eq(schema.bills.id, billId),
+    with: { items: true },
+  });
+  if (!bill || bill.kind !== "psale") return null;
+  const patti = (bill.patti ?? {}) as SalePattiAdjustments;
+  return {
+    billId: bill.id,
+    no: bill.no,
+    date: bill.date,
+    buyer: bill.customer,
+    items: bill.items
+      .sort((a, b) => a.position - b.position)
+      .map((it) => ({
+        itemId: it.id,
+        lotId: it.lotId,
+        lotName: it.lotNameSnapshot,
+        bags: it.bags,
+        kg: Number(it.kg),
+        rate: Number(it.rate),
+        weightsText: it.weightsText ?? "",
+      })),
+    cdPct: patti.cdPct ?? 0,
+    labRate: patti.labRate ?? 0,
+    brRate: patti.brRate ?? 0,
+    brSign: patti.brSign ?? 1,
+    transport: patti.transport ?? 0,
+  };
+}
+
+const editItemSchema = z.object({
+  // Present = update that existing line; absent = insert a new line.
+  itemId: z.string().uuid().optional(),
+  lotId: z.string().uuid(),
+  weightsText: z.string().max(500).optional().default(""),
+  bags: z.number().int().positive(),
+  kg: z.number().positive(),
+  rate: z.number().positive(),
+});
+
+const editSaleSchema = z.object({
+  billId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  buyer: z.string().trim().min(1).max(160),
+  items: z.array(editItemSchema).min(1),
+  cdPct: z.number().min(0).default(0),
+  labRate: z.number().min(0).default(0),
+  brRate: z.number().min(0).default(0),
+  brSign: z.union([z.literal(1), z.literal(-1)]).default(1),
+  transport: z.number().min(0).default(0),
+});
+
+/**
+ * Edit a sale patti: date, buyer, the patti-style adjustments, and the full
+ * set of lot lines (change lot/bags/weight/price, add new lines, or remove
+ * existing ones). Payments are untouched — use Receive / the receipt-delete
+ * actions for those. Mirrors edit-actions.ts's editBill, but also recomputes
+ * the CD/labour/brokerage/transport net the way saveSalePatti does, since
+ * the generic bill editor doesn't know about patti-style adjustments.
+ */
+export async function updateSalePatti(
+  input: z.input<typeof editSaleSchema>,
+): Promise<Result> {
+  await requireOwnerOrEditor();
+  const parsed = editSaleSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+
+  const bill = await db.query.bills.findFirst({
+    where: eq(schema.bills.id, d.billId),
+    with: { items: true },
+  });
+  if (!bill) return { ok: false, error: "Sale patti not found." };
+  if (bill.kind !== "psale") return { ok: false, error: "Not a sale patti." };
+
+  if (d.date !== bill.date) {
+    const closedOld = await closedDateError(bill.date);
+    if (closedOld) return { ok: false, error: closedOld };
+  }
+  const closedNew = await closedDateError(d.date);
+  if (closedNew) return { ok: false, error: closedNew };
+
+  const itemsOnBill = new Map(bill.items.map((i) => [i.id, i]));
+  for (const it of d.items) {
+    if (it.itemId && !itemsOnBill.has(it.itemId)) {
+      return { ok: false, error: "An item does not belong to this sale patti." };
+    }
+  }
+
+  const lotIds = Array.from(new Set(d.items.map((i) => i.lotId)));
+  const lotRows = await db.select().from(schema.lots).where(inArray(schema.lots.id, lotIds));
+  const lotMap = new Map(lotRows.map((l) => [l.id, l]));
+  for (const it of d.items) {
+    if (!lotMap.has(it.lotId)) {
+      return { ok: false, error: "One of the selected lots was not found." };
+    }
+  }
+
+  const submittedIds = new Set(d.items.filter((i) => i.itemId).map((i) => i.itemId!));
+  const toDelete = bill.items.filter((i) => !submittedIds.has(i.id)).map((i) => i.id);
+
+  const bagsTotal = d.items.reduce((s, i) => s + i.bags, 0);
+  const amount = r2(d.items.reduce((s, i) => s + i.kg * i.rate, 0));
+  const cd = r2((amount * d.cdPct) / 100);
+  const labor = r2(bagsTotal * d.labRate);
+  const broker = r2(bagsTotal * d.brRate);
+  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+
+  try {
+    await db.transaction(async (tx) => {
+      if (toDelete.length > 0) {
+        await tx.delete(schema.billItems).where(inArray(schema.billItems.id, toDelete));
+      }
+
+      let position = 0;
+      for (const it of d.items) {
+        const lot = lotMap.get(it.lotId)!;
+        const lineAmount = r2(it.kg * it.rate);
+        if (it.itemId) {
+          await tx
+            .update(schema.billItems)
+            .set({
+              position,
+              lotId: lot.id,
+              lotNameSnapshot: lot.name,
+              weightsText: it.weightsText || null,
+              bags: it.bags,
+              kg: it.kg.toString(),
+              rate: it.rate.toString(),
+              amount: lineAmount.toString(),
+            })
+            .where(eq(schema.billItems.id, it.itemId));
+        } else {
+          await tx.insert(schema.billItems).values({
+            billId: d.billId,
+            position,
+            lotId: lot.id,
+            lotNameSnapshot: lot.name,
+            weightsText: it.weightsText || null,
+            bags: it.bags,
+            kg: it.kg.toString(),
+            rate: it.rate.toString(),
+            amount: lineAmount.toString(),
+          });
+        }
+        position++;
+      }
+
+      const update: Record<string, unknown> = {
+        amount: amount.toString(),
+        total: net.toString(),
+        patti: {
+          cdPct: d.cdPct,
+          cd,
+          labRate: d.labRate,
+          labor,
+          brRate: d.brRate,
+          broker,
+          brSign: d.brSign,
+          transport: d.transport,
+        },
+      };
+      if (d.date !== bill.date) {
+        update.date = d.date;
+        update.fy = fyOf(d.date);
+      }
+      const buyerTrimmed = d.buyer.trim();
+      if (buyerTrimmed !== bill.customer) update.customer = buyerTrimmed;
+
+      await tx.update(schema.bills).set(update).where(eq(schema.bills.id, d.billId));
+    });
+
+    revalidatePath("/patti");
+    revalidatePath("/day");
+    revalidatePath("/stock");
+    revalidatePath("/lots");
+    revalidatePath("/balances");
+    revalidatePath("/ledger");
+    revalidatePath("/dashboard");
+    revalidatePath("/profit");
+    return { ok: true, billId: d.billId, no: bill.no, fy: bill.fy };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not update the sale patti.",
     };
   }
 }
