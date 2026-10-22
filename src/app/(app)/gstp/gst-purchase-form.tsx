@@ -61,7 +61,7 @@ export function GstPurchaseForm({
   const [pct, setPct] = useState("5");
   const [itcOn, setItcOn] = useState(true);
   const [addToStock, setAddToStock] = useState(true);
-  const [paidMode, setPaidMode] = useState<"" | "Cash" | "UPI">("");
+  const [paidMode, setPaidMode] = useState<"" | "Cash" | "UPI" | "CJ">("");
 
   // Current line + cart.
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -489,7 +489,7 @@ export function GstPurchaseForm({
               <Select
                 value={paidMode}
                 onValueChange={(v) =>
-                  setPaidMode((v as "" | "Cash" | "UPI") ?? "")
+                  setPaidMode((v as "" | "Cash" | "UPI" | "CJ") ?? "")
                 }
               >
                 <SelectTrigger className="w-full">
@@ -503,6 +503,7 @@ export function GstPurchaseForm({
                   </SelectItem>
                   <SelectItem value="Cash" label="Cash">Cash</SelectItem>
                   <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+                  <SelectItem value="CJ" label="CJ">CJ</SelectItem>
                 </SelectContent>
               </Select>
             </div>
