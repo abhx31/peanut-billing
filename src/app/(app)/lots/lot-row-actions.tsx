@@ -1,10 +1,11 @@
 "use client";
 
-import { Package, PlusCircle, Tag, Trash2 } from "lucide-react";
+import { Package, Pencil, PlusCircle, Tag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
 import { NumberPromptDialog } from "@/components/number-prompt-dialog";
-import { addBags, deleteLot, setLotCost } from "./actions";
+import { TextPromptDialog } from "@/components/text-prompt-dialog";
+import { addBags, deleteLot, renameLot, setLotCost } from "./actions";
 
 type Props = {
   lotId: string;
@@ -16,6 +17,21 @@ type Props = {
 export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
   return (
     <div className="flex gap-1 justify-end flex-wrap">
+      <TextPromptDialog
+        title={`Rename "${lotName}"`}
+        description="Only the go-forward label changes — past bills keep showing the lot name as it was when each bill was made."
+        label="Lot / quality name"
+        defaultValue={lotName}
+        confirmLabel="Rename"
+        successMessage="Lot renamed"
+        onConfirm={async (name) => renameLot({ lotId, name })}
+        trigger={
+          <Button type="button" size="sm" variant="outline">
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only sm:ml-1">Rename</span>
+          </Button>
+        }
+      />
       <NumberPromptDialog
         title={`Add bags to "${lotName}"`}
         label="Bags to add"
