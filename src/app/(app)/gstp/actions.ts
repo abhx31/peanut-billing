@@ -37,7 +37,7 @@ const saveSchema = z.object({
   firmCode: z.string().trim().max(5).optional().default(""),
   itcOn: z.boolean().default(true),
   addToStock: z.boolean().default(true),
-  paidMode: z.enum(["", "Cash", "UPI"]).optional().default(""),
+  paidMode: z.enum(["", "Cash", "UPI", "CJ"]).optional().default(""),
 });
 
 type Result =

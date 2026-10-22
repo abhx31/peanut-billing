@@ -31,7 +31,7 @@ const savePattiSchema = z.object({
   brRate: z.number().min(0).default(0),
   brSign: z.union([z.literal(1), z.literal(-1)]).default(-1),
   transport: z.number().min(0).default(0),
-  paidMode: z.enum(["", "Cash", "UPI"]).optional().default(""),
+  paidMode: z.enum(["", "Cash", "UPI", "CJ"]).optional().default(""),
   addToStock: z.boolean().optional().default(false),
   stockLotId: z.string().uuid().optional(),
 });

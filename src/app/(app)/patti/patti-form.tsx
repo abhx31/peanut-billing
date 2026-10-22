@@ -59,7 +59,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
   const [brSign, setBrSign] = useState<1 | -1>(-1);
   const [transportOn, setTransportOn] = useState(false);
   const [transport, setTransport] = useState("");
-  const [paidMode, setPaidMode] = useState<"" | "Cash" | "UPI">("");
+  const [paidMode, setPaidMode] = useState<"" | "Cash" | "UPI" | "CJ">("");
   const [addToStock, setAddToStock] = useState(false);
   const [stockLotId, setStockLotId] = useState(lots[0]?.id ?? "");
 
@@ -427,7 +427,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
           <Field label="Mode">
             <Select
               value={paidMode}
-              onValueChange={(v) => setPaidMode((v as "" | "Cash" | "UPI") ?? "")}
+              onValueChange={(v) => setPaidMode((v as "" | "Cash" | "UPI" | "CJ") ?? "")}
             >
               <SelectTrigger className="w-full">
                 <SelectValue>
@@ -440,6 +440,7 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
                 </SelectItem>
                 <SelectItem value="Cash" label="Cash">Cash</SelectItem>
                 <SelectItem value="UPI" label="UPI">UPI</SelectItem>
+                <SelectItem value="CJ" label="CJ">CJ</SelectItem>
               </SelectContent>
             </Select>
           </Field>
