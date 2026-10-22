@@ -84,6 +84,9 @@ export async function receiveFromCustomer(
   const payDate = date ?? today();
   const noteVal = note || null;
   const loc = await getCurrentLoc();
+  // Every row this cascade inserts shares one id, so the statement can show
+  // this as a single "Received ₹X" line instead of its per-bill split.
+  const receiptGroupId = crypto.randomUUID();
 
   await db.transaction(async (tx) => {
     const key = customerKey(customer);
@@ -117,6 +120,7 @@ export async function receiveFromCustomer(
         mode,
         amount: take.toString(),
         note: noteVal,
+        receiptGroupId,
         createdBy: session.user.id,
       });
       left -= take;
@@ -144,6 +148,7 @@ export async function receiveFromCustomer(
         mode,
         date: payDate,
         note: noteVal,
+        receiptGroupId,
         createdBy: session.user.id,
       });
       left -= take;
@@ -183,6 +188,7 @@ export async function receiveFromCustomer(
         mode,
         amount: left.toString(),
         note: noteVal,
+        receiptGroupId,
         createdBy: session.user.id,
       });
     }

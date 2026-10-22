@@ -190,6 +190,9 @@ export const payments = pgTable("payments", {
   // Optional free-text note entered on the Receive dialog (e.g. "part payment
   // via driver"). Shown alongside the entry in the Daily ledger.
   note: text("note"),
+  // Every row inserted by one Receive click shares this id, so statements can
+  // show the customer's actual payment amount instead of its per-bill split.
+  receiptGroupId: uuid("receipt_group_id"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -230,6 +233,8 @@ export const openingPayments = pgTable("opening_payments", {
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   // Optional free-text note entered on the Receive dialog.
   note: text("note"),
+  // Every row inserted by one Receive click shares this id.
+  receiptGroupId: uuid("receipt_group_id"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
