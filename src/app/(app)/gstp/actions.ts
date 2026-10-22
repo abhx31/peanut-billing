@@ -166,13 +166,65 @@ export async function saveGstPurchase(
   }
 }
 
-const delSchema = z.object({ id: z.string().uuid() });
+type SimpleResult = { ok: true } | { ok: false; error: string };
+
+const markPaidSchema = z.object({
+  id: z.string().uuid(),
+  mode: z.enum(["Cash", "UPI"]),
+});
+const idSchema = z.object({ id: z.string().uuid() });
+
+/**
+ * Mark an existing GST purchase as paid *today* — not on the invoice's own
+ * date. A GST purchase invoice is often entered with a backdated supplier
+ * invoice date, or created unpaid and settled later on credit terms; tying
+ * the payment to that date (as saveGstPurchase does when paidMode is set at
+ * creation) makes the money leave cash/bank on the wrong day in the Daily
+ * ledger. This mirrors patti's markPattiPaid.
+ */
+export async function markGstPurchasePaid(
+  input: z.input<typeof markPaidSchema>,
+): Promise<SimpleResult> {
+  await requireOwnerOrEditor();
+  const parsed = markPaidSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  const paidDate = new Date().toISOString().slice(0, 10);
+  const closed = await closedDateError(paidDate);
+  if (closed) return { ok: false, error: closed };
+
+  await db
+    .update(schema.pattiBills)
+    .set({ paidMode: parsed.data.mode, paidDate })
+    .where(eq(schema.pattiBills.id, parsed.data.id));
+  revalidatePath("/gstp");
+  revalidatePath("/ledger");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function unmarkGstPurchasePaid(
+  input: z.input<typeof idSchema>,
+): Promise<SimpleResult> {
+  await requireOwnerOrEditor();
+  const parsed = idSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid id." };
+
+  await db
+    .update(schema.pattiBills)
+    .set({ paidMode: null, paidDate: null })
+    .where(eq(schema.pattiBills.id, parsed.data.id));
+  revalidatePath("/gstp");
+  revalidatePath("/ledger");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
 
 export async function deleteGstPurchase(
-  input: z.input<typeof delSchema>,
+  input: z.input<typeof idSchema>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireOwnerOrEditor();
-  const parsed = delSchema.safeParse(input);
+  const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid id." };
   await db.transaction(async (tx) => {
     await tx
