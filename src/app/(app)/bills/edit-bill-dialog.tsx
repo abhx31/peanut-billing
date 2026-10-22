@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -23,10 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { money, pad2, r2 } from "@/lib/format";
+import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
 import { editBill } from "./edit-actions";
 
-type Lot = { id: string; name: string };
+type Lot = { id: string; name: string; left: number };
 
 type Line = {
   id: string;
@@ -35,6 +36,17 @@ type Line = {
   bags: number;
   kg: number;
   rate: number;
+  weightsText: string | null;
+};
+
+type Row = {
+  key: string;
+  itemId?: string; // present = existing line; absent = new line added here
+  lotId: string;
+  bagsStr: string;
+  kgStr: string;
+  rateStr: string;
+  weightsText: string;
 };
 
 type Props = {
@@ -42,6 +54,7 @@ type Props = {
   billNo: number;
   billDate: string;
   customer: string;
+  hamaliPerBag: number;
   items: Line[];
   lots: Lot[];
 };
@@ -51,21 +64,87 @@ export function EditBillDialog({
   billNo,
   billDate,
   customer,
+  hamaliPerBag,
   items,
   lots,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState(
-    items.map((it) => ({ ...it, rateStr: String(it.rate), lotIdCur: it.lotId })),
-  );
+
   const [date, setDate] = useState(billDate);
   const [customerName, setCustomerName] = useState(customer);
+  const [hamali, setHamali] = useState(String(hamaliPerBag));
+  const [rows, setRows] = useState<Row[]>(() =>
+    items.map((it) => ({
+      key: it.id,
+      itemId: it.id,
+      lotId: it.lotId,
+      bagsStr: String(it.bags),
+      kgStr: String(it.kg),
+      rateStr: String(it.rate),
+      weightsText: it.weightsText ?? "",
+    })),
+  );
 
-  function update(id: string, patch: { rateStr?: string; lotIdCur?: string }) {
-    setRows((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  // Staging area for a new line, same pattern as the create-bill cart.
+  const [newLotId, setNewLotId] = useState(lots[0]?.id ?? "");
+  const [newBags, setNewBags] = useState("");
+  const [newKg, setNewKg] = useState("");
+  const [newRate, setNewRate] = useState("");
+  const [newWeights, setNewWeights] = useState("");
+
+  function onNewWeights(v: string) {
+    setNewWeights(v);
+    const p = parseBagWeights(v);
+    if (p.count > 0) {
+      setNewBags(String(p.count));
+      setNewKg(String(p.totalKg));
+    }
   }
+
+  function updateRow(key: string, patch: Partial<Row>) {
+    setRows((xs) => xs.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  }
+
+  function removeRow(key: string) {
+    setRows((xs) => xs.filter((x) => x.key !== key));
+  }
+
+  function addLine() {
+    const bagsN = num(newBags);
+    const kgN = num(newKg);
+    const rateN = num(newRate);
+    if (!newLotId || bagsN <= 0 || kgN <= 0 || rateN <= 0) {
+      toast.error("Pick a lot and enter bags, weight and price before adding.");
+      return;
+    }
+    setRows((xs) => [
+      ...xs,
+      {
+        key: crypto.randomUUID(),
+        lotId: newLotId,
+        bagsStr: newBags,
+        kgStr: newKg,
+        rateStr: newRate,
+        weightsText: newWeights.trim(),
+      },
+    ]);
+    setNewBags("");
+    setNewKg("");
+    setNewRate("");
+    setNewWeights("");
+  }
+
+  const calc = useMemo(() => {
+    const totalBags = rows.reduce((s, r) => s + (num(r.bagsStr) || 0), 0);
+    const amount = r2(
+      rows.reduce((s, r) => s + (num(r.kgStr) || 0) * (num(r.rateStr) || 0), 0),
+    );
+    const hamaliTotal = r2(totalBags * (num(hamali) || 0));
+    const total = Math.round(amount + hamaliTotal);
+    return { totalBags, amount, hamaliTotal, total };
+  }, [rows, hamali]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,22 +157,57 @@ export function EditBillDialog({
       toast.error("Pick a valid date.");
       return;
     }
+    if (rows.length === 0) {
+      toast.error("A bill needs at least one lot.");
+      return;
+    }
     for (const r of rows) {
-      const n = Number(r.rateStr);
-      if (!n || n <= 0) {
-        toast.error("Enter a positive price for every line.");
+      if (!r.lotId || num(r.bagsStr) <= 0 || num(r.kgStr) <= 0 || num(r.rateStr) <= 0) {
+        toast.error("Every line needs a lot, bags, weight and price.");
         return;
       }
     }
+
+    // Soft stock warning, mirroring the create-bill form. This bill's own
+    // current bags are already "reserved" in lot.left's complement, so add
+    // them back before comparing against what's being asked for now.
+    const neededByLot = new Map<string, { name: string; need: number; already: number }>();
+    for (const r of rows) {
+      const entry = neededByLot.get(r.lotId) ?? {
+        name: lots.find((l) => l.id === r.lotId)?.name ?? "",
+        need: 0,
+        already: 0,
+      };
+      entry.need += num(r.bagsStr);
+      neededByLot.set(r.lotId, entry);
+    }
+    for (const it of items) {
+      const entry = neededByLot.get(it.lotId);
+      if (entry) entry.already += it.bags;
+    }
+    for (const [lotId, { name, need, already }] of neededByLot) {
+      const lot = lots.find((l) => l.id === lotId);
+      const available = (lot?.left ?? 0) + already;
+      if (need > available) {
+        if (!confirm(`Only ${available} bags of "${name}" available. Save anyway?`)) {
+          return;
+        }
+      }
+    }
+
     startTransition(async () => {
       const res = await editBill({
         billId,
         date,
         customer: trimmedCustomer,
+        hamaliPerBag: num(hamali),
         items: rows.map((r) => ({
-          itemId: r.id,
-          lotId: r.lotIdCur,
-          rate: Number(r.rateStr),
+          itemId: r.itemId,
+          lotId: r.lotId,
+          bags: num(r.bagsStr),
+          kg: num(r.kgStr),
+          rate: num(r.rateStr),
+          weightsText: r.weightsText,
         })),
       });
       if (!res.ok) {
@@ -106,8 +220,6 @@ export function EditBillDialog({
     });
   }
 
-  const total = rows.reduce((s, r) => s + r2(r.kg * (Number(r.rateStr) || 0)), 0);
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
@@ -118,16 +230,17 @@ export function EditBillDialog({
           </Button>
         }
       />
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit bill #{pad2(billNo)}</DialogTitle>
           <DialogDescription>
-            {customer} · change the lot or price per line. Bags, weight and payments stay
-            the same.
+            Change the date, customer, hamali, or any lot line — lot, bags,
+            weight or price. Add or remove lines too. Payments stay as
+            recorded; use Receive or the receipt actions for those.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="eb-date">Date</Label>
               <Input
@@ -145,26 +258,32 @@ export function EditBillDialog({
                 onChange={(e) => setCustomerName(e.target.value)}
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="eb-hamali">Hamali per bag (₹)</Label>
+              <Input
+                id="eb-hamali"
+                type="number"
+                min="0"
+                step="0.5"
+                value={hamali}
+                onChange={(e) => setHamali(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+
+          <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
             {rows.map((r) => (
-              <div key={r.id} className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  {r.bags} bags · {r2(r.kg)} kg
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+              <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <div className="space-y-1">
                     <Label>Lot / quality</Label>
                     <Select
-                      value={r.lotIdCur}
-                      onValueChange={(v) => update(r.id, { lotIdCur: v ?? r.lotIdCur })}
+                      value={r.lotId}
+                      onValueChange={(v) => updateRow(r.key, { lotId: v ?? r.lotId })}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue>
-                          {(v) => {
-                            const l = lots.find((x) => x.id === v);
-                            return l?.name ?? r.lotName;
-                          }}
+                          {(v) => lots.find((l) => l.id === v)?.name ?? "Pick a lot"}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -177,27 +296,153 @@ export function EditBillDialog({
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor={`eb-rate-${r.id}`}>Price per kg (₹)</Label>
+                    <Label htmlFor={`eb-bags-${r.key}`}>Bags</Label>
                     <Input
-                      id={`eb-rate-${r.id}`}
+                      id={`eb-bags-${r.key}`}
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={r.bagsStr}
+                      onChange={(e) => updateRow(r.key, { bagsStr: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`eb-kg-${r.key}`}>Weight (kg)</Label>
+                    <Input
+                      id={`eb-kg-${r.key}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={r.kgStr}
+                      onChange={(e) => updateRow(r.key, { kgStr: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={`eb-rate-${r.key}`}>Price per kg (₹)</Label>
+                    <Input
+                      id={`eb-rate-${r.key}`}
                       type="number"
                       min="0"
                       step="0.01"
                       value={r.rateStr}
-                      onChange={(e) => update(r.id, { rateStr: e.target.value })}
+                      onChange={(e) => updateRow(r.key, { rateStr: e.target.value })}
                     />
                   </div>
                 </div>
-                <div className="text-right text-xs text-muted-foreground tabular-nums">
-                  Line amount: {money(r2(r.kg * (Number(r.rateStr) || 0)))}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    Line amount:{" "}
+                    {money(r2((num(r.kgStr) || 0) * (num(r.rateStr) || 0)))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => removeRow(r.key)}
+                    aria-label="Remove line"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ))}
+            {rows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No lines left — add at least one below before saving.
+              </p>
+            )}
           </div>
-          <div className="rounded-md bg-muted/60 p-3 text-sm flex justify-between">
-            <span className="text-muted-foreground">New goods amount</span>
-            <span className="font-semibold tabular-nums">{money(total)}</span>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="text-sm font-medium">+ Add another lot</div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="space-y-1">
+                <Label>Lot / quality</Label>
+                <Select value={newLotId} onValueChange={(v) => setNewLotId(v ?? "")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {(v) => {
+                        const l = lots.find((x) => x.id === v);
+                        return l ? `${l.name} (${l.left} left)` : "Pick a lot";
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lots.map((l) => (
+                      <SelectItem key={l.id} value={l.id} label={`${l.name} (${l.left} left)`}>
+                        {l.name} ({l.left} left)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="eb-new-bags">Bags</Label>
+                <Input
+                  id="eb-new-bags"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={newBags}
+                  onChange={(e) => setNewBags(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="eb-new-kg">Weight (kg)</Label>
+                <Input
+                  id="eb-new-kg"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newKg}
+                  onChange={(e) => setNewKg(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="eb-new-rate">Price per kg (₹)</Label>
+                <Input
+                  id="eb-new-rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newRate}
+                  onChange={(e) => setNewRate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-4">
+                <Label htmlFor="eb-new-weights">Each bag&apos;s weight (optional)</Label>
+                <Textarea
+                  id="eb-new-weights"
+                  rows={2}
+                  value={newWeights}
+                  onChange={(e) => onNewWeights(e.target.value)}
+                  placeholder="40.5 41 50x40.5"
+                />
+              </div>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addLine}>
+              + Add line
+            </Button>
           </div>
+
+          <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Goods amount</span>
+              <span className="tabular-nums">{money(calc.amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">
+                Hamali ({calc.totalBags} bags)
+              </span>
+              <span className="tabular-nums">{money(calc.hamaliTotal)}</span>
+            </div>
+            <div className="flex justify-between font-semibold">
+              <span>New total</span>
+              <span className="tabular-nums">{money(calc.total)}</span>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
