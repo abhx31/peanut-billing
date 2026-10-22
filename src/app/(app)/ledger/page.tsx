@@ -24,6 +24,7 @@ import {
 import { DeleteReceiptButton } from "./delete-receipt-button";
 import Link from "next/link";
 import { ExcelButton } from "@/components/excel-button";
+import { LedgerTAccount } from "@/components/ledger-t-account";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ export default async function LedgerPage({ searchParams }: Props) {
         mode: schema.openingPayments.mode,
         amount: schema.openingPayments.amount,
         loc: schema.openingPayments.loc,
+        note: schema.openingPayments.note,
         dueNote: schema.openingDues.note,
         dueAmount: schema.openingDues.amount,
       })
@@ -324,16 +326,18 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>Cash in hand</CardTitle>
         </CardHeader>
         <CardContent>
-          <SumGrid
-            items={[
-              ["Opening", money(openCash)],
-              ["Cash received", money(cashIn)],
-              ["From CJ (settled)", money(cjSettledCash)],
-              ["Cash expenses", money(cashOut)],
+          <LedgerTAccount
+            debits={[
+              { label: "To Opening balance b/d", amount: openCash },
+              { label: "To Cash received", amount: cashIn },
+              { label: "To From CJ (settled)", amount: cjSettledCash },
+            ]}
+            credits={[
+              { label: "By Cash expenses", amount: cashOut },
               ...(isOwner
-                ? ([["Purchases paid (cash)", money(pattiPaidCash)]] as [string, string][])
+                ? [{ label: "By Purchases paid (cash)", amount: pattiPaidCash }]
                 : []),
-              ["Closing", money(bookCashClose)],
+              { label: "By Closing balance c/d", amount: bookCashClose },
             ]}
           />
         </CardContent>
@@ -344,16 +348,18 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>Bank / UPI</CardTitle>
         </CardHeader>
         <CardContent>
-          <SumGrid
-            items={[
-              ["Opening", money(openBank)],
-              ["UPI received", money(upiIn)],
-              ["From CJ (settled)", money(cjSettledUpi)],
-              ["UPI expenses", money(upiOut)],
+          <LedgerTAccount
+            debits={[
+              { label: "To Opening balance b/d", amount: openBank },
+              { label: "To UPI received", amount: upiIn },
+              { label: "To From CJ (settled)", amount: cjSettledUpi },
+            ]}
+            credits={[
+              { label: "By UPI expenses", amount: upiOut },
               ...(isOwner
-                ? ([["Purchases paid (UPI)", money(pattiPaidUpi)]] as [string, string][])
+                ? [{ label: "By Purchases paid (UPI)", amount: pattiPaidUpi }]
                 : []),
-              ["Closing", money(bookBankClose)],
+              { label: "By Closing balance c/d", amount: bookBankClose },
             ]}
           />
         </CardContent>
@@ -364,15 +370,17 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>CJ (money held by CJ)</CardTitle>
         </CardHeader>
         <CardContent>
-          <SumGrid
-            items={[
-              ["Opening", money(cjOpening)],
-              ["Received via CJ", money(cjIn)],
-              ["CJ paid you", money(cjSettledCash + cjSettledUpi)],
-              [
-                "Closing",
-                money(cjOpening + cjIn - cjSettledCash - cjSettledUpi),
-              ],
+          <LedgerTAccount
+            debits={[
+              { label: "To Opening balance b/d", amount: cjOpening },
+              { label: "To Received via CJ", amount: cjIn },
+            ]}
+            credits={[
+              { label: "By CJ paid you", amount: cjSettledCash + cjSettledUpi },
+              {
+                label: "By Closing balance c/d",
+                amount: cjOpening + cjIn - cjSettledCash - cjSettledUpi,
+              },
             ]}
           />
         </CardContent>
@@ -417,6 +425,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                     <th className="py-2 pr-4">Customer</th>
                     <th className="py-2 pr-4">Mode</th>
                     <th className="py-2 pr-4 text-right">Amount</th>
+                    <th className="py-2 pr-4">Note</th>
                     {canEditClosing && <th className="py-2 pr-0" />}
                   </tr>
                 </thead>
@@ -429,6 +438,9 @@ export default async function LedgerPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{p.customer}</td>
                       <td className="py-2 pr-4">{p.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground">
+                        {p.note || "—"}
+                      </td>
                       {canEditClosing && (
                         <td className="py-2 pr-0 text-right">
                           <DeleteReceiptButton
@@ -458,6 +470,9 @@ export default async function LedgerPage({ searchParams }: Props) {
                         <td className="py-2 pr-4">{p.customer}</td>
                         <td className="py-2 pr-4">{p.mode}</td>
                         <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
+                        <td className="py-2 pr-4 text-xs text-muted-foreground">
+                          {p.note || "—"}
+                        </td>
                         {canEditClosing && (
                           <td className="py-2 pr-0 text-right">
                             <DeleteReceiptButton

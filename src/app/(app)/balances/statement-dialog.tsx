@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { FileText } from "lucide-react";
+import Link from "next/link";
+import { FileText, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -46,7 +47,18 @@ export function StatementDialog({ customer }: { customer: string }) {
       />
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Statement — {customer}</DialogTitle>
+          <DialogTitle className="flex items-center justify-between gap-2 pr-6">
+            <span>Statement — {customer}</span>
+            <Link
+              href={`/balances/statement/print?c=${encodeURIComponent(customer)}`}
+              target="_blank"
+            >
+              <Button type="button" size="sm" variant="outline">
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Print
+              </Button>
+            </Link>
+          </DialogTitle>
           <DialogDescription>
             Every old due, bill and receipt for this customer, in date order.
           </DialogDescription>
@@ -76,13 +88,14 @@ export function StatementDialog({ customer }: { customer: string }) {
                     <th className="py-2 pr-4">Entry</th>
                     <th className="py-2 pr-4">Applied to</th>
                     <th className="py-2 pr-4">Mode</th>
+                    <th className="py-2 pr-4">Note</th>
                     <th className="py-2 pr-4 text-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-3 text-muted-foreground">
+                      <td colSpan={6} className="py-3 text-muted-foreground">
                         No entries for this customer.
                       </td>
                     </tr>
@@ -96,6 +109,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                           <td className="py-2 pr-4 text-muted-foreground">
                             {r.note ?? ""}
                           </td>
+                          <td className="py-2 pr-4" />
                           <td className="py-2 pr-4" />
                           <td className="py-2 pr-4 text-right">
                             {money(r.amount)}
@@ -117,43 +131,29 @@ export function StatementDialog({ customer }: { customer: string }) {
                           </td>
                           <td className="py-2 pr-4" />
                           <td className="py-2 pr-4" />
+                          <td className="py-2 pr-4" />
                           <td className="py-2 pr-4 text-right">
                             {money(r.total)}
                           </td>
                         </tr>
                       );
                     }
-                    if (r.kind === "receipt-bill") {
-                      return (
-                        <tr
-                          key={`rb-${r.id}`}
-                          className="border-b last:border-0 text-success"
-                        >
-                          <td className="py-2 pr-4">{r.date}</td>
-                          <td className="py-2 pr-4">Receipt</td>
-                          <td className="py-2 pr-4 font-mono">
-                            {r.billKind === "gst" ? "GST " : ""}
-                            {r.billKind === "psale" ? "P " : ""}
-                            {pad2(r.billNo)}
-                          </td>
-                          <td className="py-2 pr-4">{r.mode}</td>
-                          <td className="py-2 pr-4 text-right">
-                            −{money(r.amount)}
-                          </td>
-                        </tr>
-                      );
-                    }
+                    // receipt — one row per actual Receive, grouped across
+                    // every old-due / bill it was applied to.
                     return (
                       <tr
-                        key={`rd-${r.id}`}
+                        key={`rcpt-${r.id}`}
                         className="border-b last:border-0 text-success"
                       >
                         <td className="py-2 pr-4">{r.date}</td>
                         <td className="py-2 pr-4">Receipt</td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          Old due
+                        <td className="py-2 pr-4 font-mono text-xs">
+                          {r.appliedTo}
                         </td>
                         <td className="py-2 pr-4">{r.mode}</td>
+                        <td className="py-2 pr-4 text-xs text-muted-foreground">
+                          {r.note ?? ""}
+                        </td>
                         <td className="py-2 pr-4 text-right">
                           −{money(r.amount)}
                         </td>

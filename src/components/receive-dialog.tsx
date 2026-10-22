@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ type Action = (input: {
   amount: number;
   mode: Mode;
   date: string;
+  note: string;
 }) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 type Props = {
@@ -58,6 +60,7 @@ export function ReceiveDialog({
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
   const [mode, setMode] = useState<Mode>("Cash");
   const [date, setDate] = useState(today());
+  const [note, setNote] = useState("");
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +74,7 @@ export function ReceiveDialog({
       return;
     }
     startTransition(async () => {
-      const res = await onConfirm({ amount: n, mode, date });
+      const res = await onConfirm({ amount: n, mode, date, note: note.trim() });
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -140,6 +143,18 @@ export function ReceiveDialog({
                 onChange={(e) => setDate(e.target.value)}
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="receive-note">
+              Note (optional)
+            </label>
+            <Textarea
+              id="receive-note"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. part payment via driver"
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

@@ -10,6 +10,7 @@ import { money, pad2, r2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
 import { PrintLetterhead } from "@/components/print-letterhead";
+import { LedgerTAccount } from "@/components/ledger-t-account";
 import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
@@ -60,19 +61,33 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">Daily ledger — {date}</div>
 
-      <Section title="Cash in hand">
-        <Row label="Opening" value={money(openCash)} />
-        <Row label="Received" value={money(cashIn)} />
-        <Row label="Expenses" value={money(cashOut)} />
-        <Row label="Closing" value={money(openCash + cashIn - cashOut)} strong />
-      </Section>
+      <div className="mb-4">
+        <h2 className="font-semibold mb-1">Cash in hand</h2>
+        <LedgerTAccount
+          debits={[
+            { label: "To Opening balance b/d", amount: openCash },
+            { label: "To Cash received", amount: cashIn },
+          ]}
+          credits={[
+            { label: "By Cash expenses", amount: cashOut },
+            { label: "By Closing balance c/d", amount: openCash + cashIn - cashOut },
+          ]}
+        />
+      </div>
 
-      <Section title="Bank / UPI">
-        <Row label="Opening" value={money(openBank)} />
-        <Row label="Received" value={money(upiIn)} />
-        <Row label="Expenses" value={money(upiOut)} />
-        <Row label="Closing" value={money(openBank + upiIn - upiOut)} strong />
-      </Section>
+      <div className="mb-4">
+        <h2 className="font-semibold mb-1">Bank / UPI</h2>
+        <LedgerTAccount
+          debits={[
+            { label: "To Opening balance b/d", amount: openBank },
+            { label: "To UPI received", amount: upiIn },
+          ]}
+          credits={[
+            { label: "By UPI expenses", amount: upiOut },
+            { label: "By Closing balance c/d", amount: openBank + upiIn - upiOut },
+          ]}
+        />
+      </div>
 
       <Section title="Day result">
         <Row label="Sales (total)" value={money(sales)} />

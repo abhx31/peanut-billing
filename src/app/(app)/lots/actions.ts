@@ -28,6 +28,11 @@ const setCostSchema = z.object({
 
 const deleteLotSchema = z.object({ lotId: z.string().uuid() });
 
+const renameLotSchema = z.object({
+  lotId: z.string().uuid(),
+  name: z.string().trim().min(1).max(120),
+});
+
 type Result = { ok: true } | { ok: false; error: string };
 
 export async function addLot(input: z.input<typeof addLotSchema>): Promise<
@@ -112,6 +117,24 @@ export async function setLotCost(input: z.input<typeof setCostSchema>): Promise<
     });
   revalidatePath("/lots");
   revalidatePath("/profit");
+  return { ok: true };
+}
+
+export async function renameLot(input: z.input<typeof renameLotSchema>): Promise<Result> {
+  await requireSession();
+  const parsed = renameLotSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a valid lot name." };
+
+  // Only the live lot name changes. Past bills keep their own lotNameSnapshot,
+  // so old prints and records are unaffected — this is purely a go-forward label.
+  await db
+    .update(schema.lots)
+    .set({ name: parsed.data.name })
+    .where(eq(schema.lots.id, parsed.data.lotId));
+  revalidatePath("/lots");
+  revalidatePath("/bills/new");
+  revalidatePath("/stock");
+  revalidatePath("/patti");
   return { ok: true };
 }
 

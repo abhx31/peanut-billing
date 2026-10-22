@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema, type DbExecutor } from "@/db";
+import { pad2 } from "@/lib/format";
 
 export type LotWithStock = {
   id: string;
@@ -161,6 +162,7 @@ export type BillRow = {
   fy: string;
   date: string;
   customer: string;
+  customerPhone: string | null;
   loc: "MS" | "NM";
   bags: number;
   kg: number;
@@ -259,6 +261,7 @@ async function enrichBills(
       fy: b.fy,
       date: b.date,
       customer: b.customer,
+      customerPhone: b.customerPhone,
       loc: b.loc === "NM" ? "NM" : "MS",
       bags: totalBags,
       kg: totalKg,
@@ -328,6 +331,7 @@ export async function getAllPaymentsOnDate(date: string) {
       mode: schema.payments.mode,
       amount: schema.payments.amount,
       date: schema.payments.date,
+      note: schema.payments.note,
     })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.payments.billId, schema.bills.id))
@@ -665,22 +669,16 @@ export type StatementRow =
       total: number;
     }
   | {
-      kind: "receipt-due";
+      // One row per actual Receive — every payments/opening_payments row
+      // inserted by that click is summed into one amount here, so this
+      // reflects exactly what the customer paid, not its per-bill split.
+      kind: "receipt";
       id: string;
       date: string;
       amount: number;
       mode: "Cash" | "UPI" | "CJ";
-      dueId: string;
-    }
-  | {
-      kind: "receipt-bill";
-      id: string;
-      date: string;
-      amount: number;
-      mode: "Cash" | "UPI" | "CJ";
-      billId: string;
-      billNo: number;
-      billKind: "normal" | "gst" | "psale";
+      appliedTo: string;
+      note: string | null;
     };
 
 export async function getCustomerStatement(name: string): Promise<{
@@ -726,6 +724,9 @@ export async function getCustomerStatement(name: string): Promise<{
         date: schema.payments.date,
         amount: schema.payments.amount,
         mode: schema.payments.mode,
+        note: schema.payments.note,
+        receiptGroupId: schema.payments.receiptGroupId,
+        createdAt: schema.payments.createdAt,
         billId: schema.payments.billId,
         billNo: schema.bills.no,
         billKind: schema.bills.kind,
@@ -740,9 +741,18 @@ export async function getCustomerStatement(name: string): Promise<{
         date: schema.openingPayments.date,
         amount: schema.openingPayments.amount,
         mode: schema.openingPayments.mode,
+        note: schema.openingPayments.note,
+        receiptGroupId: schema.openingPayments.receiptGroupId,
+        createdAt: schema.openingPayments.createdAt,
         dueId: schema.openingPayments.openingDueId,
+        dueAmount: schema.openingDues.amount,
+        dueNote: schema.openingDues.note,
       })
       .from(schema.openingPayments)
+      .leftJoin(
+        schema.openingDues,
+        eq(schema.openingDues.id, schema.openingPayments.openingDueId),
+      )
       .where(sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`)
       .orderBy(
         asc(schema.openingPayments.date),
@@ -775,26 +785,67 @@ export async function getCustomerStatement(name: string): Promise<{
       total: Number(b.total),
     });
   }
+  // Group every payments/opening_payments row by the Receive click that
+  // created it (receiptGroupId), so the statement shows what the customer
+  // actually paid instead of how it was split across old dues / bills. Rows
+  // from before this grouping existed (receiptGroupId is null) each form
+  // their own group of one, preserving today's behaviour for old data.
+  type Group = {
+    date: string;
+    mode: "Cash" | "UPI" | "CJ";
+    amount: number;
+    note: string | null;
+    createdAt: Date;
+    applied: string[];
+  };
+  const groups = new Map<string, Group>();
+  function addToGroup(
+    groupKey: string,
+    date: string,
+    mode: string,
+    amount: number,
+    note: string | null,
+    createdAt: Date,
+    appliedLabel: string,
+  ) {
+    const g = groups.get(groupKey);
+    if (g) {
+      g.amount += amount;
+      if (!g.note && note) g.note = note;
+      if (createdAt < g.createdAt) g.createdAt = createdAt;
+      if (!g.applied.includes(appliedLabel)) g.applied.push(appliedLabel);
+    } else {
+      groups.set(groupKey, {
+        date,
+        mode: mode as "Cash" | "UPI" | "CJ",
+        amount,
+        note,
+        createdAt,
+        applied: [appliedLabel],
+      });
+    }
+  }
   for (const p of payments) {
-    rows.push({
-      kind: "receipt-bill",
-      id: p.id,
-      date: p.date,
-      amount: Number(p.amount),
-      mode: p.mode as "Cash" | "UPI" | "CJ",
-      billId: p.billId,
-      billNo: p.billNo,
-      billKind: p.billKind as "normal" | "gst" | "psale",
-    });
+    const key = p.receiptGroupId ?? `solo-${p.id}`;
+    const label = `${p.billKind === "gst" ? "GST " : p.billKind === "psale" ? "P " : ""}Bill ${pad2(p.billNo)}`;
+    addToGroup(key, p.date, p.mode, Number(p.amount), p.note, p.createdAt, label);
   }
   for (const p of duePayments) {
+    const key = p.receiptGroupId ?? `solo-${p.id}`;
+    const isAdvance =
+      Number(p.dueAmount ?? 0) === 0 ||
+      (p.dueNote ?? "").toLowerCase().includes("advance");
+    addToGroup(key, p.date, p.mode, Number(p.amount), p.note, p.createdAt, isAdvance ? "Advance" : "Old due");
+  }
+  for (const [id, g] of groups) {
     rows.push({
-      kind: "receipt-due",
-      id: p.id,
-      date: p.date,
-      amount: Number(p.amount),
-      mode: p.mode as "Cash" | "UPI" | "CJ",
-      dueId: p.dueId,
+      kind: "receipt",
+      id,
+      date: g.date,
+      amount: g.amount,
+      mode: g.mode,
+      appliedTo: g.applied.join(", "),
+      note: g.note,
     });
   }
   rows.sort(

@@ -12,8 +12,8 @@ export function ReceiveFromCustomerButton({ customer, balance }: Props) {
       description="Old dues clear first, then the oldest unpaid bills. Anything left over is kept as an advance."
       balance={balance}
       defaultAmount={balance}
-      onConfirm={({ amount, mode, date }) =>
-        receiveFromCustomer({ customer, amount, mode, date })
+      onConfirm={({ amount, mode, date, note }) =>
+        receiveFromCustomer({ customer, amount, mode, date, note })
       }
     />
   );

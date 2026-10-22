@@ -29,8 +29,8 @@ export function BillRowActions({ billId, billNo, balance }: Props) {
           description="Select payment mode, date and the amount received."
           balance={balance}
           defaultAmount={balance}
-          onConfirm={({ amount, mode, date }) =>
-            receivePaymentForBill({ billId, amount, mode, date })
+          onConfirm={({ amount, mode, date, note }) =>
+            receivePaymentForBill({ billId, amount, mode, date, note })
           }
         />
       )}
