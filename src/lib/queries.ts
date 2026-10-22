@@ -292,6 +292,21 @@ export async function getBillsByDate(date: string, isOwner: boolean) {
   return enrichBills(rows, isOwner);
 }
 
+/** GST sale invoices (kind='gst') whose date falls in a given "YYYY-MM". */
+export async function getGstBillsForMonth(ym: string, isOwner: boolean) {
+  const rows = await db
+    .select()
+    .from(schema.bills)
+    .where(
+      and(
+        eq(schema.bills.kind, "gst"),
+        sql`to_char(${schema.bills.date}, 'YYYY-MM') = ${ym}`,
+      ),
+    )
+    .orderBy(asc(schema.bills.no));
+  return enrichBills(rows, isOwner);
+}
+
 export async function getBillById(id: string, isOwner: boolean) {
   const [row] = await db.select().from(schema.bills).where(eq(schema.bills.id, id));
   if (!row) return null;

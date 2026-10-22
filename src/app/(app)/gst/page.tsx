@@ -4,19 +4,26 @@ import { FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
-import { getLotCosts, getLotsWithStock } from "@/lib/queries";
-import { fyOf, today } from "@/lib/format";
+import { getGstBillsForMonth, getLotCosts, getLotsWithStock } from "@/lib/queries";
+import { fyOf, money, pad2, r2, today } from "@/lib/format";
 import { GstBillForm } from "./gst-bill-form";
 import { ExcelButton } from "@/components/excel-button";
+import { MonthPicker } from "../gstp/month-picker";
+import { BillRowActions } from "../bills/bill-row-actions";
+import { EditGstBillDialog } from "./edit-gst-bill-dialog";
 import type { GstProfile } from "@/lib/gst-types";
 
 export const dynamic = "force-dynamic";
 
-export default async function GstBillPage() {
+type Props = { searchParams: Promise<{ m?: string }> };
+
+export default async function GstBillPage({ searchParams }: Props) {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
   const currentFy = fyOf(today());
-  const [customers, settingsRow, lots, nextNoRow, lotCosts] = await Promise.all([
+  const sp = await searchParams;
+  const month = sp.m || today().slice(0, 7);
+  const [customers, settingsRow, lots, nextNoRow, lotCosts, monthBills] = await Promise.all([
     db
       .select()
       .from(schema.gstCustomers)
@@ -31,6 +38,7 @@ export default async function GstBillPage() {
       .where(and(eq(schema.bills.kind, "gst"), eq(schema.bills.fy, currentFy)))
       .then((r) => r[0]),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
+    getGstBillsForMonth(month, isOwner),
   ]);
   const profile = (settingsRow?.gstProfile ?? null) as GstProfile | null;
   const nextInvoiceNo = Number(nextNoRow?.max ?? 0) + 1;
@@ -116,6 +124,72 @@ export default async function GstBillPage() {
         </CardHeader>
         <CardContent>
           <ExcelButton report="gst" pickDate label="GST bills (Excel)" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>GST invoices</CardTitle>
+          <MonthPicker value={month} />
+        </CardHeader>
+        <CardContent>
+          {monthBills.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No GST invoices in this month.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4">No.</th>
+                    <th className="py-2 pr-4">Date</th>
+                    <th className="py-2 pr-4">Buyer</th>
+                    <th className="py-2 pr-4 text-right">Bags</th>
+                    <th className="py-2 pr-4 text-right">Kg</th>
+                    <th className="py-2 pr-4 text-right">Total</th>
+                    <th className="py-2 pr-4 text-right">Balance</th>
+                    <th className="py-2 pr-0" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthBills.map((b) => (
+                    <tr key={b.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-mono">GST {pad2(b.no)}</td>
+                      <td className="py-2 pr-4">{b.date}</td>
+                      <td className="py-2 pr-4">{b.customer}</td>
+                      <td className="py-2 pr-4 text-right">{b.bags}</td>
+                      <td className="py-2 pr-4 text-right">{r2(b.kg)}</td>
+                      <td className="py-2 pr-4 text-right font-semibold">
+                        {money(b.total)}
+                      </td>
+                      <td
+                        className={`py-2 pr-4 text-right ${b.balance > 0.5 ? "text-destructive" : ""}`}
+                      >
+                        {money(b.balance)}
+                      </td>
+                      <td className="py-2 pr-0 text-right">
+                        <div className="flex gap-1 justify-end flex-wrap">
+                          <EditGstBillDialog
+                            billId={b.id}
+                            billNo={b.no}
+                            lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+                          />
+                          <BillRowActions
+                            billId={b.id}
+                            billNo={b.no}
+                            balance={b.balance}
+                            labelPrefix="GST "
+                            noun="GST invoice"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
