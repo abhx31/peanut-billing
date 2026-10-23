@@ -2,6 +2,7 @@ import {
   cashBalanceBefore,
   getAllPaymentsOnDate,
   getBillsByDate,
+  getCashDepositsOnDate,
   getExpensesByDate,
   getSettings,
 } from "@/lib/queries";
@@ -25,13 +26,14 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
 
-  const [bills, pays, expenses, settings, openCash, openBank] = await Promise.all([
+  const [bills, pays, expenses, settings, openCash, openBank, depositsToday] = await Promise.all([
     getBillsByDate(date, isOwner),
     getAllPaymentsOnDate(date),
     getExpensesByDate(date),
     getSettings(),
     cashBalanceBefore("Cash", date),
     cashBalanceBefore("UPI", date),
+    getCashDepositsOnDate(date),
   ]);
 
   const cashIn = pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0);
@@ -42,6 +44,7 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
   const upiOut = expenses
     .filter((e) => e.mode === "UPI")
     .reduce((s, e) => s + Number(e.amount), 0);
+  const depositTotal = depositsToday.reduce((s, d) => s + Number(d.amount), 0);
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
@@ -70,7 +73,11 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
           ]}
           credits={[
             { label: "By Cash expenses", amount: cashOut },
-            { label: "By Closing balance c/d", amount: openCash + cashIn - cashOut },
+            { label: "By Deposited to bank", amount: depositTotal },
+            {
+              label: "By Closing balance c/d",
+              amount: openCash + cashIn - cashOut - depositTotal,
+            },
           ]}
         />
       </div>
@@ -81,10 +88,14 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
           debits={[
             { label: "To Opening balance b/d", amount: openBank },
             { label: "To UPI received", amount: upiIn },
+            { label: "To Cash deposited", amount: depositTotal },
           ]}
           credits={[
             { label: "By UPI expenses", amount: upiOut },
-            { label: "By Closing balance c/d", amount: openBank + upiIn - upiOut },
+            {
+              label: "By Closing balance c/d",
+              amount: openBank + upiIn - upiOut + depositTotal,
+            },
           ]}
         />
       </div>

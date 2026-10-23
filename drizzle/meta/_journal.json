@@ -120,6 +120,13 @@
       "when": 1792700000000,
       "tag": "0016_per_store_bill_numbering",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0017_cash_deposits",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import {
   cashBalanceBefore,
   getAllPaymentsOnDate,
   getBillsByDate,
+  getCashDepositsOnDate,
   getCustomerBalances,
   getExpensesByDate,
   getSettings,
@@ -25,6 +26,8 @@ import { DeleteReceiptButton } from "./delete-receipt-button";
 import Link from "next/link";
 import { ExcelButton } from "@/components/excel-button";
 import { LedgerTAccount } from "@/components/ledger-t-account";
+import { CashDepositDialog } from "../cash-deposits/cash-deposit-dialog";
+import { DeleteCashDepositButton } from "../cash-deposits/delete-cash-deposit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +58,7 @@ export default async function LedgerPage({ searchParams }: Props) {
     openingPaymentsToday,
     pattiPaidTodayByMode,
     pattiPaidToday,
+    depositsToday,
   ] = await Promise.all([
     getBillsByDate(date, isOwner),
     getAllPaymentsOnDate(date),
@@ -134,6 +138,7 @@ export default async function LedgerPage({ searchParams }: Props) {
             amount: string;
           }[],
         ),
+    getCashDepositsOnDate(date),
   ]);
 
   const cashIn =
@@ -226,8 +231,11 @@ export default async function LedgerPage({ searchParams }: Props) {
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
-  const bookCashClose = openCash + cashIn + cjSettledCash - cashOut - pattiPaidCash;
-  const bookBankClose = openBank + upiIn + cjSettledUpi - upiOut - pattiPaidUpi;
+  const depositTotal = depositsToday.reduce((s, d) => s + Number(d.amount), 0);
+  const bookCashClose =
+    openCash + cashIn + cjSettledCash - cashOut - pattiPaidCash - depositTotal;
+  const bookBankClose =
+    openBank + upiIn + cjSettledUpi - upiOut - pattiPaidUpi + depositTotal;
 
   return (
     <div className="space-y-6">
@@ -359,6 +367,7 @@ export default async function LedgerPage({ searchParams }: Props) {
               ...(isOwner
                 ? [{ label: "By Purchases paid (cash)", amount: pattiPaidCash }]
                 : []),
+              { label: "By Deposited to bank", amount: depositTotal },
               { label: "By Closing balance c/d", amount: bookCashClose },
             ]}
           />
@@ -375,6 +384,7 @@ export default async function LedgerPage({ searchParams }: Props) {
               { label: "To Opening balance b/d", amount: openBank },
               { label: "To UPI received", amount: upiIn },
               { label: "To From CJ (settled)", amount: cjSettledUpi },
+              { label: "To Cash deposited", amount: depositTotal },
             ]}
             credits={[
               { label: "By UPI expenses", amount: upiOut },
@@ -545,6 +555,59 @@ export default async function LedgerPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{e.note ?? ""}</td>
                       <td className="py-2 pr-4">{e.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(e.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cash deposits</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Cash physically deposited into the bank on {fmtDate(date)}.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <CashDepositDialog mode="add" />
+          {depositsToday.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No cash deposits on this date.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4 text-right">Amount</th>
+                    <th className="py-2 pr-4">Note</th>
+                    {canEditClosing && <th className="py-2 pr-0" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {depositsToday.map((d) => (
+                    <tr key={d.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 text-right">{money(d.amount)}</td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground">
+                        {d.note || "—"}
+                      </td>
+                      {canEditClosing && (
+                        <td className="py-2 pr-0 text-right">
+                          <div className="flex gap-1 justify-end flex-wrap">
+                            <CashDepositDialog
+                              mode="edit"
+                              id={d.id}
+                              initialDate={d.date}
+                              initialAmount={Number(d.amount)}
+                              initialNote={d.note ?? ""}
+                            />
+                            <DeleteCashDepositButton id={d.id} amount={d.amount} />
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

@@ -354,6 +354,18 @@ export async function getAllPaymentsOnDate(date: string) {
     .orderBy(asc(schema.bills.no));
 }
 
+export async function getCashDepositsOnDate(date: string) {
+  return db
+    .select()
+    .from(schema.cashDeposits)
+    .where(eq(schema.cashDeposits.date, date))
+    .orderBy(asc(schema.cashDeposits.createdAt));
+}
+
+export async function getAllCashDeposits() {
+  return db.select().from(schema.cashDeposits).orderBy(desc(schema.cashDeposits.date));
+}
+
 export async function getStockHistory(limit = 30) {
   return db
     .select({
@@ -491,13 +503,24 @@ export async function cashBalanceBefore(
     .from(schema.openingPayments)
     .where(and(eq(schema.openingPayments.mode, mode), opayCond));
 
+  // Cash deposited into the bank: moves money OUT of Cash and INTO Bank/UPI.
+  const depCond = after
+    ? sql`${schema.cashDeposits.date} > ${after} AND ${schema.cashDeposits.date} < ${before}`
+    : sql`${schema.cashDeposits.date} < ${before}`;
+  const [dep] = await exec
+    .select({ s: sql<string>`coalesce(sum(${schema.cashDeposits.amount}), 0)` })
+    .from(schema.cashDeposits)
+    .where(depCond);
+  const depositAmount = Number(dep?.s ?? 0);
+
   return (
     base +
     Number(pr?.s ?? 0) +
     Number(cj?.s ?? 0) +
     Number(op?.s ?? 0) -
     Number(ex?.s ?? 0) -
-    Number(patti?.s ?? 0)
+    Number(patti?.s ?? 0) +
+    (mode === "UPI" ? depositAmount : -depositAmount)
   );
 }
 
