@@ -293,7 +293,7 @@ export function GstPurchaseForm({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="gp-addr">Supplier address</Label>
               <Textarea
                 id="gp-addr"

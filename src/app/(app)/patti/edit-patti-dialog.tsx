@@ -369,7 +369,7 @@ export function EditPattiDialog({ pattiId, pattiNo, lotNameSuggestions }: Props)
                     onChange={(e) => setNewRate(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1 sm:col-span-4">
+                <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="ep-new-weights">Each bag&apos;s weight (optional)</Label>
                   <Textarea
                     id="ep-new-weights"
