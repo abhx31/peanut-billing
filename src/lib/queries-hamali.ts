@@ -34,6 +34,14 @@ export async function getHamaliPaidForDate(date: string) {
   });
 }
 
+export async function getHamaliLoadsForDate(date: string) {
+  return db
+    .select()
+    .from(schema.hamaliLoads)
+    .where(eq(schema.hamaliLoads.date, date))
+    .orderBy(desc(schema.hamaliLoads.createdAt));
+}
+
 export async function getRecentHamaliDays(limit = 14) {
   // Days (latest first) where any bill had hamali > 0.
   const dates = await db

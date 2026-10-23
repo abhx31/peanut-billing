@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireSession } from "@/lib/auth-helpers";
 import {
   getHamaliForDate,
+  getHamaliLoadsForDate,
   getHamaliPaidForDate,
   getRecentHamaliDays,
 } from "@/lib/queries-hamali";
@@ -13,6 +14,8 @@ import { fmtDate, money, pad2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { DateFilter } from "@/components/date-filter";
 import { HamaliPayDialog, HamaliUndoButton } from "./hamali-pay";
+import { HamaliLoadDialog } from "./hamali-load-dialog";
+import { DeleteHamaliLoadButton } from "./delete-hamali-load-button";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +28,13 @@ export default async function HamaliPage({ searchParams }: Props) {
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
 
-  const [h, paid, recent] = await Promise.all([
+  const [h, paid, recent, loads] = await Promise.all([
     getHamaliForDate(date),
     getHamaliPaidForDate(date),
     getRecentHamaliDays(14),
+    getHamaliLoadsForDate(date),
   ]);
+  const loadsTotal = loads.reduce((s, l) => s + Number(l.amount), 0);
 
   const outstanding = recent
     .filter((r) => !r.paid)
@@ -135,6 +140,75 @@ export default async function HamaliPage({ searchParams }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {isPrivileged && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Hamali on loads received</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              For unloading an incoming load — set bags and ₹/bag, separate from the
+              per-bill hamali above. Each entry is added to Expenses (and the Daily
+              ledger) as Hamali right away.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <HamaliLoadDialog mode="add" date={date} />
+            {loads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hamali-on-load entries for this date.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b">
+                      <th className="py-2 pr-4 text-right">Bags</th>
+                      <th className="py-2 pr-4 text-right">₹ / bag</th>
+                      <th className="py-2 pr-4 text-right">Amount</th>
+                      <th className="py-2 pr-4">Paid by</th>
+                      <th className="py-2 pr-4">Note</th>
+                      <th className="py-2 pr-0" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loads.map((l) => (
+                      <tr key={l.id} className="border-b last:border-0">
+                        <td className="py-2 pr-4 text-right">{l.bags}</td>
+                        <td className="py-2 pr-4 text-right">{money(l.ratePerBag)}</td>
+                        <td className="py-2 pr-4 text-right">{money(l.amount)}</td>
+                        <td className="py-2 pr-4">{l.mode}</td>
+                        <td className="py-2 pr-4 text-xs text-muted-foreground">
+                          {l.note || "—"}
+                        </td>
+                        <td className="py-2 pr-0 text-right">
+                          <div className="flex gap-1 justify-end flex-wrap">
+                            <HamaliLoadDialog
+                              mode="edit"
+                              id={l.id}
+                              initialDate={l.date}
+                              initialBags={l.bags}
+                              initialRatePerBag={Number(l.ratePerBag)}
+                              initialMode={l.mode as "Cash" | "UPI"}
+                              initialNote={l.note ?? ""}
+                            />
+                            <DeleteHamaliLoadButton id={l.id} amount={l.amount} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="font-semibold">
+                      <td className="py-2 pr-4" />
+                      <td className="py-2 pr-4" />
+                      <td className="py-2 pr-4 text-right">{money(loadsTotal)}</td>
+                      <td className="py-2 pr-4" colSpan={3} />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
