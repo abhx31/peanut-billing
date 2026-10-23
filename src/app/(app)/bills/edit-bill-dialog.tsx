@@ -274,7 +274,7 @@ export function EditBillDialog({
           <div className="space-y-3">
             {rows.map((r) => (
               <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label>Lot / quality</Label>
                     <Select
@@ -356,7 +356,7 @@ export function EditBillDialog({
 
           <div className="rounded-lg border p-3 space-y-2">
             <div className="text-sm font-medium">+ Add another lot</div>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label>Lot / quality</Label>
                 <Select value={newLotId} onValueChange={(v) => setNewLotId(v ?? "")}>

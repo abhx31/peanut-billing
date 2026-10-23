@@ -281,7 +281,7 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
             <div className="space-y-3">
               {rows.map((r) => (
                 <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label>Lot</Label>
                       <Select
@@ -379,7 +379,7 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
 
             <div className="rounded-lg border p-3 space-y-2">
               <div className="text-sm font-medium">+ Add another lot</div>
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>Lot</Label>
                   <Select value={newLotId} onValueChange={(v) => setNewLotId(v ?? "")}>
