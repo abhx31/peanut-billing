@@ -27,7 +27,13 @@ export function MonthFilter({ options, value }: { options: Option[]; value: stri
       <Label>Month</Label>
       <Select value={value} onValueChange={(v) => v && onChange(v)}>
         <SelectTrigger>
-          <SelectValue />
+          <SelectValue>
+            {(v) =>
+              !v || v === "all"
+                ? "All months"
+                : (options.find((o) => o.value === v)?.label ?? (v as string))
+            }
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All months</SelectItem>
