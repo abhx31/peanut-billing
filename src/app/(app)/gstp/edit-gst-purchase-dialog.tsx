@@ -222,7 +222,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit GST purchase GP {pad2(no)}</DialogTitle>
           <DialogDescription>
@@ -323,7 +323,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
               </label>
             </div>
 
-            <div className="space-y-3 max-h-[30vh] overflow-y-auto pr-1">
+            <div className="space-y-3">
               {rows.map((r) => (
                 <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
                   <div className="grid gap-3 sm:grid-cols-4">
