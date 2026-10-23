@@ -28,6 +28,32 @@ export async function getHamaliForDate(date: string) {
   return { bills: bs, totalBags, totalAmount };
 }
 
+// Sale Patti / GST Sale bills on this date that still have hamali = 0 --
+// candidates to quickly add "on us" hamali to after the fact (e.g. forgot
+// to set it when creating the bill).
+export async function getZeroHamaliSaleBillsForDate(date: string) {
+  return db
+    .select({
+      id: schema.bills.id,
+      kind: schema.bills.kind,
+      no: schema.bills.no,
+      loc: schema.bills.loc,
+      customer: schema.bills.customer,
+      bags: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int`,
+    })
+    .from(schema.bills)
+    .leftJoin(schema.billItems, eq(schema.billItems.billId, schema.bills.id))
+    .where(
+      and(
+        eq(schema.bills.date, date),
+        sql`${schema.bills.kind} IN ('psale', 'gst')`,
+        sql`${schema.bills.hamali}::numeric = 0`,
+      ),
+    )
+    .groupBy(schema.bills.id)
+    .orderBy(schema.bills.no);
+}
+
 export async function getHamaliPaidForDate(date: string) {
   return db.query.hamaliPaid.findFirst({
     where: eq(schema.hamaliPaid.date, date),

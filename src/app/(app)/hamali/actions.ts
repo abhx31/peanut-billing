@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
+import { r2 } from "@/lib/format";
 
 const paySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -196,5 +197,53 @@ export async function undoHamaliPayment(
       .where(eq(schema.hamaliPaid.date, parsed.data.date));
   });
   revalidateHamali();
+  return { ok: true };
+}
+
+const setSaleHamaliSchema = z.object({
+  billId: z.string().uuid(),
+  ratePerBag: z.number().min(0),
+});
+
+// Quick fix for a Sale Patti or GST Sale bill that was saved without its
+// "on us" hamali set (e.g. forgot to toggle it on) -- sets it retroactively
+// without touching the bill's total/balance, same rule as at creation time.
+export async function setSaleHamali(
+  input: z.input<typeof setSaleHamaliSchema>,
+): Promise<Result> {
+  await requireOwnerOrEditor();
+  const parsed = setSaleHamaliSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const bill = await db.query.bills.findFirst({
+    where: eq(schema.bills.id, parsed.data.billId),
+    with: { items: true },
+  });
+  if (!bill) return { ok: false, error: "Bill not found." };
+  if (bill.kind !== "psale" && bill.kind !== "gst") {
+    return {
+      ok: false,
+      error: "Hamali can only be set this way for Sale Patti or GST Sale bills.",
+    };
+  }
+  const closed = await closedDateError(bill.date);
+  if (closed) return { ok: false, error: closed };
+
+  const bagsTotal = bill.items.reduce((s, it) => s + it.bags, 0);
+  const hamali = r2(bagsTotal * parsed.data.ratePerBag);
+
+  await db
+    .update(schema.bills)
+    .set({
+      hamaliPerBag: parsed.data.ratePerBag.toString(),
+      hamali: hamali.toString(),
+    })
+    .where(eq(schema.bills.id, parsed.data.billId));
+
+  revalidateHamali();
+  revalidatePath("/patti");
+  revalidatePath("/gst");
   return { ok: true };
 }
