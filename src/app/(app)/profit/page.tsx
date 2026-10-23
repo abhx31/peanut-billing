@@ -8,6 +8,16 @@ import { FYFilter } from "./fy-filter";
 
 export const dynamic = "force-dynamic";
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function monthLabel(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}
+
 type Props = { searchParams: Promise<{ fy?: string }> };
 
 export default async function ProfitPage({ searchParams }: Props) {
@@ -78,6 +88,25 @@ export default async function ProfitPage({ searchParams }: Props) {
     exp: byDay.reduce((s, r) => s + r.exp, 0),
   };
 
+  // Month-wise profit — same day-wise rows, rolled up by YYYY-MM.
+  const byMonthMap = new Map<
+    string,
+    { bills: number; bags: number; sales: number; profit: number; exp: number }
+  >();
+  for (const r of byDay) {
+    const month = r.date.slice(0, 7);
+    const row = byMonthMap.get(month) ?? { bills: 0, bags: 0, sales: 0, profit: 0, exp: 0 };
+    row.bills += r.bills;
+    row.bags += r.bags;
+    row.sales += r.sales;
+    row.profit += r.profit;
+    row.exp += r.exp;
+    byMonthMap.set(month, row);
+  }
+  const byMonth = Array.from(byMonthMap.entries())
+    .map(([month, row]) => ({ month, label: monthLabel(month), ...row }))
+    .sort((a, b) => b.month.localeCompare(a.month));
+
   const byLotMap = new Map<
     string,
     { name: string; bags: number; kg: number; sales: number; profit: number; billIds: Set<string> }
@@ -118,6 +147,73 @@ export default async function ProfitPage({ searchParams }: Props) {
               ["Profit per kg", money(kgSold ? totalProfit / kgSold : 0)],
             ]}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Month-wise profit</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {byMonth.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No bills in this period yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-4">Month</th>
+                    <th className="py-2 pr-4 text-right">Bills</th>
+                    <th className="py-2 pr-4 text-right">Bags</th>
+                    <th className="py-2 pr-4 text-right">Sales</th>
+                    <th className="py-2 pr-4 text-right">Profit</th>
+                    <th className="py-2 pr-4 text-right">Expenses</th>
+                    <th className="py-2 pr-4 text-right">Profit after expenses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byMonth.map((r) => (
+                    <tr key={r.month} className="border-b last:border-0">
+                      <td className="py-2 pr-4">{r.label}</td>
+                      <td className="py-2 pr-4 text-right">{r.bills}</td>
+                      <td className="py-2 pr-4 text-right">{r.bags}</td>
+                      <td className="py-2 pr-4 text-right">{money(r.sales)}</td>
+                      <td
+                        className={`py-2 pr-4 text-right ${r.profit < 0 ? "text-destructive" : ""}`}
+                      >
+                        {money(r.profit)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">{money(r.exp)}</td>
+                      <td
+                        className={`py-2 pr-4 text-right ${r.profit - r.exp < 0 ? "text-destructive" : ""}`}
+                      >
+                        {money(r.profit - r.exp)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="font-semibold">
+                    <td className="py-2 pr-4">Total</td>
+                    <td className="py-2 pr-4 text-right">{dayTotals.bills}</td>
+                    <td className="py-2 pr-4 text-right">{dayTotals.bags}</td>
+                    <td className="py-2 pr-4 text-right">{money(dayTotals.sales)}</td>
+                    <td
+                      className={`py-2 pr-4 text-right ${dayTotals.profit < 0 ? "text-destructive" : ""}`}
+                    >
+                      {money(dayTotals.profit)}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{money(dayTotals.exp)}</td>
+                    <td
+                      className={`py-2 pr-4 text-right ${dayTotals.profit - dayTotals.exp < 0 ? "text-destructive" : ""}`}
+                    >
+                      {money(dayTotals.profit - dayTotals.exp)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
