@@ -43,27 +43,47 @@ export async function getHamaliLoadsForDate(date: string) {
 }
 
 export async function getRecentHamaliDays(limit = 14) {
-  // Days (latest first) where any bill had hamali > 0.
-  const dates = await db
-    .selectDistinct({ date: schema.bills.date })
-    .from(schema.bills)
-    .where(sql`${schema.bills.hamali}::numeric > 0`)
-    .orderBy(desc(schema.bills.date))
-    .limit(limit);
+  // Days (latest first) where there's hamali on either side — loaded (sale
+  // bills) or unloaded (incoming loads).
+  const [billDates, loadDates] = await Promise.all([
+    db
+      .selectDistinct({ date: schema.bills.date })
+      .from(schema.bills)
+      .where(sql`${schema.bills.hamali}::numeric > 0`),
+    db.selectDistinct({ date: schema.hamaliLoads.date }).from(schema.hamaliLoads),
+  ]);
+  const dates = Array.from(
+    new Set([...billDates, ...loadDates].map((r) => r.date)),
+  )
+    .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+    .slice(0, limit);
 
   const result: {
     date: string;
-    bags: number;
-    amount: number;
+    loadedBags: number;
+    loadedAmount: number;
+    unloadedBags: number;
+    unloadedAmount: number;
+    totalBags: number;
+    totalAmount: number;
     paid: { amount: string; mode: "Cash" | "UPI" | "CJ" } | null;
   }[] = [];
-  for (const { date } of dates) {
-    const h = await getHamaliForDate(date);
-    const paid = await getHamaliPaidForDate(date);
+  for (const date of dates) {
+    const [h, loads, paid] = await Promise.all([
+      getHamaliForDate(date),
+      getHamaliLoadsForDate(date),
+      getHamaliPaidForDate(date),
+    ]);
+    const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
+    const unloadedAmount = loads.reduce((s, l) => s + Number(l.amount), 0);
     result.push({
       date,
-      bags: h.totalBags,
-      amount: h.totalAmount,
+      loadedBags: h.totalBags,
+      loadedAmount: h.totalAmount,
+      unloadedBags,
+      unloadedAmount,
+      totalBags: h.totalBags + unloadedBags,
+      totalAmount: h.totalAmount + unloadedAmount,
       paid: paid ? { amount: paid.amount, mode: paid.mode } : null,
     });
   }
