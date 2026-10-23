@@ -461,6 +461,32 @@ export const hamaliPaidRelations = relations(hamaliPaid, ({ one }) => ({
   }),
 }));
 
+// Manual hamali entries for incoming loads (e.g. unloading a purchase) —
+// distinct from the automatic per-bill hamali on sale bills above. Several
+// loads can land on the same day, so unlike hamali_paid this isn't one row
+// per date.
+export const hamaliLoads = pgTable("hamali_loads", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  date: date("date", { mode: "string" }).notNull(),
+  bags: integer("bags").notNull(),
+  ratePerBag: numeric("rate_per_bag", { precision: 10, scale: 2 }).notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  mode: paymentModeEnum("mode").notNull(),
+  note: text("note"),
+  expenseId: uuid("expense_id")
+    .notNull()
+    .references(() => expenses.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const hamaliLoadsRelations = relations(hamaliLoads, ({ one }) => ({
+  expense: one(expenses, {
+    fields: [hamaliLoads.expenseId],
+    references: [expenses.id],
+  }),
+}));
+
 // Per-customer sticky notes shown on the Balances page. Keyed by customerKey()
 // so the same note shows up regardless of casing / whitespace drift in how the
 // name is typed on bills.
