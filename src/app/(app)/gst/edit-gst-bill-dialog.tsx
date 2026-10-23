@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, pad2, r2 } from "@/lib/format";
 import { getGstBillForEdit, updateGstBill } from "./actions";
 
@@ -107,6 +108,8 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
   const [gstPercent, setGstPercent] = useState("5");
   const [rows, setRows] = useState<Row[]>([]);
   const [header, setHeader] = useState<HeaderState>(emptyHeader);
+  const [hamaliOn, setHamaliOn] = useState(false);
+  const [hamaliRate, setHamaliRate] = useState("");
 
   const [newLotId, setNewLotId] = useState(lots[0]?.id ?? "");
   const [newDescription, setNewDescription] = useState("Ground Nuts");
@@ -140,6 +143,8 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
       })),
     );
     setHeader(data.header);
+    setHamaliOn(data.hamaliPerBag > 0);
+    setHamaliRate(data.hamaliPerBag > 0 ? String(data.hamaliPerBag) : "");
   }
 
   function updateRow(key: string, patch: Partial<Row>) {
@@ -175,11 +180,13 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
     setNewRate("");
   }
 
+  const bagsTotal = rows.reduce((s, r) => s + (num(r.bagsStr) || 0), 0);
   const taxable = r2(
     rows.reduce((s, r) => s + (num(r.kgStr) || 0) * (num(r.rateStr) || 0), 0),
   );
   const taxTotal = r2((taxable * (num(gstPercent) || 0)) / 100);
   const total = Math.round(taxable + taxTotal);
+  const hamali = hamaliOn ? r2(bagsTotal * (num(hamaliRate) || 0)) : 0;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -212,6 +219,7 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
           kg: num(r.kgStr),
           rate: num(r.rateStr),
         })),
+        hamaliPerBag: hamaliOn ? num(hamaliRate) || 0 : 0,
         header,
       });
       if (!res.ok) {
@@ -472,6 +480,13 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
               </div>
             </details>
 
+            <HamaliOnUsField
+              on={hamaliOn}
+              onToggle={setHamaliOn}
+              ratePerBag={hamaliRate}
+              onRateChange={setHamaliRate}
+            />
+
             <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Taxable value</span>
@@ -481,6 +496,12 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
                 <span className="text-muted-foreground">Tax ({gstPercent}%)</span>
                 <span className="tabular-nums">{money(taxTotal)}</span>
               </div>
+              {hamaliOn && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Hamali (on us, not billed)</span>
+                  <span className="tabular-nums">{money(hamali)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold">
                 <span>New total</span>
                 <span className="tabular-nums">{money(total)}</span>
