@@ -17,13 +17,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { money } from "@/lib/format";
 import { addHamaliLoad, updateHamaliLoad } from "./actions";
 
@@ -38,7 +31,6 @@ type Props =
       initialDate: string;
       initialBags: number;
       initialRatePerBag: number;
-      initialMode: "Cash" | "UPI";
       initialNote: string;
     };
 
@@ -54,9 +46,6 @@ export function HamaliLoadDialog(props: Props) {
   );
   const [rate, setRate] = useState(
     props.mode === "edit" ? String(props.initialRatePerBag) : "",
-  );
-  const [payMode, setPayMode] = useState<"Cash" | "UPI">(
-    props.mode === "edit" ? props.initialMode : "Cash",
   );
   const [note, setNote] = useState(props.mode === "edit" ? props.initialNote : "");
 
@@ -83,14 +72,12 @@ export function HamaliLoadDialog(props: Props) {
               date,
               bags: bagsNum,
               ratePerBag: rateNum,
-              mode: payMode,
               note: note.trim(),
             })
           : await addHamaliLoad({
               date,
               bags: bagsNum,
               ratePerBag: rateNum,
-              mode: payMode,
               note: note.trim(),
             });
       if (!res.ok) {
@@ -131,8 +118,9 @@ export function HamaliLoadDialog(props: Props) {
             {props.mode === "edit" ? "Edit hamali load entry" : "Record hamali for a load"}
           </DialogTitle>
           <DialogDescription>
-            For unloading an incoming load — set the rate per bag and number of bags; it&apos;s
-            added to Expenses (and the Daily ledger) as Hamali.
+            For unloading an incoming load — set the rate per bag and number of bags. This
+            just records it; it&apos;s paid together with the day&apos;s loaded hamali in
+            one combined payment at day&apos;s end.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -169,21 +157,6 @@ export function HamaliLoadDialog(props: Props) {
                 onChange={(e) => setRate(e.target.value)}
               />
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label>Paid by</Label>
-            <Select
-              value={payMode}
-              onValueChange={(v) => setPayMode((v as "Cash" | "UPI") ?? "Cash")}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>{(v) => (v as string) ?? "Cash"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Cash" label="Cash">Cash</SelectItem>
-                <SelectItem value="UPI" label="UPI">UPI</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="hl-note">Note (optional)</Label>

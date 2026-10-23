@@ -27,6 +27,9 @@ function revalidateHamali() {
   revalidatePath("/dashboard");
 }
 
+// Pays loaded (sale-bill) hamali and unloaded (incoming-load) hamali for the
+// date together, as one combined expense — the amount submitted is whatever
+// the "Hamali for a date" page showed as the combined total at click time.
 export async function payHamali(input: z.input<typeof paySchema>): Promise<Result> {
   const session = await requireOwnerOrEditor();
   const parsed = paySchema.safeParse(input);
@@ -34,13 +37,17 @@ export async function payHamali(input: z.input<typeof paySchema>): Promise<Resul
   const closed = await closedDateError(parsed.data.date);
   if (closed) return { ok: false, error: closed };
 
-  // Sum bags on that date's bills — used only for the note.
-  const [row] = await db
+  // Sum bags on both sides — used only for the note.
+  const [billRow] = await db
     .select({ bags: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int` })
     .from(schema.billItems)
     .innerJoin(schema.bills, eq(schema.billItems.billId, schema.bills.id))
     .where(sql`${schema.bills.date} = ${parsed.data.date} AND ${schema.bills.hamali}::numeric > 0`);
-  const bags = Number(row?.bags ?? 0);
+  const [loadRow] = await db
+    .select({ bags: sql<number>`coalesce(sum(${schema.hamaliLoads.bags}), 0)::int` })
+    .from(schema.hamaliLoads)
+    .where(eq(schema.hamaliLoads.date, parsed.data.date));
+  const bags = Number(billRow?.bags ?? 0) + Number(loadRow?.bags ?? 0);
 
   await db.transaction(async (tx) => {
     // Replace any existing hamali_paid row for this date (one per day).
@@ -59,7 +66,7 @@ export async function payHamali(input: z.input<typeof paySchema>): Promise<Resul
       .values({
         date: parsed.data.date,
         category: "Hamali",
-        note: bags > 0 ? `Hamali for ${bags} bags` : "Hamali",
+        note: bags > 0 ? `Hamali for ${bags} bags (loaded + unloaded)` : "Hamali",
         amount: parsed.data.amount.toString(),
         mode: parsed.data.mode,
         isHamali: true,
@@ -84,10 +91,11 @@ const loadSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   bags: z.number().int().positive(),
   ratePerBag: z.number().positive(),
-  mode: z.enum(["Cash", "UPI"]),
   note: z.string().max(300).optional(),
 });
 
+// Just records bags/rate for an incoming load — no payment yet. It's paid
+// together with the rest of the day's hamali via payHamali, above.
 export async function addHamaliLoad(input: z.input<typeof loadSchema>): Promise<Result> {
   const session = await requireOwnerOrEditor();
   const parsed = loadSchema.safeParse(input);
@@ -99,32 +107,13 @@ export async function addHamaliLoad(input: z.input<typeof loadSchema>): Promise<
 
   const amount = parsed.data.bags * parsed.data.ratePerBag;
 
-  await db.transaction(async (tx) => {
-    const [expense] = await tx
-      .insert(schema.expenses)
-      .values({
-        date: parsed.data.date,
-        category: "Hamali",
-        note:
-          parsed.data.note ||
-          `Hamali for ${parsed.data.bags} bags (load) @ ${parsed.data.ratePerBag}/bag`,
-        amount: amount.toString(),
-        mode: parsed.data.mode,
-        isHamali: true,
-        createdBy: session.user.id,
-      })
-      .returning({ id: schema.expenses.id });
-
-    await tx.insert(schema.hamaliLoads).values({
-      date: parsed.data.date,
-      bags: parsed.data.bags,
-      ratePerBag: parsed.data.ratePerBag.toString(),
-      amount: amount.toString(),
-      mode: parsed.data.mode,
-      note: parsed.data.note || null,
-      expenseId: expense.id,
-      createdBy: session.user.id,
-    });
+  await db.insert(schema.hamaliLoads).values({
+    date: parsed.data.date,
+    bags: parsed.data.bags,
+    ratePerBag: parsed.data.ratePerBag.toString(),
+    amount: amount.toString(),
+    note: parsed.data.note || null,
+    createdBy: session.user.id,
   });
 
   revalidateHamali();
@@ -156,31 +145,16 @@ export async function updateHamaliLoad(
 
   const amount = parsed.data.bags * parsed.data.ratePerBag;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(schema.expenses)
-      .set({
-        date: parsed.data.date,
-        note:
-          parsed.data.note ||
-          `Hamali for ${parsed.data.bags} bags (load) @ ${parsed.data.ratePerBag}/bag`,
-        amount: amount.toString(),
-        mode: parsed.data.mode,
-      })
-      .where(eq(schema.expenses.id, existing.expenseId));
-
-    await tx
-      .update(schema.hamaliLoads)
-      .set({
-        date: parsed.data.date,
-        bags: parsed.data.bags,
-        ratePerBag: parsed.data.ratePerBag.toString(),
-        amount: amount.toString(),
-        mode: parsed.data.mode,
-        note: parsed.data.note || null,
-      })
-      .where(eq(schema.hamaliLoads.id, parsed.data.id));
-  });
+  await db
+    .update(schema.hamaliLoads)
+    .set({
+      date: parsed.data.date,
+      bags: parsed.data.bags,
+      ratePerBag: parsed.data.ratePerBag.toString(),
+      amount: amount.toString(),
+      note: parsed.data.note || null,
+    })
+    .where(eq(schema.hamaliLoads.id, parsed.data.id));
 
   revalidateHamali();
   return { ok: true };
@@ -195,13 +169,7 @@ export async function deleteHamaliLoad(
   const parsed = idSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid entry." };
 
-  const existing = await db.query.hamaliLoads.findFirst({
-    where: eq(schema.hamaliLoads.id, parsed.data.id),
-  });
-  if (!existing) return { ok: true };
-
-  // Deletes the hamali_loads row too via its ON DELETE CASCADE to expenses.
-  await db.delete(schema.expenses).where(eq(schema.expenses.id, existing.expenseId));
+  await db.delete(schema.hamaliLoads).where(eq(schema.hamaliLoads.id, parsed.data.id));
 
   revalidateHamali();
   return { ok: true };
