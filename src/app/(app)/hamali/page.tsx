@@ -9,6 +9,7 @@ import {
   getHamaliLoadsForDate,
   getHamaliPaidForDate,
   getRecentHamaliDays,
+  getZeroHamaliSaleBillsForDate,
 } from "@/lib/queries-hamali";
 import { fmtDate, money, pad2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
@@ -16,6 +17,7 @@ import { DateFilter } from "@/components/date-filter";
 import { HamaliPayDialog, HamaliUndoButton } from "./hamali-pay";
 import { HamaliLoadDialog } from "./hamali-load-dialog";
 import { DeleteHamaliLoadButton } from "./delete-hamali-load-button";
+import { SetSaleHamaliDialog } from "./set-sale-hamali-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +30,12 @@ export default async function HamaliPage({ searchParams }: Props) {
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
 
-  const [h, paid, recent, loads] = await Promise.all([
+  const [h, paid, recent, loads, zeroHamaliBills] = await Promise.all([
     getHamaliForDate(date),
     getHamaliPaidForDate(date),
     getRecentHamaliDays(14),
     getHamaliLoadsForDate(date),
+    getZeroHamaliSaleBillsForDate(date),
   ]);
   const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
   const loadsTotal = loads.reduce((s, l) => s + Number(l.amount), 0);
@@ -145,6 +148,32 @@ export default async function HamaliPage({ searchParams }: Props) {
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {zeroHamaliBills.length > 0 && (
+              <div className="mt-3 rounded-lg border border-dashed p-3">
+                <div className="text-xs font-medium text-muted-foreground mb-2">
+                  Sale bills on this date with no hamali set yet
+                </div>
+                <div className="space-y-2">
+                  {zeroHamaliBills.map((b) => {
+                    const label = `${b.kind === "gst" ? "GST " : "P "}${pad2(b.no)}${b.loc === "NM" ? " (NM)" : ""} · ${b.customer}`;
+                    return (
+                      <div
+                        key={b.id}
+                        className="flex items-center justify-between gap-2 text-sm"
+                      >
+                        <span>
+                          {label} <span className="text-muted-foreground">({b.bags} bags)</span>
+                        </span>
+                        {isPrivileged && (
+                          <SetSaleHamaliDialog billId={b.id} label={label} bags={b.bags} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
