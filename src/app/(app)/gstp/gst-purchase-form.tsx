@@ -238,7 +238,7 @@ export function GstPurchaseForm({
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="gp-date">Entry date</Label>
               <Input
@@ -387,7 +387,7 @@ export function GstPurchaseForm({
               </p>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Lot (bags are added to its stock)</Label>
                 <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
@@ -467,7 +467,7 @@ export function GstPurchaseForm({
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-end">
+          <div className="grid gap-4 sm:grid-cols-2 items-end">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -509,7 +509,7 @@ export function GstPurchaseForm({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2">
             <SumCell
               label="Bags · kg"
               value={`${calc.bagsTotal} · ${calc.kgTotal}`}
