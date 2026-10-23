@@ -31,16 +31,16 @@ export function BagWeightsList({ lines }: { lines: Line[] }) {
               {withWeights.length > 1 && (
                 <div className="font-medium mb-0.5">{l.label}</div>
               )}
-              <div className="flex flex-wrap gap-x-4">
+              <div className="flex flex-wrap items-start gap-x-4">
                 {columns.map((col, ci) => (
                   <table key={ci} className="border-collapse break-inside-avoid">
                     <tbody>
                       {col.map((w, bi) => (
                         <tr key={bi}>
-                          <td className="pr-2 text-gray-500">
+                          <td className="text-right text-gray-500 w-5">
                             {ci * ROWS_PER_COLUMN + bi + 1}.
                           </td>
-                          <td className="text-right tabular-nums">{r2(w)}</td>
+                          <td className="pl-2 text-left tabular-nums">{r2(w)}</td>
                         </tr>
                       ))}
                     </tbody>
