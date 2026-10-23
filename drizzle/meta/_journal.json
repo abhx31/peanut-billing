@@ -113,6 +113,13 @@
       "when": 1792600000000,
       "tag": "0015_patti_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0016_per_store_bill_numbering",
+      "breakpoints": true
     }
   ]
 }

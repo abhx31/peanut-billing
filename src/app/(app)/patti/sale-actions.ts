@@ -76,9 +76,10 @@ export async function saveSalePatti(
         }
       }
 
-      // Sale patti uses its OWN 01..NN series per FY (kind='psale').
+      // Sale patti uses its OWN 01..NN series per FY (kind='psale'), separate
+      // per store.
       const noRes = await tx.execute<{ no: number }>(
-        sql`select coalesce(max(no), 0) + 1 as no from bills where fy = ${fy} and kind = 'psale'`,
+        sql`select next_bill_no_for_loc(${fy}, 'psale', ${loc === "NM" ? "NM" : "MS"}) as no`,
       );
       const no = noRes.rows[0].no;
 

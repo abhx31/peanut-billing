@@ -156,7 +156,14 @@ export const bills = pgTable(
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("bills_kind_fy_no_uq").on(t.kind, t.fy, t.no)],
+  (t) => [
+    uniqueIndex("bills_kind_loc_fy_no_uq").on(
+      t.kind,
+      sql`coalesce(${t.loc}, 'MS')`,
+      t.fy,
+      t.no,
+    ),
+  ],
 );
 
 export const billItems = pgTable("bill_items", {
