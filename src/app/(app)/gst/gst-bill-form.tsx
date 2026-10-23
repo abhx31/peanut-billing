@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, parseBagWeights, r2, today } from "@/lib/format";
 import type { GstProfile } from "@/lib/gst-types";
 import { saveGstBill } from "./actions";
@@ -97,6 +98,9 @@ export function GstBillForm({
   const [rate, setRate] = useState("");
   const [amountOverride, setAmountOverride] = useState("");
 
+  const [hamaliOn, setHamaliOn] = useState(true);
+  const [hamaliRate, setHamaliRate] = useState("10");
+
   const [credit, setCredit] = useState(false);
   const [cash, setCash] = useState("");
   const [upi, setUpi] = useState("");
@@ -144,6 +148,7 @@ export function GstBillForm({
   );
 
   const calc = useMemo(() => {
+    const bagsTotal = items.reduce((s, i) => s + i.bags, 0);
     const taxable = r2(items.reduce((s, i) => s + i.amount, 0));
     const taxTotal = r2((taxable * num(gstPercent)) / 100);
     const cgst = intra ? r2(taxTotal / 2) : 0;
@@ -152,6 +157,8 @@ export function GstBillForm({
     const preRound = r2(taxable + cgst + sgst + igst);
     const total = Math.round(preRound);
     const roundOff = r2(total - preRound);
+    // On us — tracked for the Hamali tab only, never part of the invoice total.
+    const hamali = hamaliOn ? r2(bagsTotal * num(hamaliRate)) : 0;
     const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(total - paid);
     const profit = lotCosts
@@ -163,6 +170,7 @@ export function GstBillForm({
         )
       : null;
     return {
+      bagsTotal,
       taxable,
       taxTotal,
       cgst,
@@ -171,11 +179,12 @@ export function GstBillForm({
       preRound,
       total,
       roundOff,
+      hamali,
       paid,
       balance,
       profit,
     };
-  }, [items, gstPercent, intra, credit, cash, upi, cj, lotCosts]);
+  }, [items, gstPercent, intra, hamaliOn, hamaliRate, credit, cash, upi, cj, lotCosts]);
 
   function clearCurrentLine() {
     setBags("");
@@ -201,6 +210,8 @@ export function GstBillForm({
   function reset() {
     setCart([]);
     clearCurrentLine();
+    setHamaliOn(true);
+    setHamaliRate("10");
     setCash("");
     setUpi("");
     setCj("");
@@ -232,6 +243,7 @@ export function GstBillForm({
           rate: it.rate,
           amountOverride: it.amount,
         })),
+        hamaliPerBag: hamaliOn ? num(hamaliRate) : 0,
         header: {
           ewb: ewb.trim(),
           veh: veh.trim(),
@@ -599,6 +611,13 @@ export function GstBillForm({
             </Button>
           </div>
 
+          <HamaliOnUsField
+            on={hamaliOn}
+            onToggle={setHamaliOn}
+            ratePerBag={hamaliRate}
+            onRateChange={setHamaliRate}
+          />
+
           <div className="grid gap-4 sm:grid-cols-2 items-end">
             <div className="space-y-2">
               <Label>GST rate</Label>
@@ -699,6 +718,9 @@ export function GstBillForm({
               <SumCell label={`IGST ${gstPercent}%`} value={money(calc.igst)} />
             )}
             <SumCell label="Round off" value={money(calc.roundOff)} />
+            {hamaliOn && (
+              <SumCell label="Hamali (on us, not billed)" value={money(calc.hamali)} />
+            )}
             <SumCell label="Total" value={money(calc.total)} strong />
             <SumCell
               label="Balance"

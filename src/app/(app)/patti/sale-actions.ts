@@ -26,6 +26,7 @@ const saveSchema = z.object({
   brRate: z.number().min(0).default(0),
   brSign: z.union([z.literal(1), z.literal(-1)]).default(1),
   transport: z.number().min(0).default(0),
+  hamaliPerBag: z.number().min(0).default(0),
   payCash: z.number().min(0).default(0),
   payUpi: z.number().min(0).default(0),
   payCj: z.number().min(0).default(0),
@@ -59,6 +60,9 @@ export async function saveSalePatti(
   // surfaces on the print as a Round Off line.
   const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
   const total = net;
+  // Hamali the firm absorbs itself — tracked for the Hamali tab only, never
+  // added to what the buyer owes (net/total above are unaffected).
+  const hamali = r2(bagsTotal * d.hamaliPerBag);
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -92,8 +96,8 @@ export async function saveSalePatti(
           date: d.date,
           customer: d.buyer,
           loc: loc === "NM" ? "NM" : "MS",
-          hamaliPerBag: "0",
-          hamali: "0",
+          hamaliPerBag: d.hamaliPerBag.toString(),
+          hamali: hamali.toString(),
           gstPercent: "0",
           gst: "0",
           amount: amount.toString(),
@@ -212,6 +216,7 @@ export async function getSalePattiForEdit(billId: string) {
     brRate: patti.brRate ?? 0,
     brSign: patti.brSign ?? 1,
     transport: patti.transport ?? 0,
+    hamaliPerBag: Number(bill.hamaliPerBag ?? 0),
   };
 }
 
@@ -235,6 +240,7 @@ const editSaleSchema = z.object({
   brRate: z.number().min(0).default(0),
   brSign: z.union([z.literal(1), z.literal(-1)]).default(1),
   transport: z.number().min(0).default(0),
+  hamaliPerBag: z.number().min(0).default(0),
 });
 
 /**
@@ -294,6 +300,7 @@ export async function updateSalePatti(
   const labor = r2(bagsTotal * d.labRate);
   const broker = r2(bagsTotal * d.brRate);
   const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+  const hamali = r2(bagsTotal * d.hamaliPerBag);
 
   try {
     await db.transaction(async (tx) => {
@@ -338,6 +345,8 @@ export async function updateSalePatti(
       const update: Record<string, unknown> = {
         amount: amount.toString(),
         total: net.toString(),
+        hamaliPerBag: d.hamaliPerBag.toString(),
+        hamali: hamali.toString(),
         patti: {
           cdPct: d.cdPct,
           cd,

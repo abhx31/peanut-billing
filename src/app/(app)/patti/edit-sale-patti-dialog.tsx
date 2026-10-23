@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PattiAdjustmentsFields } from "@/components/patti-adjustments-fields";
+import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
 import { getSalePattiForEdit, updateSalePatti } from "./sale-actions";
 
@@ -64,6 +65,8 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
   const [brSign, setBrSign] = useState<1 | -1>(1);
   const [transportOn, setTransportOn] = useState(false);
   const [transport, setTransport] = useState("");
+  const [hamaliOn, setHamaliOn] = useState(false);
+  const [hamaliRate, setHamaliRate] = useState("");
 
   const [newLotId, setNewLotId] = useState(lots[0]?.id ?? "");
   const [newBags, setNewBags] = useState("");
@@ -102,6 +105,8 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
     setBrSign(data.brSign);
     setTransportOn(data.transport > 0);
     setTransport(data.transport > 0 ? String(data.transport) : "");
+    setHamaliOn(data.hamaliPerBag > 0);
+    setHamaliRate(data.hamaliPerBag > 0 ? String(data.hamaliPerBag) : "");
   }
 
   function onNewWeights(v: string) {
@@ -155,6 +160,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
   const broker = brOn ? r2(bagsTotal * (num(brRate) || 0)) : 0;
   const trans = transportOn ? num(transport) || 0 : 0;
   const net = Math.round(amount - cd - labor + brSign * broker - trans);
+  const hamali = hamaliOn ? r2(bagsTotal * (num(hamaliRate) || 0)) : 0;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -196,6 +202,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
         brRate: brOn ? num(brRate) : 0,
         brSign,
         transport: trans,
+        hamaliPerBag: hamaliOn ? num(hamaliRate) || 0 : 0,
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -436,11 +443,24 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
               />
             </div>
 
+            <HamaliOnUsField
+              on={hamaliOn}
+              onToggle={setHamaliOn}
+              ratePerBag={hamaliRate}
+              onRateChange={setHamaliRate}
+            />
+
             <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Amount</span>
                 <span className="tabular-nums">{money(amount)}</span>
               </div>
+              {hamaliOn && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Hamali (on us, not billed)</span>
+                  <span className="tabular-nums">{money(hamali)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-semibold">
                 <span>New net receivable</span>
                 <span className="tabular-nums">{money(net)}</span>

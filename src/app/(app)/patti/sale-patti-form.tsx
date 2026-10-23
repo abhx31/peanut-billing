@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormSection, FormGrid, Field, FormActions } from "@/components/form";
+import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
 import { saveSalePatti } from "./sale-actions";
 
@@ -60,6 +61,8 @@ export function SalePattiForm({ lots, customers }: Props) {
   const [brSign, setBrSign] = useState<1 | -1>(1);
   const [transportOn, setTransportOn] = useState(false);
   const [transport, setTransport] = useState("");
+  const [hamaliOn, setHamaliOn] = useState(true);
+  const [hamaliRate, setHamaliRate] = useState("10");
   const [credit, setCredit] = useState(false);
   const [cash, setCash] = useState("");
   const [upi, setUpi] = useState("");
@@ -107,10 +110,29 @@ export function SalePattiForm({ lots, customers }: Props) {
     const broker = brOn ? r2(bagsTotal * num(brRate)) : 0;
     const trans = transportOn ? num(transport) : 0;
     const net = r2(amount - cd - labor + brSign * broker - trans);
+    // On us — tracked for the Hamali tab only, never part of net/balance.
+    const hamali = hamaliOn ? r2(bagsTotal * num(hamaliRate)) : 0;
     const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(net - paid);
-    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, net, paid, balance };
-  }, [items, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport, credit, cash, upi, cj]);
+    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, hamali, net, paid, balance };
+  }, [
+    items,
+    cdOn,
+    cdPct,
+    labOn,
+    labRate,
+    brOn,
+    brRate,
+    brSign,
+    transportOn,
+    transport,
+    hamaliOn,
+    hamaliRate,
+    credit,
+    cash,
+    upi,
+    cj,
+  ]);
 
   function clearCurrentLine() {
     setBags("");
@@ -181,6 +203,7 @@ export function SalePattiForm({ lots, customers }: Props) {
         brRate: brOn ? num(brRate) : 0,
         brSign,
         transport: transportOn ? num(transport) : 0,
+        hamaliPerBag: hamaliOn ? num(hamaliRate) : 0,
         payCash: credit ? 0 : num(cash),
         payUpi: credit ? 0 : num(upi),
         payCj: credit ? 0 : num(cj),
@@ -202,6 +225,8 @@ export function SalePattiForm({ lots, customers }: Props) {
       setBrSign(1);
       setTransportOn(false);
       setTransport("");
+      setHamaliOn(true);
+      setHamaliRate("10");
       setCash("");
       setUpi("");
       setCj("");
@@ -365,6 +390,14 @@ export function SalePattiForm({ lots, customers }: Props) {
             </label>
           </Field>
         </FormGrid>
+        <div className="mt-3">
+          <HamaliOnUsField
+            on={hamaliOn}
+            onToggle={setHamaliOn}
+            ratePerBag={hamaliRate}
+            onRateChange={setHamaliRate}
+          />
+        </div>
       </FormSection>
 
       <FormSection title="Payment" description="How the buyer paid for the sale net (or leave on credit)." compact>
@@ -408,6 +441,9 @@ export function SalePattiForm({ lots, customers }: Props) {
             <SumCell label={`Brokerage (${brSign === 1 ? "+" : "−"})`} value={money(calc.broker)} />
           )}
           {transportOn && <SumCell label="Transport (−)" value={money(calc.trans)} />}
+          {hamaliOn && (
+            <SumCell label="Hamali (on us, not billed)" value={money(calc.hamali)} />
+          )}
           <SumCell label="Net receivable" value={money(calc.net)} strong />
           <SumCell label="Balance" value={money(calc.balance)} danger={calc.balance > 0.5} />
         </div>

@@ -31,6 +31,7 @@ const saveGstBillSchema = z.object({
   consigneeId: z.string().uuid().optional(),
   gstPercent: z.number().min(0).max(28),
   items: z.array(itemSchema).min(1),
+  hamaliPerBag: z.number().min(0).default(0),
   header: z.object({
     ewb: z.string().trim().max(80).optional().default(""),
     veh: z.string().trim().max(80).optional().default(""),
@@ -121,6 +122,9 @@ export async function saveGstBill(
     igst: intra ? undefined : igst,
     roundOff,
   };
+  // Hamali the firm absorbs itself — tracked for the Hamali tab only, never
+  // added to the invoice total above.
+  const hamali = r2(totalBags * d.hamaliPerBag);
 
   const buyerSnap: PartySnapshot = {
     name: buyer.name,
@@ -179,8 +183,8 @@ export async function saveGstBill(
           date: d.date,
           customer: buyer.name,
           loc: null,
-          hamaliPerBag: "0",
-          hamali: "0",
+          hamaliPerBag: d.hamaliPerBag.toString(),
+          hamali: hamali.toString(),
           gstPercent: d.gstPercent.toString(),
           gst: taxTotal.toString(),
           amount: taxable.toString(),
@@ -241,7 +245,6 @@ export async function saveGstBill(
       }
       if (payRows.length) await tx.insert(schema.payments).values(payRows);
 
-      void totalBags;
       return { billId: bill.id, no };
     });
 
@@ -276,6 +279,7 @@ export async function getGstBillForEdit(billId: string) {
     date: bill.date,
     buyerName: buyer.name ?? bill.customer,
     gstPercent: Number(bill.gstPercent),
+    hamaliPerBag: Number(bill.hamaliPerBag ?? 0),
     items: bill.items
       .sort((a, b) => a.position - b.position)
       .map((it) => ({
@@ -325,6 +329,7 @@ const editGstBillSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   gstPercent: z.number().min(0).max(28),
   items: z.array(editItemSchema).min(1),
+  hamaliPerBag: z.number().min(0).default(0),
   header: z.object({
     ewb: z.string().trim().max(80).optional().default(""),
     veh: z.string().trim().max(80).optional().default(""),
@@ -397,6 +402,8 @@ export async function updateGstBill(
     (seller.stateCode ?? "").toString().trim() === (buyer.stateCode ?? "").toString().trim();
 
   const items = d.items.map((it) => ({ ...it, amount: r2(it.kg * it.rate) }));
+  const totalBags = items.reduce((s, it) => s + it.bags, 0);
+  const hamali = r2(totalBags * d.hamaliPerBag);
   const taxable = r2(items.reduce((s, it) => s + it.amount, 0));
   const taxTotal = r2((taxable * d.gstPercent) / 100);
   const cgst = intra ? r2(taxTotal / 2) : 0;
@@ -482,6 +489,8 @@ export async function updateGstBill(
         gst: taxTotal.toString(),
         amount: taxable.toString(),
         total: total.toString(),
+        hamaliPerBag: d.hamaliPerBag.toString(),
+        hamali: hamali.toString(),
         headerExtras,
         taxBreakdown,
       };
