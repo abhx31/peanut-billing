@@ -249,7 +249,7 @@ export function EditPattiDialog({ pattiId, pattiNo, lotNameSuggestions }: Props)
             <div className="space-y-3">
               {rows.map((r) => (
                 <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label htmlFor={`ep-lot-${r.key}`}>Lot / quality</Label>
                       <Input
@@ -326,7 +326,7 @@ export function EditPattiDialog({ pattiId, pattiNo, lotNameSuggestions }: Props)
 
             <div className="rounded-lg border p-3 space-y-2">
               <div className="text-sm font-medium">+ Add another lot</div>
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="ep-new-lot">Lot / quality</Label>
                   <Input
