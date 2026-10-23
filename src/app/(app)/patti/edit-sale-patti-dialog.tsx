@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PattiAdjustmentsFields } from "@/components/patti-adjustments-fields";
 import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
 import { getSalePattiForEdit, updateSalePatti } from "./sale-actions";
 
@@ -222,7 +223,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit sale patti P {pad2(billNo)}</DialogTitle>
           <DialogDescription>
@@ -256,7 +257,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+            <div className="space-y-3">
               {rows.map((r) => (
                 <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
                   <div className="grid gap-3 sm:grid-cols-4">
@@ -413,73 +414,26 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
 
             <div className="rounded-lg border p-3 space-y-2">
               <div className="text-sm font-medium">Adjustments</div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={cdOn} onChange={(e) => setCdOn(e.target.checked)} />
-                  CD %
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={cdPct}
-                    onChange={(e) => setCdPct(e.target.value)}
-                    disabled={!cdOn}
-                    className="w-20"
-                  />
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={labOn} onChange={(e) => setLabOn(e.target.checked)} />
-                  Labour ₹/bag
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={labRate}
-                    onChange={(e) => setLabRate(e.target.value)}
-                    disabled={!labOn}
-                    className="w-20"
-                  />
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={brOn} onChange={(e) => setBrOn(e.target.checked)} />
-                  Brokerage ₹/bag
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={brRate}
-                    onChange={(e) => setBrRate(e.target.value)}
-                    disabled={!brOn}
-                    className="w-20"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setBrSign((s) => (s === 1 ? -1 : 1))}
-                    disabled={!brOn}
-                  >
-                    {brSign === 1 ? "+ Add" : "− Deduct"}
-                  </Button>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={transportOn}
-                    onChange={(e) => setTransportOn(e.target.checked)}
-                  />
-                  Transport ₹
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={transport}
-                    onChange={(e) => setTransport(e.target.value)}
-                    disabled={!transportOn}
-                    className="w-24"
-                  />
-                </label>
-              </div>
+              <PattiAdjustmentsFields
+                cdOn={cdOn}
+                setCdOn={setCdOn}
+                cdPct={cdPct}
+                setCdPct={setCdPct}
+                labOn={labOn}
+                setLabOn={setLabOn}
+                labRate={labRate}
+                setLabRate={setLabRate}
+                brOn={brOn}
+                setBrOn={setBrOn}
+                brRate={brRate}
+                setBrRate={setBrRate}
+                brSign={brSign}
+                setBrSign={setBrSign}
+                transportOn={transportOn}
+                setTransportOn={setTransportOn}
+                transport={transport}
+                setTransport={setTransport}
+              />
             </div>
 
             <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
