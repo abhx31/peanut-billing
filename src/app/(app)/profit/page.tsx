@@ -46,7 +46,8 @@ export default async function ProfitPage({ searchParams }: Props) {
   const sales = bills.reduce((s, b) => s + b.amount, 0);
   const exp = scopedExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
-  // Day-wise profit — group bills + non-hamali expenses by date.
+  // Day-wise profit — group bills + expenses by date (matches the top
+  // "Expenses" tile, which also includes Hamali).
   const byDayMap = new Map<
     string,
     { bills: number; bags: number; sales: number; profit: number; exp: number }
@@ -66,7 +67,6 @@ export default async function ProfitPage({ searchParams }: Props) {
     byDayMap.set(b.date, row);
   }
   for (const e of scopedExpenses) {
-    if (e.isHamali) continue;
     const row = byDayMap.get(e.date) ?? {
       bills: 0,
       bags: 0,
