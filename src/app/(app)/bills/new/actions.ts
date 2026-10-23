@@ -104,7 +104,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
       );
 
       const noResult = await tx.execute<{ no: number }>(
-        sql`select next_bill_no(${fy}, 'normal') as no`,
+        sql`select next_bill_no_for_loc(${fy}, 'normal', ${loc === "NM" ? "NM" : "MS"}) as no`,
       );
       const no = noResult.rows[0].no;
 
