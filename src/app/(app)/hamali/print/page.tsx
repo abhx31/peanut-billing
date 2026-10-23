@@ -102,7 +102,6 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
               <th className="text-right border-b border-gray-500 py-1">Bags</th>
               <th className="text-right border-b border-gray-500 py-1">₹ / bag</th>
               <th className="text-right border-b border-gray-500 py-1">Amount</th>
-              <th className="text-left border-b border-gray-500 py-1">Paid by</th>
               <th className="text-left border-b border-gray-500 py-1">Note</th>
             </tr>
           </thead>
@@ -112,7 +111,6 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
                 <td className="py-1 text-right">{l.bags}</td>
                 <td className="py-1 text-right">{money(l.ratePerBag)}</td>
                 <td className="py-1 text-right">{money(l.amount)}</td>
-                <td className="py-1">{l.mode}</td>
                 <td className="py-1">{l.note || "—"}</td>
               </tr>
             ))}
@@ -122,7 +120,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
               <td className="py-1 text-right border-t border-gray-500">
                 {money(loadsTotal)}
               </td>
-              <td className="border-t border-gray-500" colSpan={2} />
+              <td className="border-t border-gray-500" />
             </tr>
           </tbody>
         </table>
@@ -135,16 +133,11 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
         <div className="font-bold text-base">Total hamali: {money(totalAmount)}</div>
         {paid ? (
           <div>
-            Loaded hamali paid: <b>{money(paid.amount)}</b> ({paid.mode})
+            Hamali paid: <b>{money(paid.amount)}</b> ({paid.mode})
             {paid.date ? ` on ${fmtDate(paid.date)}` : ""}
           </div>
         ) : (
-          h.totalAmount > 0 && (
-            <div className="font-semibold">Loaded hamali not paid yet</div>
-          )
-        )}
-        {loads.length > 0 && (
-          <div>Unloaded hamali is paid at the time each load is logged.</div>
+          totalAmount > 0 && <div className="font-semibold">Not paid yet</div>
         )}
       </div>
 

@@ -16,7 +16,7 @@ export function DeleteHamaliLoadButton({
   return (
     <ConfirmDestructive
       title="Delete this hamali load entry?"
-      description={`Removes the matching ${money(amount)} expense too. Your cash/UPI balance goes back up by this amount on that day.`}
+      description={`Removes this ${money(amount)} load from the day's hamali total. If that day's hamali has already been paid, you'll need to Undo and pay again to reflect the change.`}
       confirmLabel="Delete entry"
       successMessage="Hamali load entry deleted"
       onConfirm={() => deleteHamaliLoad({ id })}

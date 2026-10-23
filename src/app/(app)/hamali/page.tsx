@@ -41,7 +41,7 @@ export default async function HamaliPage({ searchParams }: Props) {
 
   const outstanding = recent
     .filter((r) => !r.paid)
-    .reduce((s, r) => s + r.loadedAmount, 0);
+    .reduce((s, r) => s + r.totalAmount, 0);
 
   return (
     <div className="space-y-6">
@@ -69,10 +69,10 @@ export default async function HamaliPage({ searchParams }: Props) {
               ["Total bags", String(totalBags)],
               ["Hamali — total", money(totalAmount)],
               [
-                "Loaded hamali — status",
+                "Status",
                 paid
                   ? `Paid ${money(paid.amount)} (${paid.mode})`
-                  : h.totalAmount > 0
+                  : totalAmount > 0
                     ? "Not paid yet"
                     : "—",
               ],
@@ -80,21 +80,17 @@ export default async function HamaliPage({ searchParams }: Props) {
           />
           {isPrivileged && (
             <div className="flex gap-2">
-              {h.totalAmount > 0 && !paid && (
-                <HamaliPayDialog
-                  date={date}
-                  bags={h.totalBags}
-                  amount={h.totalAmount}
-                />
+              {totalAmount > 0 && !paid && (
+                <HamaliPayDialog date={date} bags={totalBags} amount={totalAmount} />
               )}
               {paid && <HamaliUndoButton date={date} />}
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Loaded hamali (sale bills) is paid in one go above. Unloaded hamali
-            (incoming loads, below) is paid at the time each load is logged. Both add
-            to Expenses as <b>Hamali</b>, so your cash or UPI balance goes down —
-            kept separate from business profit.
+            Loaded (sale bills) and unloaded (incoming loads, below) hamali are paid
+            together in one go, using the button above. It adds to Expenses as{" "}
+            <b>Hamali</b>, so your cash or UPI balance goes down — kept separate from
+            business profit.
           </p>
         </CardContent>
       </Card>
@@ -170,7 +166,6 @@ export default async function HamaliPage({ searchParams }: Props) {
                       <th className="py-2 pr-4 text-right">Bags</th>
                       <th className="py-2 pr-4 text-right">₹ / bag</th>
                       <th className="py-2 pr-4 text-right">Amount</th>
-                      <th className="py-2 pr-4">Paid by</th>
                       <th className="py-2 pr-4">Note</th>
                       {isPrivileged && <th className="py-2 pr-0" />}
                     </tr>
@@ -181,7 +176,6 @@ export default async function HamaliPage({ searchParams }: Props) {
                         <td className="py-2 pr-4 text-right">{l.bags}</td>
                         <td className="py-2 pr-4 text-right">{money(l.ratePerBag)}</td>
                         <td className="py-2 pr-4 text-right">{money(l.amount)}</td>
-                        <td className="py-2 pr-4">{l.mode}</td>
                         <td className="py-2 pr-4 text-xs text-muted-foreground">
                           {l.note || "—"}
                         </td>
@@ -194,7 +188,6 @@ export default async function HamaliPage({ searchParams }: Props) {
                                 initialDate={l.date}
                                 initialBags={l.bags}
                                 initialRatePerBag={Number(l.ratePerBag)}
-                                initialMode={l.mode as "Cash" | "UPI"}
                                 initialNote={l.note ?? ""}
                               />
                               <DeleteHamaliLoadButton id={l.id} amount={l.amount} />
@@ -207,7 +200,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                       <td className="py-2 pr-4" />
                       <td className="py-2 pr-4" />
                       <td className="py-2 pr-4 text-right">{money(loadsTotal)}</td>
-                      <td className="py-2 pr-4" colSpan={isPrivileged ? 3 : 2} />
+                      <td className="py-2 pr-4" colSpan={isPrivileged ? 2 : 1} />
                     </tr>
                   </tbody>
                 </table>
@@ -228,7 +221,7 @@ export default async function HamaliPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle>Recent days</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Outstanding (loaded hamali not paid yet): <b>{money(outstanding)}</b>
+            Outstanding (not paid yet): <b>{money(outstanding)}</b>
           </p>
         </CardHeader>
         <CardContent>
@@ -244,7 +237,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                     <th className="py-2 pr-4 text-right">Unloaded bags</th>
                     <th className="py-2 pr-4 text-right">Total bags</th>
                     <th className="py-2 pr-4 text-right">Hamali</th>
-                    <th className="py-2 pr-4">Loaded hamali paid</th>
+                    <th className="py-2 pr-4">Paid</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -273,7 +266,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                           >
                             {money(r.paid.amount)} ({r.paid.mode})
                           </Badge>
-                        ) : r.loadedAmount > 0 ? (
+                        ) : r.totalAmount > 0 ? (
                           <Badge variant="destructive" className="text-xs">
                             Not paid
                           </Badge>

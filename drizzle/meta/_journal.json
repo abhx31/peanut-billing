@@ -134,6 +134,13 @@
       "when": 1792900000000,
       "tag": "0018_hamali_loads",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793000000000,
+      "tag": "0019_hamali_loads_combined_pay",
+      "breakpoints": true
     }
   ]
 }
