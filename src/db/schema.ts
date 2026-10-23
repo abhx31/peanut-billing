@@ -279,6 +279,17 @@ export const cjSettlements = pgTable("cj_settlements", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+// Cash deposited into the bank: reduces Cash in hand, increases Bank/UPI, on
+// the given date. Deletable and editable like any other Daily ledger entry.
+export const cashDeposits = pgTable("cash_deposits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  date: date("date", { mode: "string" }).notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 // Hamali paid-out record per day (one per date). References the expense entry it created.
 export const hamaliPaid = pgTable("hamali_paid", {
   date: date("date", { mode: "string" }).primaryKey(),

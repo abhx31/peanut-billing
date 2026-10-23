@@ -11,6 +11,7 @@ import {
   CreditCard,
   FileText,
   HandCoins,
+  Landmark,
   LayoutDashboard,
   LineChart,
   Menu,
@@ -57,6 +58,7 @@ const ICONS = {
   gcust: UsersIcon,
   patti: ShoppingBasket,
   pattiPayments: CircleDollarSign,
+  cashDeposits: Landmark,
   profit: TrendingUp,
   settings: SettingsIcon,
 };
