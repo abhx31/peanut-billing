@@ -287,7 +287,7 @@ export function GstBillForm({
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="g-date">Date</Label>
               <Input
@@ -381,7 +381,7 @@ export function GstBillForm({
             <summary className="cursor-pointer text-sm font-semibold select-none">
               More invoice details (optional)
             </summary>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <HeaderField id="g-dn" label="Delivery note" value={dn} setValue={setDn} />
               <HeaderField
                 id="g-mp"
@@ -482,7 +482,7 @@ export function GstBillForm({
               </p>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Lot / quality (stock)</Label>
                 <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
@@ -599,7 +599,7 @@ export function GstBillForm({
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 items-end">
+          <div className="grid gap-4 sm:grid-cols-2 items-end">
             <div className="space-y-2">
               <Label>GST rate</Label>
               <Select value={gstPercent} onValueChange={(v) => setGstPercent(v ?? "5")}>
@@ -682,7 +682,7 @@ export function GstBillForm({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2">
             <SumCell label="Taxable value" value={money(calc.taxable)} />
             {intra ? (
               <>

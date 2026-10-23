@@ -444,7 +444,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
 
           <div>
             <h2 className="text-base font-semibold mb-2">Payment</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="cash">Paid cash (₹)</Label>
                 <Input
@@ -519,7 +519,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
             </p>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2">
             <SumCell
               label="Bags · kg"
               value={`${calc.totalBags} · ${r2(calc.totalKg)}`}

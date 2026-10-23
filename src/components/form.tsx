@@ -58,11 +58,15 @@ export function FormGrid({
   className?: string;
   children: React.ReactNode;
 }) {
+  // Capped at 2 columns regardless of `cols` — a 3rd/4th column only ever
+  // fit comfortably on very wide viewports, and on anything narrower the
+  // extra lg: tier squeezed fields down to the point labels wrapped and
+  // inputs went ragged. Two columns always gets each field real width.
   const colsClass = {
     1: "sm:grid-cols-1",
     2: "sm:grid-cols-2",
-    3: "sm:grid-cols-2 lg:grid-cols-3",
-    4: "sm:grid-cols-2 lg:grid-cols-4",
+    3: "sm:grid-cols-2",
+    4: "sm:grid-cols-2",
   }[cols];
   return <div className={cn("grid gap-4", colsClass, className)}>{children}</div>;
 }
