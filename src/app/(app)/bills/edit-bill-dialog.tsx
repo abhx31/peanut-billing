@@ -410,7 +410,7 @@ export function EditBillDialog({
                   onChange={(e) => setNewRate(e.target.value)}
                 />
               </div>
-              <div className="space-y-1 sm:col-span-4">
+              <div className="space-y-1 sm:col-span-2">
                 <Label htmlFor="eb-new-weights">Each bag&apos;s weight (optional)</Label>
                 <Textarea
                   id="eb-new-weights"

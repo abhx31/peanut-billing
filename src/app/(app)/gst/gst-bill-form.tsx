@@ -536,7 +536,7 @@ export function GstBillForm({
                   onChange={(e) => setBags(e.target.value)}
                 />
               </div>
-              <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="g-weights">
                   Weight of each bag (kg) – separate with space, comma or new line.
                   Same weight bags: 50x40.5

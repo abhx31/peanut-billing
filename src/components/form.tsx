@@ -89,14 +89,9 @@ export function Field({
   span?: 1 | 2 | 3 | "full";
   children: React.ReactNode;
 }) {
-  const spanClass =
-    span === "full"
-      ? "sm:col-span-2 lg:col-span-full"
-      : span === 2
-        ? "sm:col-span-2"
-        : span === 3
-          ? "sm:col-span-2 lg:col-span-3"
-          : undefined;
+  // FormGrid never exceeds 2 columns now, so span 2/3/"full" all mean the
+  // same thing: take the whole row.
+  const spanClass = span && span !== 1 ? "sm:col-span-2" : undefined;
   return (
     <div className={cn("space-y-1.5", spanClass)}>
       <Label htmlFor={htmlFor} className="text-sm font-medium">

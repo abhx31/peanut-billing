@@ -404,19 +404,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
                   </p>
                 )}
               </div>
-              <div className="space-y-2 sm:order-2">
-                <Label htmlFor="line-bags">No. of bags</Label>
-                <Input
-                  id="line-bags"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  value={bags}
-                  onChange={(e) => setBags(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2 sm:order-1">
+              <div className="space-y-2">
                 <Label htmlFor="line-kg">Total weight (kg)</Label>
                 <Input
                   id="line-kg"
@@ -426,6 +414,18 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
                   inputMode="decimal"
                   value={kg}
                   onChange={(e) => setKg(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="line-bags">No. of bags</Label>
+                <Input
+                  id="line-bags"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={bags}
+                  onChange={(e) => setBags(e.target.value)}
                 />
               </div>
             </div>
