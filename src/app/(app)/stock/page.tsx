@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
 import { getLotsWithStock, getStockHistory, getLotCosts, lotStockAt } from "@/lib/queries";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
@@ -38,6 +41,14 @@ export default async function StockPage() {
       <Card>
         <CardHeader>
           <CardTitle>Stock left · {storeName}</CardTitle>
+          <div>
+            <Link href="/stock/print" target="_blank">
+              <Button type="button" variant="outline" size="sm">
+                <Printer className="mr-2 h-4 w-4" />
+                Print stock left
+              </Button>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <SumGrid items={totals} />

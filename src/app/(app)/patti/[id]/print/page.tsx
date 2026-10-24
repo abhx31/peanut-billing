@@ -82,7 +82,7 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
         const multi = lines.length > 1;
         return (
           <>
-            <table className="w-full text-sm border-collapse mb-3">
+            <table className="print-table w-full text-sm border-collapse mb-3">
               <thead>
                 <tr>
                   <th className="text-left border-b border-gray-500 py-1">Item</th>
