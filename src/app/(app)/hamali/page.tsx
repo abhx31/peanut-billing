@@ -12,6 +12,7 @@ import {
   getZeroHamaliSaleBillsForDate,
 } from "@/lib/queries-hamali";
 import { fmtDate, money, pad2, today } from "@/lib/format";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { SumGrid } from "@/components/sum-grid";
 import { DateFilter } from "@/components/date-filter";
 import { HamaliPayDialog, HamaliUndoButton } from "./hamali-pay";
@@ -29,13 +30,14 @@ export default async function HamaliPage({ searchParams }: Props) {
   const session = await requireSession();
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
+  const loc = await getCurrentLoc();
 
   const [h, paid, recent, loads, zeroHamaliBills] = await Promise.all([
-    getHamaliForDate(date),
-    getHamaliPaidForDate(date),
-    getRecentHamaliDays(14),
-    getHamaliLoadsForDate(date),
-    getZeroHamaliSaleBillsForDate(date),
+    getHamaliForDate(date, loc),
+    getHamaliPaidForDate(date, loc),
+    getRecentHamaliDays(loc, 14),
+    getHamaliLoadsForDate(date, loc),
+    getZeroHamaliSaleBillsForDate(date, loc),
   ]);
   const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
   const loadsTotal = loads.reduce((s, l) => s + Number(l.amount), 0);
@@ -52,7 +54,7 @@ export default async function HamaliPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Scale className="h-4 w-4 text-primary" />
-            Hamali for a date
+            Hamali for a date · {locLabel(loc)}
           </CardTitle>
           <div className="flex items-end gap-3 flex-wrap">
             <DateFilter paramKey="d" value={date} />

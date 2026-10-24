@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
-import { getCurrentLoc } from "@/lib/loc";
+import { atLoc, getCurrentLoc } from "@/lib/loc";
 import { today } from "@/lib/format";
 import { customerKey } from "@/lib/queries";
 
@@ -64,7 +64,8 @@ const receiveFromCustomerSchema = z.object({
 });
 
 /**
- * Apply a receipt from a customer against their dues, oldest first:
+ * Apply a receipt from a customer against their dues WITH THE CURRENT STORE,
+ * oldest first (the other store's bills and dues are never touched):
  *   1. Open opening_dues (by date, then no — oldest first)
  *   2. Unpaid bills (by date, then number)
  *   3. Leftover becomes an "Advance received" opening row with amount=0,
@@ -90,8 +91,8 @@ export async function receiveFromCustomer(
 
   await db.transaction(async (tx) => {
     const key = customerKey(customer);
-    const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
-    const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+    const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key} AND ${atLoc(schema.bills.loc, loc)}`;
+    const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key} AND ${atLoc(schema.openingDues.loc, loc)}`;
 
     // 1) Opening dues, oldest first (by date, then creation order).
     const dues = await tx
@@ -177,6 +178,7 @@ export async function receiveFromCustomer(
           amount: "0",
           date: payDate,
           note: "Advance received",
+          loc: loc === "NM" ? "NM" : "MS",
           createdBy: session.user.id,
         })
         .returning({ id: schema.openingDues.id });

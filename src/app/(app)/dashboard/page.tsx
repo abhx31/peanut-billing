@@ -24,11 +24,12 @@ import {
   getLatestBills,
   getLotsWithStock,
   getSalesSeries,
+  lotStockAt,
 } from "@/lib/queries";
 import { getCjTotals } from "@/lib/queries-cj";
 import { getOldDuesSummary } from "@/lib/queries-recv";
 import { db, schema } from "@/db";
-import { getCurrentLoc, locLabel } from "@/lib/loc";
+import { atLoc, getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, today } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,58 +62,41 @@ export default async function DashboardPage() {
     dues,
     pattiUnpaidRow,
   ] = await Promise.all([
-    getBillsByDate(date, isOwner),
-    getAllPaymentsOnDate(date),
+    getBillsByDate(date, isOwner, loc),
+    getAllPaymentsOnDate(date, loc),
     getLotsWithStock(),
-    getCustomerBalances(),
-    cashBalanceBefore("Cash", futureAnchor),
-    cashBalanceBefore("UPI", futureAnchor),
-    getLatestBills(24, isOwner),
+    getCustomerBalances(loc),
+    cashBalanceBefore("Cash", futureAnchor, loc),
+    cashBalanceBefore("UPI", futureAnchor, loc),
+    getLatestBills(8, isOwner, loc),
     getSalesSeries(14, loc),
-    getCjTotals(),
-    getOldDuesSummary(),
+    getCjTotals(loc),
+    getOldDuesSummary(loc),
     isPrivileged
       ? db
           .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
           .from(schema.pattiBills)
-          .where(sql`${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = ''`)
+          .where(
+            sql`(${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = '') AND ${atLoc(schema.pattiBills.loc, loc)}`,
+          )
           .then((r) => r[0])
       : Promise.resolve(undefined),
   ]);
-  const latest = latestAll.filter((b) => b.loc === loc).slice(0, 8);
-  const billsHere = bills.filter((b) => b.loc === loc);
+  // Everything on this page is the current store's only.
+  const latest = latestAll;
+  const billsHere = bills;
 
-  function statsFor(loc: "MS" | "NM") {
-    const bs = bills.filter((b) => b.loc === loc);
-    const ps = paysToday.filter(
-      (p) => (p.billLoc === "NM" ? "NM" : "MS") === loc,
-    );
-    const sumPay = (m: "Cash" | "UPI" | "CJ") =>
-      ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
-    return {
-      bills: bs.length,
-      bags: bs.reduce((s, b) => s + b.bags, 0),
-      sales: bs.reduce((s, b) => s + b.total, 0),
-      cashIn: sumPay("Cash"),
-      upiIn: sumPay("UPI"),
-      cjIn: sumPay("CJ"),
-      creditGiven: bs.reduce((s, b) => s + b.balance, 0),
-      profit: isOwner ? bs.reduce((s, b) => s + (b.profit ?? 0), 0) : 0,
-    };
-  }
-  const storeRows: { name: string; stats: ReturnType<typeof statsFor> }[] = [
-    { name: "Main store", stats: statsFor("MS") },
-    { name: "New Mahavir", stats: statsFor("NM") },
-  ];
-  const storeTotals = {
-    bills: storeRows.reduce((s, r) => s + r.stats.bills, 0),
-    bags: storeRows.reduce((s, r) => s + r.stats.bags, 0),
-    sales: storeRows.reduce((s, r) => s + r.stats.sales, 0),
-    cashIn: storeRows.reduce((s, r) => s + r.stats.cashIn, 0),
-    upiIn: storeRows.reduce((s, r) => s + r.stats.upiIn, 0),
-    cjIn: storeRows.reduce((s, r) => s + r.stats.cjIn, 0),
-    creditGiven: storeRows.reduce((s, r) => s + r.stats.creditGiven, 0),
-    profit: storeRows.reduce((s, r) => s + r.stats.profit, 0),
+  const sumPay = (m: "Cash" | "UPI" | "CJ") =>
+    paysToday.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
+  const todayStats = {
+    bills: bills.length,
+    bags: bills.reduce((s, b) => s + b.bags, 0),
+    sales: bills.reduce((s, b) => s + b.total, 0),
+    cashIn: sumPay("Cash"),
+    upiIn: sumPay("UPI"),
+    cjIn: sumPay("CJ"),
+    creditGiven: bills.reduce((s, b) => s + b.balance, 0),
+    profit: isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0,
   };
 
   const pattiUnpaid = Number(pattiUnpaidRow?.s ?? 0);
@@ -128,11 +112,13 @@ export default async function DashboardPage() {
   const pendingCredit =
     balances.reduce((s, c) => s + c.balance, 0) + dues.outstanding;
   const dueCount = balances.filter((c) => c.balance > 0.5).length;
-  const totalBagsLeft = lots.reduce((s, l) => s + l.left, 0);
-  const stockM = lots.reduce((s, l) => s + l.stkM, 0);
-  const stockN = lots.reduce((s, l) => s + l.stkN, 0);
-  const lowStockLots = lots.filter((l) => l.left > 0 && l.left <= 5).length;
-  const outOfStock = lots.filter((l) => l.left <= 0).length;
+  // This store's stock only. Lots never stocked here aren't "out of stock" here.
+  const lotsHere = lots
+    .map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }))
+    .filter((l) => l.known);
+  const totalBagsLeft = lotsHere.reduce((s, l) => s + l.left, 0);
+  const lowStockLots = lotsHere.filter((l) => l.left > 0 && l.left <= 5).length;
+  const outOfStock = lotsHere.filter((l) => l.left <= 0).length;
   const salesLast14 = series.reduce((s, d) => s + d.total, 0);
 
   return (
@@ -212,18 +198,19 @@ export default async function DashboardPage() {
           href="/cj"
         />
         <KPICard
-          title="Main store"
-          value={`${stockM} bags`}
-          sub={`${lots.length} lot${lots.length === 1 ? "" : "s"}`}
+          title={`Stock · ${storeName}`}
+          value={`${totalBagsLeft} bags`}
+          sub={`${lotsHere.length} lot${lotsHere.length === 1 ? "" : "s"}`}
           icon={Store}
           href="/stock"
         />
         <KPICard
-          title="New Mahavir"
-          value={`${stockN} bags`}
-          sub="Branch stock"
-          icon={Store}
-          href="/nm"
+          title="Old dues (to collect)"
+          value={money(dues.outstanding)}
+          sub={`${dues.customers} customer${dues.customers === 1 ? "" : "s"}`}
+          icon={CreditCard}
+          tone={dues.outstanding > 0.5 ? "warn" : undefined}
+          href="/recv"
         />
         {isPrivileged && (
           <KPICard
@@ -235,23 +222,13 @@ export default async function DashboardPage() {
             href="/patti"
           />
         )}
-        {!isPrivileged && (
-          <KPICard
-            title="Total stock"
-            value={`${totalBagsLeft} bags`}
-            sub={`${outOfStock + lowStockLots} low / out`}
-            icon={Boxes}
-            tone={outOfStock > 0 || lowStockLots > 0 ? "warn" : undefined}
-            href="/stock"
-          />
-        )}
       </section>
 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2">
             <Store className="h-4 w-4 text-primary" />
-            Today by store
+            Today · {storeName}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -259,7 +236,6 @@ export default async function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b">
-                  <th className="py-2 pr-4">Store</th>
                   <th className="py-2 pr-4 text-right">Bills</th>
                   <th className="py-2 pr-4 text-right">Bags</th>
                   <th className="py-2 pr-4 text-right">Sales</th>
@@ -271,49 +247,16 @@ export default async function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {storeRows.map((r) => {
-                  const isCurrent = r.name === storeName;
-                  return (
-                  <tr
-                    key={r.name}
-                    className={`border-b ${isCurrent ? "bg-primary/5" : ""}`}
-                  >
-                    <td className="py-2 pr-4 font-medium">
-                      {r.name}
-                      {isCurrent && (
-                        <Badge variant="secondary" className="ml-2 text-[10px]">
-                          Working here
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="py-2 pr-4 text-right">{r.stats.bills}</td>
-                    <td className="py-2 pr-4 text-right">{r.stats.bags}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.sales)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.cashIn)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.upiIn)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.cjIn)}</td>
-                    <td className="py-2 pr-4 text-right">
-                      {money(r.stats.creditGiven)}
-                    </td>
-                    {isOwner && (
-                      <td className="py-2 pr-4 text-right">{money(r.stats.profit)}</td>
-                    )}
-                  </tr>
-                  );
-                })}
-                <tr className="font-semibold">
-                  <td className="py-2 pr-4">Total</td>
-                  <td className="py-2 pr-4 text-right">{storeTotals.bills}</td>
-                  <td className="py-2 pr-4 text-right">{storeTotals.bags}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.sales)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.cashIn)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.upiIn)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.cjIn)}</td>
-                  <td className="py-2 pr-4 text-right">
-                    {money(storeTotals.creditGiven)}
-                  </td>
+                <tr>
+                  <td className="py-2 pr-4 text-right">{todayStats.bills}</td>
+                  <td className="py-2 pr-4 text-right">{todayStats.bags}</td>
+                  <td className="py-2 pr-4 text-right">{money(todayStats.sales)}</td>
+                  <td className="py-2 pr-4 text-right">{money(todayStats.cashIn)}</td>
+                  <td className="py-2 pr-4 text-right">{money(todayStats.upiIn)}</td>
+                  <td className="py-2 pr-4 text-right">{money(todayStats.cjIn)}</td>
+                  <td className="py-2 pr-4 text-right">{money(todayStats.creditGiven)}</td>
                   {isOwner && (
-                    <td className="py-2 pr-4 text-right">{money(storeTotals.profit)}</td>
+                    <td className="py-2 pr-4 text-right">{money(todayStats.profit)}</td>
                   )}
                 </tr>
               </tbody>
@@ -347,7 +290,7 @@ export default async function DashboardPage() {
           <CardHeader className="flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2">
               <Boxes className="h-4 w-4 text-primary" />
-              Stock snapshot
+              Stock snapshot · {storeName}
             </CardTitle>
             <Link
               href="/stock"
@@ -358,7 +301,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-3 gap-2 text-center">
-              <StockStat label="Lots" value={lots.length} />
+              <StockStat label="Lots" value={lotsHere.length} />
               <StockStat label="Bags left" value={totalBagsLeft} />
               <StockStat
                 label="Low / out"
@@ -367,10 +310,10 @@ export default async function DashboardPage() {
               />
             </div>
             <div className="divide-y">
-              {lots.length === 0 ? (
+              {lotsHere.length === 0 ? (
                 <EmptyState
-                  title="No lots yet"
-                  description="Add a lot to track stock."
+                  title="No stock here yet"
+                  description="Add a lot, or transfer bags from the other store."
                   cta={
                     <Link href="/lots">
                       <Button size="sm">Add lot</Button>
@@ -378,7 +321,7 @@ export default async function DashboardPage() {
                   }
                 />
               ) : (
-                lots.slice(0, 5).map((l) => (
+                lotsHere.slice(0, 5).map((l) => (
                   <div
                     key={l.id}
                     className="py-2.5 flex items-center justify-between gap-3"

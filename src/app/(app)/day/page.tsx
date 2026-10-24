@@ -4,7 +4,9 @@ import {
   getBillsByDate,
   getCustomerBalances,
   getLotsWithStock,
+  lotStockAt,
 } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtDate, money, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
@@ -23,13 +25,17 @@ export default async function DailySummaryPage({ searchParams }: Props) {
   const role = session.user.role;
   const isOwner = role === "owner";
   const canEditBill = isOwner || role === "editor";
+  const loc = await getCurrentLoc();
+  const storeName = locLabel(loc);
 
-  const [bills, pays, lots, balances] = await Promise.all([
-    getBillsByDate(date, isOwner),
-    getAllPaymentsOnDate(date),
+  const [bills, pays, allLots, balances] = await Promise.all([
+    getBillsByDate(date, isOwner, loc),
+    getAllPaymentsOnDate(date, loc),
     getLotsWithStock(),
-    getCustomerBalances(),
+    getCustomerBalances(loc),
   ]);
+  const lotsHere = allLots.map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }));
+  const lots = lotsHere.filter((l) => l.known);
 
   const totalSales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
@@ -54,7 +60,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Daily summary</CardTitle>
+          <CardTitle>Daily summary · {storeName}</CardTitle>
         </CardHeader>
         <CardContent>
           <DateFilter paramKey="d" value={date} />
@@ -131,7 +137,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                                 rate: it.rate,
                                 weightsText: it.weightsText,
                               }))}
-                              lots={lots.map((l) => ({
+                              lots={lotsHere.map((l) => ({
                                 id: l.id,
                                 name: l.name,
                                 left: l.left,
@@ -152,7 +158,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock left</CardTitle>
+          <CardTitle>Stock left · {storeName}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

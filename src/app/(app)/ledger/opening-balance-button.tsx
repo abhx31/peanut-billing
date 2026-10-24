@@ -17,9 +17,9 @@ import {
 import { AmountInput } from "@/components/ui/amount-input";
 import { setOpeningBalances } from "./actions";
 
-type Props = { openingCash: number; openingBank: number };
+type Props = { storeName: string; openingCash: number; openingBank: number };
 
-export function OpeningBalanceButton({ openingCash, openingBank }: Props) {
+export function OpeningBalanceButton({ storeName, openingCash, openingBank }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -59,10 +59,10 @@ export function OpeningBalanceButton({ openingCash, openingBank }: Props) {
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set opening balances</DialogTitle>
+          <DialogTitle>Set opening balances · {storeName}</DialogTitle>
           <DialogDescription>
-            These are the cash and bank balances carried over before your first ledger entry.
-            The daily ledger uses them to compute running closing balances.
+            {storeName}&apos;s cash and bank balances carried over before its first ledger entry.
+            Its daily ledger uses them to compute running closing balances. Each store has its own.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">

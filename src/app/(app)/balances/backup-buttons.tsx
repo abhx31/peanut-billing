@@ -39,7 +39,7 @@ export function BackupButtons({ isOwner }: { isOwner: boolean }) {
         disabled={loading !== null}
         onClick={() => download("csv")}
       >
-        {loading === "csv" ? "Preparing…" : "Download all bills (CSV)"}
+        {loading === "csv" ? "Preparing…" : "Download this store's bills (CSV)"}
       </Button>
       <Button
         type="button"

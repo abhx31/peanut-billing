@@ -1,11 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
+import { getCurrentLoc } from "@/lib/loc";
 
 const saveClosingSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -30,17 +31,19 @@ export async function saveClosing(
   }
   const closed = await closedDateError(parsed.data.date);
   if (closed) return { ok: false, error: closed };
+  const loc = await getCurrentLoc();
 
   await db
     .insert(schema.closings)
     .values({
       date: parsed.data.date,
+      loc,
       cash: parsed.data.cash?.toString() ?? null,
       bank: parsed.data.bank?.toString() ?? null,
       createdBy: session.user.id,
     })
     .onConflictDoUpdate({
-      target: schema.closings.date,
+      target: [schema.closings.date, schema.closings.loc],
       set: {
         cash: parsed.data.cash?.toString() ?? null,
         bank: parsed.data.bank?.toString() ?? null,
@@ -59,7 +62,10 @@ export async function removeClosing(
   if (!parsed.success) return { ok: false, error: "Invalid date." };
   const closed = await closedDateError(parsed.data.date);
   if (closed) return { ok: false, error: closed };
-  await db.delete(schema.closings).where(eq(schema.closings.date, parsed.data.date));
+  const loc = await getCurrentLoc();
+  await db
+    .delete(schema.closings)
+    .where(and(eq(schema.closings.date, parsed.data.date), eq(schema.closings.loc, loc)));
   revalidatePath("/ledger");
   revalidatePath("/dashboard");
   return { ok: true };

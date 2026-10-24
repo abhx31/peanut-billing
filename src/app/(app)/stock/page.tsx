@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
-import { getLotsWithStock, getStockHistory, getLotCosts } from "@/lib/queries";
+import { getLotsWithStock, getStockHistory, getLotCosts, lotStockAt } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, r2 } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 
@@ -9,28 +10,34 @@ export const dynamic = "force-dynamic";
 export default async function StockPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
-  const [lots, history, costs] = await Promise.all([
+  const loc = await getCurrentLoc();
+  const storeName = locLabel(loc);
+  const [allLots, history, costs] = await Promise.all([
     getLotsWithStock(),
-    getStockHistory(30),
+    getStockHistory(loc, 30),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
   ]);
 
-  const totalStkM = lots.reduce((s, l) => s + l.stkM, 0);
-  const totalStkN = lots.reduce((s, l) => s + l.stkN, 0);
+  // Only this store's stock. Lots that have never been at this store are hidden.
+  const lots = allLots
+    .map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }))
+    .filter((l) => l.known);
   const totals: [string, string][] = [
     ["Lots", String(lots.length)],
     ["Bags added", String(lots.reduce((s, l) => s + l.added, 0))],
+    [
+      loc === "NM" ? "Received (net)" : "Sent to New Mahavir (net)",
+      String(Math.abs(lots.reduce((s, l) => s + l.moved, 0))),
+    ],
     ["Bags sold", String(lots.reduce((s, l) => s + l.sold, 0))],
-    ["Main store left", String(totalStkM)],
-    ["New Mahavir left", String(totalStkN)],
-    ["Total left", String(totalStkM + totalStkN)],
+    ["Bags left", String(lots.reduce((s, l) => s + l.left, 0))],
   ];
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Stock left</CardTitle>
+          <CardTitle>Stock left · {storeName}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <SumGrid items={totals} />
@@ -40,10 +47,9 @@ export default async function StockPage() {
                 <tr className="text-left text-muted-foreground border-b">
                   <th className="py-2 pr-4">Lot / quality</th>
                   <th className="py-2 pr-4 text-right">Added</th>
+                  <th className="py-2 pr-4 text-right">Transfers (net)</th>
                   <th className="py-2 pr-4 text-right">Sold</th>
-                  <th className="py-2 pr-4 text-right">Main left</th>
-                  <th className="py-2 pr-4 text-right">NM left</th>
-                  <th className="py-2 pr-4 text-right">Total left</th>
+                  <th className="py-2 pr-4 text-right">Left</th>
                   <th className="py-2 pr-4 text-right">Kg sold</th>
                   {isOwner && <th className="py-2 pr-4 text-right">Cost / kg</th>}
                 </tr>
@@ -51,8 +57,8 @@ export default async function StockPage() {
               <tbody>
                 {lots.length === 0 ? (
                   <tr>
-                    <td colSpan={isOwner ? 8 : 7} className="py-2 text-muted-foreground">
-                      No lots yet.
+                    <td colSpan={isOwner ? 7 : 6} className="py-2 text-muted-foreground">
+                      No stock at {storeName} yet.
                     </td>
                   </tr>
                 ) : (
@@ -60,17 +66,10 @@ export default async function StockPage() {
                     <tr key={l.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">{l.name}</td>
                       <td className="py-2 pr-4 text-right">{l.added}</td>
+                      <td className="py-2 pr-4 text-right">
+                        {l.moved > 0 ? `+${l.moved}` : l.moved}
+                      </td>
                       <td className="py-2 pr-4 text-right">{l.sold}</td>
-                      <td
-                        className={`py-2 pr-4 text-right ${l.stkM < 0 ? "text-destructive" : ""}`}
-                      >
-                        {l.stkM}
-                      </td>
-                      <td
-                        className={`py-2 pr-4 text-right ${l.stkN < 0 ? "text-destructive" : ""}`}
-                      >
-                        {l.stkN}
-                      </td>
                       <td
                         className={`py-2 pr-4 text-right font-semibold ${l.left <= 0 ? "text-destructive" : ""}`}
                       >
@@ -93,7 +92,7 @@ export default async function StockPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock added (latest 30)</CardTitle>
+          <CardTitle>Stock added at {storeName} (latest 30)</CardTitle>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
@@ -105,7 +104,6 @@ export default async function StockPage() {
                   <tr className="text-left text-muted-foreground border-b">
                     <th className="py-2 pr-4">Date</th>
                     <th className="py-2 pr-4">Lot / quality</th>
-                    <th className="py-2 pr-4">Store</th>
                     <th className="py-2 pr-4 text-right">Bags added</th>
                   </tr>
                 </thead>
@@ -114,9 +112,6 @@ export default async function StockPage() {
                     <tr key={h.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">{fmtDate(h.date)}</td>
                       <td className="py-2 pr-4">{h.lotName ?? "(deleted lot)"}</td>
-                      <td className="py-2 pr-4">
-                        {h.loc === "NM" ? "New Mahavir" : "Main store"}
-                      </td>
                       <td className="py-2 pr-4 text-right">{h.bags}</td>
                     </tr>
                   ))}

@@ -1,7 +1,8 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { atLoc, type Loc } from "@/lib/loc";
 
-export async function getHamaliForDate(date: string) {
+export async function getHamaliForDate(date: string, loc: Loc) {
   const bs = await db
     .select({
       id: schema.bills.id,
@@ -19,6 +20,7 @@ export async function getHamaliForDate(date: string) {
       and(
         eq(schema.bills.date, date),
         sql`${schema.bills.hamali}::numeric > 0`,
+        atLoc(schema.bills.loc, loc),
       ),
     )
     .groupBy(schema.bills.id)
@@ -31,7 +33,7 @@ export async function getHamaliForDate(date: string) {
 // Sale Patti / GST Sale bills on this date that still have hamali = 0 --
 // candidates to quickly add "on us" hamali to after the fact (e.g. forgot
 // to set it when creating the bill).
-export async function getZeroHamaliSaleBillsForDate(date: string) {
+export async function getZeroHamaliSaleBillsForDate(date: string, loc: Loc) {
   return db
     .select({
       id: schema.bills.id,
@@ -48,35 +50,39 @@ export async function getZeroHamaliSaleBillsForDate(date: string) {
         eq(schema.bills.date, date),
         sql`${schema.bills.kind} IN ('psale', 'gst')`,
         sql`${schema.bills.hamali}::numeric = 0`,
+        atLoc(schema.bills.loc, loc),
       ),
     )
     .groupBy(schema.bills.id)
     .orderBy(schema.bills.no);
 }
 
-export async function getHamaliPaidForDate(date: string) {
+export async function getHamaliPaidForDate(date: string, loc: Loc) {
   return db.query.hamaliPaid.findFirst({
-    where: eq(schema.hamaliPaid.date, date),
+    where: and(eq(schema.hamaliPaid.date, date), eq(schema.hamaliPaid.loc, loc)),
   });
 }
 
-export async function getHamaliLoadsForDate(date: string) {
+export async function getHamaliLoadsForDate(date: string, loc: Loc) {
   return db
     .select()
     .from(schema.hamaliLoads)
-    .where(eq(schema.hamaliLoads.date, date))
+    .where(and(eq(schema.hamaliLoads.date, date), atLoc(schema.hamaliLoads.loc, loc)))
     .orderBy(desc(schema.hamaliLoads.createdAt));
 }
 
-export async function getRecentHamaliDays(limit = 14) {
+export async function getRecentHamaliDays(loc: Loc, limit = 14) {
   // Days (latest first) where there's hamali on either side — loaded (sale
   // bills) or unloaded (incoming loads).
   const [billDates, loadDates] = await Promise.all([
     db
       .selectDistinct({ date: schema.bills.date })
       .from(schema.bills)
-      .where(sql`${schema.bills.hamali}::numeric > 0`),
-    db.selectDistinct({ date: schema.hamaliLoads.date }).from(schema.hamaliLoads),
+      .where(and(sql`${schema.bills.hamali}::numeric > 0`, atLoc(schema.bills.loc, loc))),
+    db
+      .selectDistinct({ date: schema.hamaliLoads.date })
+      .from(schema.hamaliLoads)
+      .where(atLoc(schema.hamaliLoads.loc, loc)),
   ]);
   const dates = Array.from(
     new Set([...billDates, ...loadDates].map((r) => r.date)),
@@ -96,9 +102,9 @@ export async function getRecentHamaliDays(limit = 14) {
   }[] = [];
   for (const date of dates) {
     const [h, loads, paid] = await Promise.all([
-      getHamaliForDate(date),
-      getHamaliLoadsForDate(date),
-      getHamaliPaidForDate(date),
+      getHamaliForDate(date, loc),
+      getHamaliLoadsForDate(date, loc),
+      getHamaliPaidForDate(date, loc),
     ]);
     const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
     const unloadedAmount = loads.reduce((s, l) => s + Number(l.amount), 0);

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
-import { getCurrentLoc } from "@/lib/loc";
+import { getCurrentLoc, toLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
 
 const supplierSchema = z.object({
@@ -86,8 +86,9 @@ export async function saveGstPurchase(
 
   try {
     const result = await db.transaction(async (tx) => {
+      // Each store runs its own 01..NN GST purchase series.
       const noRes = await tx.execute<{ no: number }>(
-        sql`select next_patti_no(${fy}, 'gstp') as no`,
+        sql`select next_patti_no_for_loc(${fy}, 'gstp', ${loc === "NM" ? "NM" : "MS"}) as no`,
       );
       const no = noRes.rows[0].no;
 
@@ -99,6 +100,7 @@ export async function saveGstPurchase(
           fy,
           date: d.date,
           party: d.party,
+          loc: loc === "NM" ? "NM" : "MS",
           bags,
           kg: kg.toString(),
           rate: rate.toString(),
@@ -288,7 +290,8 @@ export async function updateGstPurchase(
   const net = Math.round(preRound);
   const roundOff = r2(net - preRound);
   const itc = d.itcOn ? totalTax : 0;
-  const loc = await getCurrentLoc();
+  // Rebuilt stock stays at the store this purchase belongs to.
+  const loc = toLoc(bill.loc);
 
   try {
     await db.transaction(async (tx) => {

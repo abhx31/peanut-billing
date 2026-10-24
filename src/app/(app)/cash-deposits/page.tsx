@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { getAllCashDeposits } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money } from "@/lib/format";
 import { CashDepositDialog } from "./cash-deposit-dialog";
 import { DeleteCashDepositButton } from "./delete-cash-deposit-button";
@@ -9,18 +10,19 @@ export const dynamic = "force-dynamic";
 
 export default async function CashDepositsPage() {
   await requireOwnerOrEditor();
-  const deposits = await getAllCashDeposits();
+  const loc = await getCurrentLoc();
+  const deposits = await getAllCashDeposits(loc);
   const total = deposits.reduce((s, d) => s + Number(d.amount), 0);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Cash deposits</CardTitle>
+          <CardTitle>Cash deposits · {locLabel(loc)}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Every time cash in hand gets physically deposited into the bank, record it
-            here — it moves the amount out of Cash and into Bank / UPI in the Daily
-            ledger from that date onward.
+            Every time {locLabel(loc)}&apos;s cash in hand gets physically deposited into the
+            bank, record it here — it moves the amount out of Cash and into Bank / UPI in
+            this store&apos;s Daily ledger from that date onward.
           </p>
         </CardHeader>
         <CardContent>

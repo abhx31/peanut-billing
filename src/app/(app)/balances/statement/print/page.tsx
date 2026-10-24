@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCustomerStatement, getSettings } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2 } from "@/lib/format";
 import { PrintTrigger } from "../../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
@@ -19,8 +20,9 @@ export default async function PrintStatementPage({ searchParams }: Props) {
 
   const size = parsePageSize(sp.size, "A4");
   const chosen = hasPageSize(sp.size);
+  const loc = await getCurrentLoc();
   const [data, settings] = await Promise.all([
-    getCustomerStatement(customer),
+    getCustomerStatement(customer, loc),
     getSettings(),
   ]);
 
@@ -38,7 +40,7 @@ export default async function PrintStatementPage({ searchParams }: Props) {
 
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">
-        <b>STATEMENT OF ACCOUNT</b>
+        <b>STATEMENT OF ACCOUNT</b> · {locLabel(loc)}
         <br />
         Customer: <b>{data.customer}</b>
       </div>

@@ -13,7 +13,7 @@ import {
   getCustomerBalances,
   getLotsWithStock,
 } from "@/lib/queries";
-import { getCurrentLoc } from "@/lib/loc";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { PattiForm } from "./patti-form";
@@ -34,14 +34,14 @@ export default async function PattiPage({ searchParams }: Props) {
   const isOwner = session.user.role === "owner";
   const sp = await searchParams;
   const date = sp.d || today();
-  const [bills, lotSuggestions, lots, customerBalances, loc, dayBills] =
+  const loc = await getCurrentLoc();
+  const [bills, lotSuggestions, lots, customerBalances, dayBills] =
     await Promise.all([
-      getPattiBillsByDate(date),
+      getPattiBillsByDate(date, loc),
       getPattiLotNameSuggestions(),
       getLotsWithStock(),
-      getCustomerBalances(),
-      getCurrentLoc(),
-      getBillsByDate(date, isOwner),
+      getCustomerBalances(loc),
+      getBillsByDate(date, isOwner, loc),
     ]);
   const saleBills = dayBills.filter((b) => b.kind === "psale");
   const paidMap = await getPattiPaidMap(bills.map((b) => b.id));
@@ -79,7 +79,7 @@ export default async function PattiPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Patti bills on this date</CardTitle>
+          <CardTitle>{locLabel(loc)} patti bills on this date</CardTitle>
           <DateFilter paramKey="d" value={date} />
           <ExcelButton report="patti" date={date} />
           <p className="text-sm text-muted-foreground">

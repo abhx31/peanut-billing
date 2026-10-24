@@ -7,6 +7,7 @@ import {
   getSettings,
 } from "@/lib/queries";
 import { requireSession } from "@/lib/auth-helpers";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, r2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
@@ -25,15 +26,16 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
   const chosen = hasPageSize(sp.size);
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
+  const loc = await getCurrentLoc();
 
   const [bills, pays, expenses, settings, openCash, openBank, depositsToday] = await Promise.all([
-    getBillsByDate(date, isOwner),
-    getAllPaymentsOnDate(date),
-    getExpensesByDate(date),
+    getBillsByDate(date, isOwner, loc),
+    getAllPaymentsOnDate(date, loc),
+    getExpensesByDate(date, loc),
     getSettings(),
-    cashBalanceBefore("Cash", date),
-    cashBalanceBefore("UPI", date),
-    getCashDepositsOnDate(date),
+    cashBalanceBefore("Cash", date, loc),
+    cashBalanceBefore("UPI", date, loc),
+    getCashDepositsOnDate(date, loc),
   ]);
 
   const cashIn = pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0);
@@ -62,7 +64,7 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
       <style>{`@media print { @page { size: ${size}; margin: 10mm; } nav, header { display: none !important; } }`}</style>
 
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
-      <div className="mb-4">Daily ledger — {fmtDate(date)}</div>
+      <div className="mb-4">Daily ledger · {locLabel(loc)} — {fmtDate(date)}</div>
 
       <div className="mb-4">
         <h2 className="font-semibold mb-1">Cash in hand</h2>

@@ -1,13 +1,18 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { atLoc, type Loc } from "@/lib/loc";
 
-/** Regular purchase patti bills (kind is null) on a date. */
-export async function getPattiBillsByDate(date: string) {
+/** One store's regular purchase patti bills (kind is null) on a date. */
+export async function getPattiBillsByDate(date: string, loc: Loc) {
   return db
     .select()
     .from(schema.pattiBills)
     .where(
-      and(eq(schema.pattiBills.date, date), isNull(schema.pattiBills.kind)),
+      and(
+        eq(schema.pattiBills.date, date),
+        isNull(schema.pattiBills.kind),
+        atLoc(schema.pattiBills.loc, loc),
+      ),
     )
     .orderBy(desc(schema.pattiBills.createdAt));
 }
@@ -23,9 +28,9 @@ export async function getPattiLotNameSuggestions() {
     .sort();
 }
 
-/** GST purchase bills (kind = 'gstp') whose supplier-invoice date falls in a
- *  given year-month ("YYYY-MM"). */
-export async function getGstPurchasesForMonth(ym: string) {
+/** One store's GST purchase bills (kind = 'gstp') whose supplier-invoice
+ *  date falls in a given year-month ("YYYY-MM"). */
+export async function getGstPurchasesForMonth(ym: string, loc: Loc) {
   return db
     .select()
     .from(schema.pattiBills)
@@ -33,14 +38,15 @@ export async function getGstPurchasesForMonth(ym: string) {
       and(
         eq(schema.pattiBills.kind, "gstp"),
         sql`to_char(coalesce(${schema.pattiBills.invDate}, ${schema.pattiBills.date}), 'YYYY-MM') = ${ym}`,
+        atLoc(schema.pattiBills.loc, loc),
       ),
     )
     .orderBy(desc(schema.pattiBills.createdAt));
 }
 
-/** Output tax (GST sales invoices) + ITC (GST purchases) for a month,
- *  grouped by CGST/SGST/IGST — the Phase-D "GST summary" tile row. */
-export async function getGstMonthlySummary(ym: string) {
+/** One store's output tax (GST sales invoices) + ITC (GST purchases) for a
+ *  month, grouped by CGST/SGST/IGST — the Phase-D "GST summary" tile row. */
+export async function getGstMonthlySummary(ym: string, loc: Loc) {
   const sales = await db
     .select({
       taxable: schema.bills.amount,
@@ -51,6 +57,7 @@ export async function getGstMonthlySummary(ym: string) {
       and(
         eq(schema.bills.kind, "gst"),
         sql`to_char(${schema.bills.date}, 'YYYY-MM') = ${ym}`,
+        atLoc(schema.bills.loc, loc),
       ),
     );
   const purchases = await db
@@ -64,6 +71,7 @@ export async function getGstMonthlySummary(ym: string) {
       and(
         eq(schema.pattiBills.kind, "gstp"),
         sql`to_char(coalesce(${schema.pattiBills.invDate}, ${schema.pattiBills.date}), 'YYYY-MM') = ${ym}`,
+        atLoc(schema.pattiBills.loc, loc),
       ),
     );
 
@@ -130,10 +138,10 @@ export async function getPattiPaidMap(
   return new Map(rows.map((r) => [r.pattiId, Number(r.paid)]));
 }
 
-/** Every purchase bill (regular Patti or GST Purchase) with an outstanding
- *  balance — net minus whatever's been paid so far. For the Payments
- *  recorded tab's "still owed" summary. */
-export async function getOutstandingPattiBills() {
+/** One store's purchase bills (regular Patti or GST Purchase) with an
+ *  outstanding balance — net minus whatever's been paid so far. For the
+ *  Payments recorded tab's "still owed" summary. */
+export async function getOutstandingPattiBills(loc: Loc) {
   const bills = await db
     .select({
       id: schema.pattiBills.id,
@@ -145,6 +153,7 @@ export async function getOutstandingPattiBills() {
       net: schema.pattiBills.net,
     })
     .from(schema.pattiBills)
+    .where(atLoc(schema.pattiBills.loc, loc))
     .orderBy(asc(schema.pattiBills.date), asc(schema.pattiBills.no));
   const paidMap = await getPattiPaidMap(bills.map((b) => b.id));
   return bills
@@ -156,9 +165,9 @@ export async function getOutstandingPattiBills() {
     .filter((b) => b.balance > 0.5);
 }
 
-/** Every payment recorded against any purchase bill, newest first — the
- *  Payments recorded tab's main list. */
-export async function getAllPattiPayments() {
+/** Every payment recorded against one store's purchase bills, newest first —
+ *  the Payments recorded tab's main list. */
+export async function getAllPattiPayments(loc: Loc) {
   return db
     .select({
       id: schema.pattiPayments.id,
@@ -174,5 +183,6 @@ export async function getAllPattiPayments() {
     })
     .from(schema.pattiPayments)
     .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
+    .where(atLoc(schema.pattiBills.loc, loc))
     .orderBy(desc(schema.pattiPayments.date), desc(schema.pattiPayments.createdAt));
 }

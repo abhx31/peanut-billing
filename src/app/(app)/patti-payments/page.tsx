@@ -6,6 +6,7 @@ import {
   getOutstandingPattiBills,
 } from "@/lib/queries-patti";
 import { fmtDate, money, pad2 } from "@/lib/format";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { PayPattiDialog } from "./pay-patti-dialog";
 import { DeletePattiPaymentButton } from "./delete-patti-payment-button";
 
@@ -17,9 +18,10 @@ function billLabel(kind: string | null, no: number) {
 
 export default async function PattiPaymentsPage() {
   await requireOwnerOrEditor();
+  const loc = await getCurrentLoc();
   const [outstanding, allPayments] = await Promise.all([
-    getOutstandingPattiBills(),
-    getAllPattiPayments(),
+    getOutstandingPattiBills(loc),
+    getAllPattiPayments(loc),
   ]);
 
   const totalOwed = outstanding.reduce((s, b) => s + b.balance, 0);
@@ -28,7 +30,7 @@ export default async function PattiPaymentsPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Still owed on purchases</CardTitle>
+          <CardTitle>Still owed on purchases · {locLabel(loc)}</CardTitle>
           <p className="text-sm text-muted-foreground">
             Every Patti or GST purchase bill with a balance left — pay it in parts,
             across whatever days and modes it actually takes.

@@ -13,10 +13,11 @@ import {
   type CloseResult,
 } from "@/lib/year-close";
 
+const countSchema = z.object({ cash: z.number().finite(), bank: z.number().finite() });
+
 const archiveSchema = z.object({
   fy: z.string().regex(FY_RE),
-  cash: z.number().finite(),
-  bank: z.number().finite(),
+  counts: z.object({ MS: countSchema, NM: countSchema }),
 });
 
 const fySchema = z.object({ fy: z.string().regex(FY_RE) });
@@ -27,7 +28,9 @@ async function checkInput(
   input: z.input<typeof archiveSchema>,
 ): Promise<{ ok: true; data: z.output<typeof archiveSchema> } | { ok: false; error: string }> {
   const parsed = archiveSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Enter cash in hand and bank balance." };
+  if (!parsed.success) {
+    return { ok: false, error: "Enter cash in hand and bank balance for both stores." };
+  }
   const next = await nextFyToClose();
   if (!next || next.fy !== parsed.data.fy) {
     return { ok: false, error: "This financial year cannot be archived now. Refresh the page." };

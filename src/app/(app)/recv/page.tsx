@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import { getOldDues, getOldDuesSummary } from "@/lib/queries-recv";
 import { getCustomerNames } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { AddOldDueForm } from "./add-old-due-form";
@@ -18,11 +19,13 @@ export default async function ReceivablesPage() {
   const session = await requireSession();
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
+  const loc = await getCurrentLoc();
+  const storeName = locLabel(loc);
 
   const [allDues, summary, custs] = await Promise.all([
-    getOldDues(),
-    getOldDuesSummary(),
-    getCustomerNames(),
+    getOldDues(loc),
+    getOldDuesSummary(loc),
+    getCustomerNames(loc),
   ]);
   // Hide fully-paid / overpaid dues (and the amount=0 "Advance received"
   // marker rows). Keep them in the summary tiles so totals still reflect
@@ -37,11 +40,11 @@ export default async function ReceivablesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wallet className="h-4 w-4 text-primary" />
-              Old dues from before you started using the app
+              Old dues from before you started using the app · {storeName}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Enter each customer&apos;s total due as of your start date. These are not new
-              sales, so they do not change sales, profit, stock or hamali.
+              Enter each customer&apos;s total due to {storeName} as of your start date. These
+              are not new sales, so they do not change sales, profit, stock or hamali.
             </p>
           </CardHeader>
           <CardContent>
@@ -53,7 +56,7 @@ export default async function ReceivablesPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-3 flex-wrap">
-            Old dues
+            Old dues · {storeName}
             {hiddenCount > 0 && (
               <span className="text-xs font-normal text-muted-foreground">
                 ({hiddenCount} paid or advance {hiddenCount === 1 ? "entry" : "entries"} hidden — see Balances → Statement for the full history)

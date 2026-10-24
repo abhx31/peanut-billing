@@ -17,12 +17,13 @@ export default async function NewBillPage() {
   const role = session.user.role;
   const canSeeCost = role === "owner" || role === "editor";
 
-  const [lots, settings, customerBalances, costs, loc] = await Promise.all([
+  const loc = await getCurrentLoc();
+  const [lots, settings, customerBalances, costs] = await Promise.all([
     getLotsWithStock(),
     getSettings(),
-    getCustomerBalances(),
+    // A customer's balance shown on the bill is what they owe THIS store.
+    getCustomerBalances(loc),
     canSeeCost ? getLotCosts() : Promise.resolve({} as Record<string, string>),
-    getCurrentLoc(),
   ]);
 
   if (lots.length === 0) {

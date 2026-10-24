@@ -11,12 +11,13 @@ import {
 import { getOldDues } from "@/lib/queries-recv";
 import { getPattiBillsByDate } from "@/lib/queries-patti";
 import { pad2 } from "@/lib/format";
+import { atLoc, locLabel, type Loc } from "@/lib/loc";
 import type { GstTaxBreakdown, PartySnapshot } from "@/lib/gst-types";
 
 import type { Report } from "@/lib/excel-reports";
 
-// Excel (.xlsx) downloads of the daily pages. Each report mirrors what its page shows;
-// "day" puts all of them in one workbook, one sheet each.
+// Excel (.xlsx) downloads of the daily pages, for one store. Each report mirrors what its
+// page shows; "day" puts all of them in one workbook, one sheet each.
 
 export type Viewer = { isOwner: boolean; isPrivileged: boolean };
 
@@ -123,14 +124,16 @@ function sheet(wb: ExcelJS.Workbook, name: string) {
 
 // ---------------------------------------------------------------------------------------------
 
-async function ledgerSheet(wb: ExcelJS.Workbook, date: string, v: Viewer) {
+async function ledgerSheet(wb: ExcelJS.Workbook, date: string, v: Viewer, loc: Loc) {
   const [bills, pays, expenses, openCash, openBank, closing] = await Promise.all([
-    getBillsByDate(date, v.isOwner),
-    getAllPaymentsOnDate(date),
-    getExpensesByDate(date),
-    cashBalanceBefore("Cash", date),
-    cashBalanceBefore("UPI", date),
-    db.query.closings.findFirst({ where: eq(schema.closings.date, date) }),
+    getBillsByDate(date, v.isOwner, loc),
+    getAllPaymentsOnDate(date, loc),
+    getExpensesByDate(date, loc),
+    cashBalanceBefore("Cash", date, loc),
+    cashBalanceBefore("UPI", date, loc),
+    db.query.closings.findFirst({
+      where: and(eq(schema.closings.date, date), eq(schema.closings.loc, loc)),
+    }),
   ]);
   // Same arithmetic as the Daily ledger page.
   const by = <T extends { mode: string; amount: string }>(rows: T[], mode: string) =>
@@ -144,7 +147,7 @@ async function ledgerSheet(wb: ExcelJS.Workbook, date: string, v: Viewer) {
   const profit = v.isOwner ? sum(bills, (b) => b.profit ?? 0) : 0;
 
   const w = sheet(wb, "Daily ledger");
-  w.title(`Daily ledger — ${dmy(date)}`);
+  w.title(`Daily ledger · ${locLabel(loc)} — ${dmy(date)}`);
   w.section("Cash in hand");
   w.pairs([
     ["Opening", openCash],
@@ -227,24 +230,22 @@ function expenseTable(w: SheetWriter, rows: Awaited<ReturnType<typeof getExpense
       { header: "Category", key: "category", width: 18 },
       { header: "Note", key: "note", width: 30 },
       { header: "Paid by", key: "mode", width: 10 },
-      { header: "Store", key: "store", width: 14 },
       { header: "Amount", key: "amount", width: 14, money: true },
     ],
     rows.map((e) => ({
       category: e.category,
       note: e.note ?? "",
       mode: e.mode,
-      store: e.loc === "NM" ? "New Mahavir" : "Main",
       amount: n(e.amount),
     })),
     { category: "Total", amount: sum(rows, (e) => n(e.amount)) },
   );
 }
 
-async function expensesSheet(wb: ExcelJS.Workbook, date: string) {
-  const rows = await getExpensesByDate(date);
+async function expensesSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
+  const rows = await getExpensesByDate(date, loc);
   const w = sheet(wb, "Expenses");
-  w.title(`Expenses — ${dmy(date)}`);
+  w.title(`Expenses · ${locLabel(loc)} — ${dmy(date)}`);
   expenseTable(w, rows);
   const total = (mode: string) => sum(rows.filter((e) => e.mode === mode), (e) => n(e.amount));
   w.pairs([
@@ -255,10 +256,10 @@ async function expensesSheet(wb: ExcelJS.Workbook, date: string) {
   ]);
 }
 
-async function receivablesSheet(wb: ExcelJS.Workbook, date: string) {
-  const dues = await getOldDues();
+async function receivablesSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
+  const dues = await getOldDues(loc);
   const w = sheet(wb, "Receivables");
-  w.title("Receivables — old dues", `As on ${dmy(date)}`);
+  w.title(`Receivables · ${locLabel(loc)} — old dues`, `As on ${dmy(date)}`);
   w.table(
     [
       { header: "Customer", key: "customer", width: 26 },
@@ -285,10 +286,10 @@ async function receivablesSheet(wb: ExcelJS.Workbook, date: string) {
   );
 }
 
-async function balancesSheet(wb: ExcelJS.Workbook, date: string) {
-  const all = await getCustomerBalances();
+async function balancesSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
+  const all = await getCustomerBalances(loc);
   const w = sheet(wb, "Balances");
-  w.title("Customer balances (credit given)", `As on ${dmy(date)}`);
+  w.title(`Customer balances (credit given) · ${locLabel(loc)}`, `As on ${dmy(date)}`);
   w.table(
     [
       { header: "Customer", key: "name", width: 28 },
@@ -306,11 +307,13 @@ async function balancesSheet(wb: ExcelJS.Workbook, date: string) {
   );
 }
 
-async function gstSheet(wb: ExcelJS.Workbook, date: string) {
+async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
   const bills = await db
     .select()
     .from(schema.bills)
-    .where(and(eq(schema.bills.kind, "gst"), eq(schema.bills.date, date)))
+    .where(
+      and(eq(schema.bills.kind, "gst"), eq(schema.bills.date, date), atLoc(schema.bills.loc, loc)),
+    )
     .orderBy(asc(schema.bills.no));
   const paid = bills.length
     ? await db
@@ -352,7 +355,7 @@ async function gstSheet(wb: ExcelJS.Workbook, date: string) {
   });
 
   const w = sheet(wb, "GST bills");
-  w.title(`GST invoices — ${dmy(date)}`);
+  w.title(`GST invoices · ${locLabel(loc)} — ${dmy(date)}`);
   w.table(
     [
       { header: "Invoice no.", key: "no", width: 11 },
@@ -384,10 +387,10 @@ async function gstSheet(wb: ExcelJS.Workbook, date: string) {
   );
 }
 
-async function pattiSheet(wb: ExcelJS.Workbook, date: string) {
-  const bills = (await getPattiBillsByDate(date)).sort((a, b) => a.no - b.no);
+async function pattiSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
+  const bills = (await getPattiBillsByDate(date, loc)).sort((a, b) => a.no - b.no);
   const w = sheet(wb, "Patti bills");
-  w.title(`Patti bills (purchases) — ${dmy(date)}`);
+  w.title(`Patti bills (purchases) · ${locLabel(loc)} — ${dmy(date)}`);
   w.table(
     [
       { header: "No.", key: "no", width: 7 },
@@ -436,18 +439,23 @@ async function pattiSheet(wb: ExcelJS.Workbook, date: string) {
   ]);
 }
 
-/** Builds the requested report for `date` as an .xlsx file. */
-export async function buildReport(report: Report, date: string, v: Viewer): Promise<Buffer> {
+/** Builds the requested report for one store on `date` as an .xlsx file. */
+export async function buildReport(
+  report: Report,
+  date: string,
+  v: Viewer,
+  loc: Loc,
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Peanut Billing";
   wb.created = new Date();
 
-  if (report === "day" || report === "ledger") await ledgerSheet(wb, date, v);
-  if (report === "day" || report === "expenses") await expensesSheet(wb, date);
-  if (report === "day" || report === "gst") await gstSheet(wb, date);
-  if ((report === "day" && v.isPrivileged) || report === "patti") await pattiSheet(wb, date);
-  if (report === "day" || report === "receivables") await receivablesSheet(wb, date);
-  if (report === "day" || report === "balances") await balancesSheet(wb, date);
+  if (report === "day" || report === "ledger") await ledgerSheet(wb, date, v, loc);
+  if (report === "day" || report === "expenses") await expensesSheet(wb, date, loc);
+  if (report === "day" || report === "gst") await gstSheet(wb, date, loc);
+  if ((report === "day" && v.isPrivileged) || report === "patti") await pattiSheet(wb, date, loc);
+  if (report === "day" || report === "receivables") await receivablesSheet(wb, date, loc);
+  if (report === "day" || report === "balances") await balancesSheet(wb, date, loc);
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

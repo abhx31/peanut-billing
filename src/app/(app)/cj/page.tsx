@@ -9,6 +9,7 @@ import {
   getCjTotals,
 } from "@/lib/queries-cj";
 import { fmtDate, money, pad2 } from "@/lib/format";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { SumGrid } from "@/components/sum-grid";
 import { CjSettlementForm } from "./cj-settlement-form";
 import { DeleteCjSettlementButton } from "./delete-cj-settlement-button";
@@ -19,11 +20,12 @@ export default async function CJPage() {
   const session = await requireSession();
   const role = session.user.role;
   const isPrivileged = role === "owner" || role === "editor";
+  const loc = await getCurrentLoc();
 
   const [totals, settlements, received] = await Promise.all([
-    getCjTotals(),
-    getCjSettlementsLatest(50),
-    getCjPaymentsLatest(40),
+    getCjTotals(loc),
+    getCjSettlementsLatest(loc, 50),
+    getCjPaymentsLatest(loc, 40),
   ]);
 
   return (
@@ -32,7 +34,7 @@ export default async function CJPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <HandCoins className="h-4 w-4 text-primary" />
-            Payments received through CJ
+            Payments received through CJ · {locLabel(loc)}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             CJ is a go-between: when UPI fails, the customer pays CJ, and CJ hands you

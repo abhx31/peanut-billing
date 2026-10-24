@@ -1,4 +1,4 @@
-import { getLotsWithStock, getLotCosts } from "@/lib/queries";
+import { getLotsWithStock, getLotCosts, lotStockAt } from "@/lib/queries";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { money } from "@/lib/format";
@@ -11,12 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function LotsPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
-  const [lots, costs, loc] = await Promise.all([
+  const [allLots, costs, loc] = await Promise.all([
     getLotsWithStock(),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
     getCurrentLoc(),
   ]);
   const storeName = locLabel(loc);
+  // The lot list is shared by both stores; the bag count is this store's own.
+  const lots = allLots.map((l) => ({ id: l.id, name: l.name, left: lotStockAt(l, loc).left }));
 
   return (
     <div className="space-y-6">
@@ -31,7 +33,7 @@ export default async function LotsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock</CardTitle>
+          <CardTitle>Stock · {storeName}</CardTitle>
         </CardHeader>
         <CardContent>
           {lots.length === 0 ? (
@@ -42,7 +44,7 @@ export default async function LotsPage() {
                 <thead>
                   <tr className="text-left text-muted-foreground border-b">
                     <th className="py-2 pr-4">Lot / quality</th>
-                    <th className="py-2 pr-4 text-right">Bags left</th>
+                    <th className="py-2 pr-4 text-right">Bags left here</th>
                     {isOwner && <th className="py-2 pr-4 text-right">Cost / kg</th>}
                     <th className="py-2 pr-4" />
                   </tr>

@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql, type SQLWrapper } from "drizzle-orm";
 import { db, schema, type DbExecutor } from "@/db";
 import { pad2 } from "@/lib/format";
+import { atLoc, openingsFor, type Loc } from "@/lib/loc";
 
 export type LotWithStock = {
   id: string;
@@ -9,10 +10,17 @@ export type LotWithStock = {
   sold: number;
   left: number;
   kgSold: number;
+  /** Bags added straight into Main store / New Mahavir stock (not via transfer). */
+  addedM: number;
+  addedN: number;
   /** Bags transferred to New Mahavir and still there (xfer out − xfer back). */
   recvN: number;
-  /** Bags sold at New Mahavir. */
+  /** Bags sold at Main store / New Mahavir. */
+  soldM: number;
   soldN: number;
+  /** Kg sold at Main store / New Mahavir. */
+  kgSoldM: number;
+  kgSoldN: number;
   /** Bags left at the Main store. */
   stkM: number;
   /** Bags left at New Mahavir. */
@@ -43,6 +51,7 @@ export async function getLotsWithStock(
       bagsSold: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int`,
       bagsSoldNM: sql<number>`coalesce(sum(case when ${schema.bills.loc} = 'NM' then ${schema.billItems.bags} else 0 end), 0)::int`,
       kgSold: sql<string>`coalesce(sum(${schema.billItems.kg}), 0)`,
+      kgSoldNM: sql<string>`coalesce(sum(case when ${schema.bills.loc} = 'NM' then ${schema.billItems.kg} else 0 end), 0)`,
     })
     .from(schema.billItems)
     .innerJoin(schema.bills, eq(schema.billItems.billId, schema.bills.id))
@@ -75,6 +84,7 @@ export async function getLotsWithStock(
     const soldNM = soldMap.get(l.id)?.bagsSoldNM ?? 0;
     const soldMain = sold - soldNM;
     const kg = soldMap.get(l.id)?.kgSold ?? "0";
+    const kgNM = Number(soldMap.get(l.id)?.kgSoldNM ?? 0);
     const xferOut = xferMap.get(l.id)?.out ?? 0;
     const xferBack = xferMap.get(l.id)?.back ?? 0;
     const recvN = xferOut - xferBack;
@@ -87,13 +97,39 @@ export async function getLotsWithStock(
       sold,
       left: added - sold,
       kgSold: Number(kg),
+      addedM: addedMain,
+      addedN: addedNM,
       recvN,
+      soldM: soldMain,
       soldN: soldNM,
+      kgSoldM: Number(kg) - kgNM,
+      kgSoldN: kgNM,
       stkM,
       stkN,
       deletedAt: l.deletedAt,
     };
   });
+}
+
+/** One store's view of a lot. */
+export type LotStockAt = {
+  /** Bags added straight into this store's stock. */
+  added: number;
+  /** Net bags moved in by transfer (negative = more sent to the other store than received). */
+  moved: number;
+  sold: number;
+  left: number;
+  kgSold: number;
+  /** Whether this lot has ever had any stock movement at this store. */
+  known: boolean;
+};
+
+export function lotStockAt(l: LotWithStock, loc: Loc): LotStockAt {
+  const v =
+    loc === "NM"
+      ? { added: l.addedN, moved: l.recvN, sold: l.soldN, left: l.stkN, kgSold: l.kgSoldN }
+      : { added: l.addedM, moved: -l.recvN, sold: l.soldM, left: l.stkM, kgSold: l.kgSoldM };
+  return { ...v, known: v.added !== 0 || v.moved !== 0 || v.sold !== 0 || v.left !== 0 };
 }
 
 export async function getLotCosts(): Promise<Record<string, string>> {
@@ -111,6 +147,9 @@ export async function getSettings(exec: DbExecutor = db) {
       openingCash: "0",
       openingBank: "0",
       cjOpening: "0",
+      openingCashNm: "0",
+      openingBankNm: "0",
+      cjOpeningNm: "0",
       extras: null,
       letterheadImage: null,
       updatedAt: new Date(),
@@ -132,10 +171,11 @@ export async function getAllUsers() {
     .orderBy(asc(schema.users.createdAt));
 }
 
-export async function getCustomerNames() {
+export async function getCustomerNames(loc: Loc) {
   const rows = await db
     .selectDistinct({ customer: schema.bills.customer })
     .from(schema.bills)
+    .where(atLoc(schema.bills.loc, loc))
     .orderBy(schema.bills.customer);
   return rows.map((r) => r.customer);
 }
@@ -283,17 +323,17 @@ async function enrichBills(
   });
 }
 
-export async function getBillsByDate(date: string, isOwner: boolean) {
+export async function getBillsByDate(date: string, isOwner: boolean, loc: Loc) {
   const rows = await db
     .select()
     .from(schema.bills)
-    .where(eq(schema.bills.date, date))
+    .where(and(eq(schema.bills.date, date), atLoc(schema.bills.loc, loc)))
     .orderBy(asc(schema.bills.no));
   return enrichBills(rows, isOwner);
 }
 
 /** GST sale invoices (kind='gst') whose date falls in a given "YYYY-MM". */
-export async function getGstBillsForMonth(ym: string, isOwner: boolean) {
+export async function getGstBillsForMonth(ym: string, isOwner: boolean, loc: Loc) {
   const rows = await db
     .select()
     .from(schema.bills)
@@ -301,6 +341,7 @@ export async function getGstBillsForMonth(ym: string, isOwner: boolean) {
       and(
         eq(schema.bills.kind, "gst"),
         sql`to_char(${schema.bills.date}, 'YYYY-MM') = ${ym}`,
+        atLoc(schema.bills.loc, loc),
       ),
     )
     .orderBy(asc(schema.bills.no));
@@ -314,8 +355,13 @@ export async function getBillById(id: string, isOwner: boolean) {
   return enriched;
 }
 
-export async function getAllBills(isOwner: boolean) {
-  const rows = await db.select().from(schema.bills).orderBy(asc(schema.bills.no));
+/** Every bill of one store, or of both stores (`"all"` — only for the full backup). */
+export async function getAllBills(isOwner: boolean, loc: Loc | "all") {
+  const rows = await db
+    .select()
+    .from(schema.bills)
+    .where(loc === "all" ? undefined : atLoc(schema.bills.loc, loc))
+    .orderBy(asc(schema.bills.no));
   return enrichBills(rows, isOwner);
 }
 
@@ -327,15 +373,16 @@ export async function getPaymentsByBill(billId: string) {
     .orderBy(asc(schema.payments.createdAt));
 }
 
-export async function getExpensesByDate(date: string) {
+export async function getExpensesByDate(date: string, loc: Loc) {
   return db
     .select()
     .from(schema.expenses)
-    .where(eq(schema.expenses.date, date))
+    .where(and(eq(schema.expenses.date, date), atLoc(schema.expenses.loc, loc)))
     .orderBy(asc(schema.expenses.createdAt));
 }
 
-export async function getAllPaymentsOnDate(date: string) {
+/** Bill receipts on a date. A payment belongs to its bill's store. */
+export async function getAllPaymentsOnDate(date: string, loc: Loc) {
   return db
     .select({
       id: schema.payments.id,
@@ -350,23 +397,27 @@ export async function getAllPaymentsOnDate(date: string) {
     })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.payments.billId, schema.bills.id))
-    .where(eq(schema.payments.date, date))
+    .where(and(eq(schema.payments.date, date), atLoc(schema.bills.loc, loc)))
     .orderBy(asc(schema.bills.no));
 }
 
-export async function getCashDepositsOnDate(date: string) {
+export async function getCashDepositsOnDate(date: string, loc: Loc) {
   return db
     .select()
     .from(schema.cashDeposits)
-    .where(eq(schema.cashDeposits.date, date))
+    .where(and(eq(schema.cashDeposits.date, date), atLoc(schema.cashDeposits.loc, loc)))
     .orderBy(asc(schema.cashDeposits.createdAt));
 }
 
-export async function getAllCashDeposits() {
-  return db.select().from(schema.cashDeposits).orderBy(desc(schema.cashDeposits.date));
+export async function getAllCashDeposits(loc: Loc) {
+  return db
+    .select()
+    .from(schema.cashDeposits)
+    .where(atLoc(schema.cashDeposits.loc, loc))
+    .orderBy(desc(schema.cashDeposits.date));
 }
 
-export async function getStockHistory(limit = 30) {
+export async function getStockHistory(loc: Loc, limit = 30) {
   return db
     .select({
       id: schema.stockIn.id,
@@ -379,34 +430,15 @@ export async function getStockHistory(limit = 30) {
     })
     .from(schema.stockIn)
     .leftJoin(schema.lots, eq(schema.stockIn.lotId, schema.lots.id))
+    .where(atLoc(schema.stockIn.loc, loc))
     .orderBy(desc(schema.stockIn.date), desc(schema.stockIn.createdAt))
     .limit(limit);
 }
 
-// Current running balance (all-time) for a cash/UPI mode.
-export async function currentBalance(mode: "Cash" | "UPI") {
-  const settings = await getSettings();
-  const opening =
-    mode === "Cash" ? Number(settings.openingCash) : Number(settings.openingBank);
-  const [pr] = await db
-    .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
-    .from(schema.payments)
-    .where(eq(schema.payments.mode, mode));
-  const [ex] = await db
-    .select({ s: sql<string>`coalesce(sum(${schema.expenses.amount}), 0)` })
-    .from(schema.expenses)
-    .where(eq(schema.expenses.mode, mode));
-  return opening + Number(pr?.s ?? 0) - Number(ex?.s ?? 0);
-}
-
-export async function getSalesSeries(days: number, loc?: "MS" | "NM") {
-  // Returns last N days of sales totals (one row per day, zero-filled).
-  // When loc is provided, only bills from that store are counted.
-  // Legacy rows written with NULL are treated as Main store ("MS").
-  const locFilter =
-    loc === undefined
-      ? sql``
-      : sql` AND COALESCE(b.loc, 'MS') = ${loc}`;
+export async function getSalesSeries(days: number, loc: Loc) {
+  // Returns last N days of sales totals for one store (one row per day,
+  // zero-filled). Legacy rows written with NULL are treated as Main store.
+  const locFilter = sql` AND COALESCE(b.loc, 'MS') = ${loc}`;
   const rows = await db.execute<{ d: string; total: string; bills: number }>(sql`
     SELECT to_char(d::date, 'YYYY-MM-DD') AS d,
            COALESCE(SUM(b.total), 0)::text AS total,
@@ -427,28 +459,34 @@ export async function getSalesSeries(days: number, loc?: "MS" | "NM") {
   }));
 }
 
-export async function getLatestBills(limit: number, isOwner: boolean) {
+export async function getLatestBills(limit: number, isOwner: boolean, loc: Loc) {
   const rows = await db
     .select()
     .from(schema.bills)
+    .where(atLoc(schema.bills.loc, loc))
     .orderBy(desc(schema.bills.createdAt))
     .limit(limit);
   return enrichBills(rows, isOwner);
 }
 
-// Cash/bank running balance up to (but NOT including) `before` date.
-// If a `closings` row exists on-or-before `before`, we use the latest such row as the
-// anchor and add only flows that happened AFTER that closing's date.
+// One store's cash/bank running balance up to (but NOT including) `before` date.
+// If that store has a `closings` row before `before`, the latest such row is the
+// anchor and only flows that happened AFTER that closing's date are added.
+// Each flow counts for the store it belongs to: bill receipts by their bill's
+// store, purchase payments by their patti's store, the rest by their own loc.
 export async function cashBalanceBefore(
   mode: "Cash" | "UPI",
   before: string,
+  loc: Loc,
   exec: DbExecutor = db,
 ) {
   const col = mode === "Cash" ? schema.closings.cash : schema.closings.bank;
   const [latestClose] = await exec
     .select({ date: schema.closings.date, value: col })
     .from(schema.closings)
-    .where(sql`${schema.closings.date} < ${before} AND ${col} IS NOT NULL`)
+    .where(
+      sql`${schema.closings.date} < ${before} AND ${col} IS NOT NULL AND ${schema.closings.loc} = ${loc}`,
+    )
     .orderBy(desc(schema.closings.date))
     .limit(1);
 
@@ -457,60 +495,78 @@ export async function cashBalanceBefore(
   if (latestClose && latestClose.value != null) {
     base = Number(latestClose.value);
   } else {
-    const settings = await getSettings(exec);
-    base = mode === "Cash" ? Number(settings.openingCash) : Number(settings.openingBank);
+    const opening = openingsFor(await getSettings(exec), loc);
+    base = mode === "Cash" ? opening.cash : opening.bank;
   }
 
-  const dateCond = after
-    ? sql`${schema.payments.date} > ${after} AND ${schema.payments.date} < ${before}`
-    : sql`${schema.payments.date} < ${before}`;
-  const exCond = after
-    ? sql`${schema.expenses.date} > ${after} AND ${schema.expenses.date} < ${before}`
-    : sql`${schema.expenses.date} < ${before}`;
-  const cjCond = after
-    ? sql`${schema.cjSettlements.date} > ${after} AND ${schema.cjSettlements.date} < ${before}`
-    : sql`${schema.cjSettlements.date} < ${before}`;
-  const pattiCond = after
-    ? sql`${schema.pattiPayments.date} > ${after} AND ${schema.pattiPayments.date} < ${before}`
-    : sql`${schema.pattiPayments.date} < ${before}`;
+  const inWindow = (dateCol: SQLWrapper) =>
+    after
+      ? sql`${dateCol} > ${after} AND ${dateCol} < ${before}`
+      : sql`${dateCol} < ${before}`;
 
   const [pr] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
     .from(schema.payments)
-    .where(and(eq(schema.payments.mode, mode), dateCond));
+    .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
+    .where(
+      and(
+        eq(schema.payments.mode, mode),
+        inWindow(schema.payments.date),
+        atLoc(schema.bills.loc, loc),
+      ),
+    );
   const [ex] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.expenses.amount}), 0)` })
     .from(schema.expenses)
-    .where(and(eq(schema.expenses.mode, mode), exCond));
+    .where(
+      and(
+        eq(schema.expenses.mode, mode),
+        inWindow(schema.expenses.date),
+        atLoc(schema.expenses.loc, loc),
+      ),
+    );
   const [cj] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
     .from(schema.cjSettlements)
-    .where(and(eq(schema.cjSettlements.mode, mode), cjCond));
+    .where(
+      and(
+        eq(schema.cjSettlements.mode, mode),
+        inWindow(schema.cjSettlements.date),
+        atLoc(schema.cjSettlements.loc, loc),
+      ),
+    );
   // Purchase payments made in this mode (Cash/UPI only here — CJ-mode
   // payments never touch our own cash/bank, see cjBalanceBefore-equivalent
   // handling in the Daily ledger page).
   const [patti] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
     .from(schema.pattiPayments)
-    .where(and(eq(schema.pattiPayments.mode, mode), pattiCond));
+    .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
+    .where(
+      and(
+        eq(schema.pattiPayments.mode, mode),
+        inWindow(schema.pattiPayments.date),
+        atLoc(schema.pattiBills.loc, loc),
+      ),
+    );
 
   // Also credit opening-due payments received in this mode.
-  const opayCond = after
-    ? sql`${schema.openingPayments.date} > ${after} AND ${schema.openingPayments.date} < ${before}`
-    : sql`${schema.openingPayments.date} < ${before}`;
   const [op] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)` })
     .from(schema.openingPayments)
-    .where(and(eq(schema.openingPayments.mode, mode), opayCond));
+    .where(
+      and(
+        eq(schema.openingPayments.mode, mode),
+        inWindow(schema.openingPayments.date),
+        atLoc(schema.openingPayments.loc, loc),
+      ),
+    );
 
   // Cash deposited into the bank: moves money OUT of Cash and INTO Bank/UPI.
-  const depCond = after
-    ? sql`${schema.cashDeposits.date} > ${after} AND ${schema.cashDeposits.date} < ${before}`
-    : sql`${schema.cashDeposits.date} < ${before}`;
   const [dep] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.cashDeposits.amount}), 0)` })
     .from(schema.cashDeposits)
-    .where(depCond);
+    .where(and(inWindow(schema.cashDeposits.date), atLoc(schema.cashDeposits.loc, loc)));
   const depositAmount = Number(dep?.s ?? 0);
 
   return (
@@ -560,7 +616,13 @@ export async function getCustomerNotes(
   return new Map(rows.map((r) => [r.customerKey, r.note]));
 }
 
+/**
+ * What each customer owes ONE store. A customer who buys at both stores has a
+ * separate balance at each. Old-due receipts count towards the store of the
+ * due they were applied to.
+ */
 export async function getCustomerBalances(
+  loc: Loc,
   exec: DbExecutor = db,
 ): Promise<CustomerBalance[]> {
   const bills = await exec
@@ -569,6 +631,7 @@ export async function getCustomerBalances(
       billed: sql<string>`coalesce(sum(${schema.bills.total}), 0)`,
     })
     .from(schema.bills)
+    .where(atLoc(schema.bills.loc, loc))
     .groupBy(schema.bills.customer);
 
   const pays = await exec
@@ -578,6 +641,7 @@ export async function getCustomerBalances(
     })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.payments.billId, schema.bills.id))
+    .where(atLoc(schema.bills.loc, loc))
     .groupBy(schema.bills.customer);
 
   const dues = await exec
@@ -586,6 +650,7 @@ export async function getCustomerBalances(
       openingDue: sql<string>`coalesce(sum(${schema.openingDues.amount}), 0)`,
     })
     .from(schema.openingDues)
+    .where(atLoc(schema.openingDues.loc, loc))
     .groupBy(schema.openingDues.customer);
 
   const duePays = await exec
@@ -594,6 +659,8 @@ export async function getCustomerBalances(
       openingPaid: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)`,
     })
     .from(schema.openingPayments)
+    .innerJoin(schema.openingDues, eq(schema.openingDues.id, schema.openingPayments.openingDueId))
+    .where(atLoc(schema.openingDues.loc, loc))
     .groupBy(schema.openingPayments.customer);
 
   // Merge by name-key so case / whitespace differences collapse into one row.
@@ -638,8 +705,8 @@ export async function getCustomerBalances(
     .sort((a, b) => b.totalBalance - a.totalBalance);
 }
 
-/** { customerKey -> list of unpaid bills (date, no, kind, loc, balance) }. */
-export async function getPendingBillsByCustomer(): Promise<
+/** One store's { customerKey -> list of unpaid bills (date, no, kind, loc, balance) }. */
+export async function getPendingBillsByCustomer(loc: Loc): Promise<
   Map<
     string,
     Array<{
@@ -665,6 +732,7 @@ export async function getPendingBillsByCustomer(): Promise<
       paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
     })
     .from(schema.bills)
+    .where(atLoc(schema.bills.loc, loc))
     .orderBy(asc(schema.bills.date), asc(schema.bills.no));
 
   const map = new Map<
@@ -722,7 +790,8 @@ export type StatementRow =
       note: string | null;
     };
 
-export async function getCustomerStatement(name: string): Promise<{
+/** A customer's statement with ONE store. */
+export async function getCustomerStatement(name: string, loc: Loc): Promise<{
   customer: string;
   rows: StatementRow[];
   totals: {
@@ -733,8 +802,14 @@ export async function getCustomerStatement(name: string): Promise<{
   };
 }> {
   const key = customerKey(name);
-  const billMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
-  const dueMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+  const billMatches = and(
+    sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`,
+    atLoc(schema.bills.loc, loc),
+  );
+  const dueMatches = and(
+    sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`,
+    atLoc(schema.openingDues.loc, loc),
+  );
 
   const [dues, bills, payments, duePayments] = await Promise.all([
     db
@@ -790,11 +865,16 @@ export async function getCustomerStatement(name: string): Promise<{
         dueNote: schema.openingDues.note,
       })
       .from(schema.openingPayments)
-      .leftJoin(
+      .innerJoin(
         schema.openingDues,
         eq(schema.openingDues.id, schema.openingPayments.openingDueId),
       )
-      .where(sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`)
+      .where(
+        and(
+          sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`,
+          atLoc(schema.openingDues.loc, loc),
+        ),
+      )
       .orderBy(
         asc(schema.openingPayments.date),
         asc(schema.openingPayments.createdAt),

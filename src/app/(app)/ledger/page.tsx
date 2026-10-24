@@ -1,4 +1,4 @@
-import { eq, lt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   cashBalanceBefore,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/queries";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
-import { getCurrentLoc } from "@/lib/loc";
+import { atLoc, getCurrentLoc, locLabel, openingsFor } from "@/lib/loc";
 import { fmtDate, money, pad2, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
@@ -40,6 +40,8 @@ export default async function LedgerPage({ searchParams }: Props) {
   const role = session.user.role;
   const isOwner = role === "owner";
   const canEditClosing = role === "owner" || role === "editor";
+  // Everything below is the current store's own book only.
+  const loc = await getCurrentLoc();
 
   const [
     bills,
@@ -54,40 +56,46 @@ export default async function LedgerPage({ searchParams }: Props) {
     cjReceivedBeforeRow,
     pattiPaidCJBeforeRow,
     customerBalances,
-    loc,
     openingPaymentsToday,
     pattiPaidTodayByMode,
     pattiPaidToday,
     depositsToday,
   ] = await Promise.all([
-    getBillsByDate(date, isOwner),
-    getAllPaymentsOnDate(date),
-    getExpensesByDate(date),
+    getBillsByDate(date, isOwner, loc),
+    getAllPaymentsOnDate(date, loc),
+    getExpensesByDate(date, loc),
     getSettings(),
-    cashBalanceBefore("Cash", date),
-    cashBalanceBefore("UPI", date),
-    db.query.closings.findFirst({ where: eq(schema.closings.date, date) }),
+    cashBalanceBefore("Cash", date, loc),
+    cashBalanceBefore("UPI", date, loc),
+    db.query.closings.findFirst({
+      where: and(eq(schema.closings.date, date), eq(schema.closings.loc, loc)),
+    }),
     db
       .select({ mode: schema.cjSettlements.mode, amount: schema.cjSettlements.amount })
       .from(schema.cjSettlements)
-      .where(eq(schema.cjSettlements.date, date)),
+      .where(and(eq(schema.cjSettlements.date, date), atLoc(schema.cjSettlements.loc, loc))),
     db
       .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
       .from(schema.cjSettlements)
-      .where(lt(schema.cjSettlements.date, date))
+      .where(sql`${schema.cjSettlements.date} < ${date} AND ${atLoc(schema.cjSettlements.loc, loc)}`)
       .then((r) => r[0]),
     db
       .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
       .from(schema.payments)
-      .where(sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} < ${date}`)
+      .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
+      .where(
+        sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} < ${date} AND ${atLoc(schema.bills.loc, loc)}`,
+      )
       .then((r) => r[0]),
     db
       .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
       .from(schema.pattiPayments)
-      .where(sql`${schema.pattiPayments.mode} = 'CJ' AND ${schema.pattiPayments.date} < ${date}`)
+      .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
+      .where(
+        sql`${schema.pattiPayments.mode} = 'CJ' AND ${schema.pattiPayments.date} < ${date} AND ${atLoc(schema.pattiBills.loc, loc)}`,
+      )
       .then((r) => r[0]),
-    getCustomerBalances(),
-    getCurrentLoc(),
+    getCustomerBalances(loc),
     db
       .select({
         id: schema.openingPayments.id,
@@ -104,7 +112,9 @@ export default async function LedgerPage({ searchParams }: Props) {
         schema.openingDues,
         eq(schema.openingDues.id, schema.openingPayments.openingDueId),
       )
-      .where(eq(schema.openingPayments.date, date)),
+      .where(
+        and(eq(schema.openingPayments.date, date), atLoc(schema.openingPayments.loc, loc)),
+      ),
     // Aggregate only — always fetched regardless of role, so the Cash/Bank/CJ
     // closing balances stay correct for everyone. Who got paid (the detailed
     // breakdown below) stays owner-only.
@@ -114,7 +124,8 @@ export default async function LedgerPage({ searchParams }: Props) {
         s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)`,
       })
       .from(schema.pattiPayments)
-      .where(eq(schema.pattiPayments.date, date))
+      .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
+      .where(and(eq(schema.pattiPayments.date, date), atLoc(schema.pattiBills.loc, loc)))
       .groupBy(schema.pattiPayments.mode),
     isOwner
       ? db
@@ -127,7 +138,7 @@ export default async function LedgerPage({ searchParams }: Props) {
           })
           .from(schema.pattiPayments)
           .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
-          .where(eq(schema.pattiPayments.date, date))
+          .where(and(eq(schema.pattiPayments.date, date), atLoc(schema.pattiBills.loc, loc)))
           .orderBy(schema.pattiBills.no)
       : Promise.resolve(
           [] as {
@@ -138,7 +149,7 @@ export default async function LedgerPage({ searchParams }: Props) {
             amount: string;
           }[],
         ),
-    getCashDepositsOnDate(date),
+    getCashDepositsOnDate(date, loc),
   ]);
 
   const cashIn =
@@ -157,52 +168,6 @@ export default async function LedgerPage({ searchParams }: Props) {
       .filter((p) => p.mode === "CJ")
       .reduce((s, p) => s + Number(p.amount), 0);
 
-  function statsFor(loc: "MS" | "NM") {
-    const bs = bills.filter((b) => b.loc === loc);
-    const ps = pays.filter(
-      (p) => (p.billLoc === "NM" ? "NM" : "MS") === loc,
-    );
-    const op = openingPaymentsToday.filter(
-      (p) => (p.loc === "NM" ? "NM" : "MS") === loc,
-    );
-    const ex = expenses.filter(
-      (e) => (e.loc === "NM" ? "NM" : "MS") === loc,
-    );
-    const sumPay = (m: "Cash" | "UPI" | "CJ") =>
-      ps.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0) +
-      op.filter((p) => p.mode === m).reduce((s, p) => s + Number(p.amount), 0);
-    const sumExp = (m: "Cash" | "UPI") =>
-      ex.filter((e) => e.mode === m).reduce((s, e) => s + Number(e.amount), 0);
-    const sIn = sumPay("Cash");
-    const uIn = sumPay("UPI");
-    const cIn = sumPay("CJ");
-    const cExp = sumExp("Cash");
-    const uExp = sumExp("UPI");
-    return {
-      sales: bs.reduce((s, b) => s + b.total, 0),
-      cashIn: sIn,
-      upiIn: uIn,
-      cjIn: cIn,
-      cashExp: cExp,
-      upiExp: uExp,
-      netCash: sIn - cExp,
-      profit: isOwner ? bs.reduce((s, b) => s + (b.profit ?? 0), 0) : 0,
-    };
-  }
-  const storeRows: { name: string; stats: ReturnType<typeof statsFor> }[] = [
-    { name: "Main store", stats: statsFor("MS") },
-    { name: "New Mahavir", stats: statsFor("NM") },
-  ];
-  const storeTotals = {
-    sales: storeRows.reduce((s, r) => s + r.stats.sales, 0),
-    cashIn: storeRows.reduce((s, r) => s + r.stats.cashIn, 0),
-    upiIn: storeRows.reduce((s, r) => s + r.stats.upiIn, 0),
-    cjIn: storeRows.reduce((s, r) => s + r.stats.cjIn, 0),
-    cashExp: storeRows.reduce((s, r) => s + r.stats.cashExp, 0),
-    upiExp: storeRows.reduce((s, r) => s + r.stats.upiExp, 0),
-    netCash: storeRows.reduce((s, r) => s + r.stats.netCash, 0),
-    profit: storeRows.reduce((s, r) => s + r.stats.profit, 0),
-  };
   const cashOut = expenses
     .filter((e) => e.mode === "Cash")
     .reduce((s, e) => s + Number(e.amount), 0);
@@ -223,8 +188,9 @@ export default async function LedgerPage({ searchParams }: Props) {
   // CJ paying a supplier directly on our behalf — reduces CJ's held balance,
   // never touches our own Cash/Bank.
   const pattiPaidCJ = pattiPaidByMode.get("CJ") ?? 0;
+  const opening = openingsFor(settings, loc);
   const cjOpening =
-    Number(settings.cjOpening ?? 0) +
+    opening.cj +
     Number(cjReceivedBeforeRow?.s ?? 0) -
     Number(cjSettlementsBeforeRow?.s ?? 0) -
     Number(pattiPaidCJBeforeRow?.s ?? 0);
@@ -241,7 +207,11 @@ export default async function LedgerPage({ searchParams }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Daily ledger</CardTitle>
+          <CardTitle>Daily ledger · {locLabel(loc)}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Only {locLabel(loc)}&apos;s bills, receipts, expenses and cash. Switch store at the top to
+            see the other store&apos;s book.
+          </p>
         </CardHeader>
         <CardContent className="flex items-end gap-3 flex-wrap">
           <DateFilter paramKey="d" value={date} />
@@ -261,11 +231,12 @@ export default async function LedgerPage({ searchParams }: Props) {
             defaultDate={date}
             customerNames={customerBalances.map((c) => c.name)}
           />
-          <ExpenseQuickButton defaultDate={date} defaultLoc={loc} />
+          <ExpenseQuickButton defaultDate={date} />
           {isOwner && (
             <OpeningBalanceButton
-              openingCash={Number(settings.openingCash)}
-              openingBank={Number(settings.openingBank)}
+              storeName={locLabel(loc)}
+              openingCash={opening.cash}
+              openingBank={opening.bank}
             />
           )}
         </CardContent>
@@ -275,9 +246,9 @@ export default async function LedgerPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle>Close the day</CardTitle>
           <p className="text-sm text-muted-foreground">
-            After entering all bills and expenses for {fmtDate(date)}, count your cash and (if you
-            can) check the bank balance, then save it as the closing. Tomorrow&apos;s
-            opening uses this number.
+            After entering all of {locLabel(loc)}&apos;s bills and expenses for {fmtDate(date)},
+            count this store&apos;s cash and (if you can) check its bank balance, then save it as
+            the closing. Tomorrow&apos;s opening for {locLabel(loc)} uses this number.
           </p>
         </CardHeader>
         <CardContent>
@@ -289,65 +260,6 @@ export default async function LedgerPage({ searchParams }: Props) {
             existingBank={existingClosing?.bank ?? null}
             canEdit={canEditClosing}
           />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>By store</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b">
-                  <th className="py-2 pr-4">Store</th>
-                  <th className="py-2 pr-4 text-right">Sales</th>
-                  <th className="py-2 pr-4 text-right">Cash in</th>
-                  <th className="py-2 pr-4 text-right">UPI in</th>
-                  <th className="py-2 pr-4 text-right">CJ in</th>
-                  <th className="py-2 pr-4 text-right">Cash exp.</th>
-                  <th className="py-2 pr-4 text-right">UPI exp.</th>
-                  <th className="py-2 pr-4 text-right">Net cash</th>
-                  {isOwner && <th className="py-2 pr-4 text-right">Profit</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {storeRows.map((r) => (
-                  <tr key={r.name} className="border-b">
-                    <td className="py-2 pr-4 font-medium">{r.name}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.sales)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.cashIn)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.upiIn)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.cjIn)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.cashExp)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.upiExp)}</td>
-                    <td className="py-2 pr-4 text-right">{money(r.stats.netCash)}</td>
-                    {isOwner && (
-                      <td className="py-2 pr-4 text-right">{money(r.stats.profit)}</td>
-                    )}
-                  </tr>
-                ))}
-                <tr className="font-semibold">
-                  <td className="py-2 pr-4">Total</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.sales)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.cashIn)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.upiIn)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.cjIn)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.cashExp)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.upiExp)}</td>
-                  <td className="py-2 pr-4 text-right">{money(storeTotals.netCash)}</td>
-                  {isOwner && (
-                    <td className="py-2 pr-4 text-right">{money(storeTotals.profit)}</td>
-                  )}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Net cash = cash received − cash expenses.
-            {isOwner ? " Patti payments (owner) are not split by store." : ""}
-          </p>
         </CardContent>
       </Card>
 

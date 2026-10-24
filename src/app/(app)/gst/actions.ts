@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
+import { getCurrentLoc } from "@/lib/loc";
 import type {
   GstHeaderExtras,
   GstProfile,
@@ -69,6 +70,7 @@ export async function saveGstBill(
   const closed = await closedDateError(d.date);
   if (closed) return { ok: false, error: closed };
   const fy = fyOf(d.date);
+  const loc = await getCurrentLoc();
 
   const buyer = await db.query.gstCustomers.findFirst({
     where: eq(schema.gstCustomers.id, d.buyerId),
@@ -182,7 +184,7 @@ export async function saveGstBill(
           fy,
           date: d.date,
           customer: buyer.name,
-          loc: null,
+          loc: loc === "NM" ? "NM" : "MS",
           hamaliPerBag: d.hamaliPerBag.toString(),
           hamali: hamali.toString(),
           gstPercent: d.gstPercent.toString(),

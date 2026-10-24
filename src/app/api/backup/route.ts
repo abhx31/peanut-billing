@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
 import { getAllBills } from "@/lib/queries";
+import { getCurrentLoc } from "@/lib/loc";
 import { pad2, r2, today } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,8 @@ export async function GET(req: Request) {
   const format = url.searchParams.get("format");
 
   if (format === "csv") {
-    const bills = await getAllBills(isOwner);
+    // The bills CSV is the current store's; the JSON backup below is everything.
+    const bills = await getAllBills(isOwner, await getCurrentLoc());
     const header = [
       "Bill no",
       "Period",

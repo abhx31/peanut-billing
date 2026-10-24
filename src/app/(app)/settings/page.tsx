@@ -19,13 +19,16 @@ export default async function SettingsPage() {
     nextFyToClose(),
     listArchives(),
   ]);
-  // Book balance at the end of the year to close, used to prefill the owner's count.
-  const [closeCash, closeBank] = next?.canClose
+  // Each store's book balance at the end of the year to close, used to prefill the owner's count.
+  const after = next?.canClose ? fyBounds(next.fy).nextStart : null;
+  const [msCash, msBank, nmCash, nmBank] = after
     ? await Promise.all([
-        cashBalanceBefore("Cash", fyBounds(next.fy).nextStart),
-        cashBalanceBefore("UPI", fyBounds(next.fy).nextStart),
+        cashBalanceBefore("Cash", after, "MS"),
+        cashBalanceBefore("UPI", after, "MS"),
+        cashBalanceBefore("Cash", after, "NM"),
+        cashBalanceBefore("UPI", after, "NM"),
       ])
-    : [0, 0];
+    : [0, 0, 0, 0];
 
   return (
     <div className="space-y-6">
@@ -39,6 +42,8 @@ export default async function SettingsPage() {
             hamaliDefault={Number(settings.hamaliDefault)}
             openingCash={Number(settings.openingCash)}
             openingBank={Number(settings.openingBank)}
+            openingCashNm={Number(settings.openingCashNm)}
+            openingBankNm={Number(settings.openingBankNm)}
             letterheadImage={settings.letterheadImage ?? null}
           />
         </CardContent>
@@ -84,8 +89,7 @@ export default async function SettingsPage() {
         <CardContent>
           <YearCloseCard
             next={next}
-            cash={closeCash}
-            bank={closeBank}
+            counts={{ MS: { cash: msCash, bank: msBank }, NM: { cash: nmCash, bank: nmBank } }}
             archives={archives.map((a) => {
               const counts = a.counts as {
                 removed?: { bills?: number };
