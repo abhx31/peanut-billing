@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
 import { fmtDate, money } from "@/lib/format";
-import type { CloseResult } from "@/lib/year-close";
+import type { CloseResult, StoreCounts } from "@/lib/year-close";
 import {
   confirmArchiveAction,
   createArchiveAction,
@@ -41,8 +41,8 @@ export type ArchiveRow = {
 
 type Props = {
   next: { fy: string; end: string; canClose: boolean } | null;
-  cash: number;
-  bank: number;
+  /** Each store's book cash/bank on the last day, to prefill the count. */
+  counts: StoreCounts;
   archives: ArchiveRow[];
 };
 
@@ -63,7 +63,7 @@ export async function downloadArchive(fy: string, format: "json" | "csv") {
   }
 }
 
-export function YearCloseCard({ next, cash, bank, archives }: Props) {
+export function YearCloseCard({ next, counts, archives }: Props) {
   const pending = archives.find((a) => a.status === "pending");
 
   return (
@@ -71,7 +71,7 @@ export function YearCloseCard({ next, cash, bank, archives }: Props) {
       {pending ? (
         <PendingArchive a={pending} />
       ) : next?.canClose ? (
-        <CreateArchiveDialog fy={next.fy} end={next.end} cash={cash} bank={bank} />
+        <CreateArchiveDialog fy={next.fy} end={next.end} counts={counts} />
       ) : (
         <p className="text-sm text-muted-foreground">
           {next ? `${next.fy} can be archived after ${next.end}.` : "Nothing to archive yet."}
@@ -139,34 +139,48 @@ function ArchiveLinks({ fy }: { fy: string }) {
 // ---------------------------------------------------------------------------------------------
 // Step 1: create the archive (nothing is removed).
 
+const STORES = [
+  { loc: "MS", name: "Main store" },
+  { loc: "NM", name: "New Mahavir" },
+] as const;
+
 function CreateArchiveDialog({
   fy,
   end,
-  cash,
-  bank,
+  counts,
 }: {
   fy: string;
   end: string;
-  cash: number;
-  bank: number;
+  counts: StoreCounts;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [cashIn, setCashIn] = useState(String(cash));
-  const [bankIn, setBankIn] = useState(String(bank));
+  // Text inputs per store: [cash, bank].
+  const [inputs, setInputs] = useState({
+    MS: { cash: String(counts.MS.cash), bank: String(counts.MS.bank) },
+    NM: { cash: String(counts.NM.cash), bank: String(counts.NM.bank) },
+  });
   const [preview, setPreview] = useState<CloseResult | null>(null);
 
-  const values = () => ({ fy, cash: Number(cashIn), bank: Number(bankIn) });
-  const valid =
-    cashIn.trim() !== "" &&
-    bankIn.trim() !== "" &&
-    Number.isFinite(Number(cashIn)) &&
-    Number.isFinite(Number(bankIn));
+  const values = () => ({
+    fy,
+    counts: {
+      MS: { cash: Number(inputs.MS.cash), bank: Number(inputs.MS.bank) },
+      NM: { cash: Number(inputs.NM.cash), bank: Number(inputs.NM.bank) },
+    },
+  });
+  const valid = Object.values(inputs).every((s) =>
+    [s.cash, s.bank].every((v) => v.trim() !== "" && Number.isFinite(Number(v))),
+  );
+  function setInput(loc: "MS" | "NM", field: "cash" | "bank", v: string) {
+    setInputs((prev) => ({ ...prev, [loc]: { ...prev[loc], [field]: v } }));
+    setPreview(null);
+  }
 
   function runPreview() {
     if (!valid) {
-      toast.error("Enter cash in hand and bank balance.");
+      toast.error("Enter cash in hand and bank balance for both stores.");
       return;
     }
     startTransition(async () => {
@@ -218,34 +232,33 @@ function CreateArchiveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="yc-cash">Cash in hand on {end}</Label>
-            <Input
-              id="yc-cash"
-              inputMode="decimal"
-              value={cashIn}
-              onChange={(e) => {
-                setCashIn(e.target.value);
-                setPreview(null);
-              }}
-            />
+        {STORES.map((s) => (
+          <div key={s.loc} className="space-y-2">
+            <div className="text-sm font-medium">{s.name}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor={`yc-cash-${s.loc}`}>Cash in hand on {end}</Label>
+                <Input
+                  id={`yc-cash-${s.loc}`}
+                  inputMode="decimal"
+                  value={inputs[s.loc].cash}
+                  onChange={(e) => setInput(s.loc, "cash", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`yc-bank-${s.loc}`}>Bank / UPI on {end}</Label>
+                <Input
+                  id={`yc-bank-${s.loc}`}
+                  inputMode="decimal"
+                  value={inputs[s.loc].bank}
+                  onChange={(e) => setInput(s.loc, "bank", e.target.value)}
+                />
+              </div>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="yc-bank">Bank / UPI on {end}</Label>
-            <Input
-              id="yc-bank"
-              inputMode="decimal"
-              value={bankIn}
-              onChange={(e) => {
-                setBankIn(e.target.value);
-                setPreview(null);
-              }}
-            />
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground -mt-2">
-          Filled in from the ledger. Change them if your count was different.
+        ))}
+        <p className="text-xs text-muted-foreground">
+          Filled in from each store&apos;s ledger. Change them if your count was different.
         </p>
 
         {preview && <PreviewSummary r={preview} end={end} />}
@@ -428,9 +441,15 @@ function PreviewSummary({ r, end }: { r: CloseResult; end: string }) {
       </Section>
       <Section title="Carried forward when removed">
         <li>
-          Cash {money(r.carry.closing.cash)} and bank {money(r.carry.closing.bank)} saved as the{" "}
-          {end} closing
+          Main store: cash {money(r.carry.closing.cash)} and bank {money(r.carry.closing.bank)}{" "}
+          saved as the {end} closing
         </li>
+        {r.carry.closingNm && (
+          <li>
+            New Mahavir: cash {money(r.carry.closingNm.cash)} and bank{" "}
+            {money(r.carry.closingNm.bank)} saved as the {end} closing
+          </li>
+        )}
         {r.carry.stock.length > 0 && (
           <li>
             Opening stock for {r.carry.stock.length} lots (Main {main} bags
@@ -438,7 +457,10 @@ function PreviewSummary({ r, end }: { r: CloseResult; end: string }) {
           </li>
         )}
         {r.carry.cjMoved !== 0 && (
-          <li>CJ money held: {money(r.carry.cjOpening)} brought forward</li>
+          <li>Main store CJ money held: {money(r.carry.cjOpening)} brought forward</li>
+        )}
+        {(r.carry.cjMovedNm ?? 0) !== 0 && (
+          <li>New Mahavir CJ money held: {money(r.carry.cjOpeningNm ?? 0)} brought forward</li>
         )}
       </Section>
       <p className="text-muted-foreground">
@@ -446,8 +468,8 @@ function PreviewSummary({ r, end }: { r: CloseResult; end: string }) {
       </p>
       <p className="flex items-start gap-2 text-emerald-700 dark:text-emerald-400">
         <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
-        Checked: customer credit, old dues, unpaid patti, cash, bank, CJ and stock will all stay
-        exactly the same.
+        Checked: each store&apos;s customer credit, old dues, unpaid patti, cash, bank, CJ and
+        stock will all stay exactly the same.
       </p>
     </div>
   );

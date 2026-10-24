@@ -5,6 +5,7 @@ import {
   getHamaliPaidForDate,
 } from "@/lib/queries-hamali";
 import { getSettings } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, today } from "@/lib/format";
 import { PrintTrigger } from "../../bills/[id]/print/print-trigger";
 import { PrintSizeChooser, PrintSizeToggle } from "@/components/print-size-toggle";
@@ -21,10 +22,11 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
   const date = sp.d || today();
   const size = parsePageSize(sp.size, "A5");
   const chosen = hasPageSize(sp.size);
+  const loc = await getCurrentLoc();
   const [h, paid, loads, settings] = await Promise.all([
-    getHamaliForDate(date),
-    getHamaliPaidForDate(date),
-    getHamaliLoadsForDate(date),
+    getHamaliForDate(date, loc),
+    getHamaliPaidForDate(date, loc),
+    getHamaliLoadsForDate(date, loc),
     getSettings(),
   ]);
   const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
@@ -46,7 +48,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
 
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">
-        <b>HAMALI STATEMENT</b>
+        <b>HAMALI STATEMENT</b> · {locLabel(loc)}
         <br />
         Date: <b>{fmtDate(date)}</b>
       </div>

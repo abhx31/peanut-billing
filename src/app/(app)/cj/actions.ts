@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { today } from "@/lib/format";
+import { getCurrentLoc } from "@/lib/loc";
 
 const addSettlementSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -27,12 +28,14 @@ export async function addCjSettlement(
   if (!parsed.success) return { ok: false, error: "Enter the amount CJ gave you." };
   const closed = await closedDateError(parsed.data.date ?? today());
   if (closed) return { ok: false, error: closed };
+  const loc = await getCurrentLoc();
 
   await db.insert(schema.cjSettlements).values({
     date: parsed.data.date ?? today(),
     amount: parsed.data.amount.toString(),
     mode: parsed.data.mode,
     note: parsed.data.note || null,
+    loc,
     createdBy: session.user.id,
   });
   revalidatePath("/cj");

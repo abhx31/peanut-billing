@@ -5,6 +5,7 @@ import { cashBalanceBefore, getCustomerBalances, getLotsWithStock } from "@/lib/
 import { getCjTotals } from "@/lib/queries-cj";
 import { getOldDuesSummary } from "@/lib/queries-recv";
 import { fyOf, r2, today } from "@/lib/format";
+import { locLabel, type Loc } from "@/lib/loc";
 
 // Year-end close of FY X (after 31 Mar of X+1), in two steps:
 //  1. createArchive: runs the whole close as a dry run (including the safety check below) and saves
@@ -15,10 +16,11 @@ import { fyOf, r2, today } from "@/lib/format";
 // The close itself:
 //  - keeps every row that is still owed (bills with a balance, old dues, unpaid patti) live and untouched;
 //  - removes settled rows dated up to 31 Mar of X+1 into a gzipped archive in `fy_archives`;
-//  - carries running totals forward (31 Mar closing for cash/bank, settings.cj_opening for CJ,
-//    1 Apr stock-in / transfer rows for stock) so every live figure is unchanged;
-//  - re-computes customer credit, old dues, unpaid patti, cash, bank, CJ and stock before and after,
-//    inside the same transaction, and rolls everything back if any of them moved.
+//  - carries running totals forward (31 Mar closing per store for cash/bank, settings.cj_opening /
+//    cj_opening_nm for CJ, 1 Apr stock-in / transfer rows for stock) so every live figure is
+//    unchanged;
+//  - re-computes each store's customer credit, old dues, unpaid patti, cash, bank, CJ and stock
+//    before and after, inside the same transaction, and rolls everything back if any of them moved.
 
 export const FY_RE = /^\d{4}-\d{2}$/;
 
@@ -84,29 +86,36 @@ export async function nextFyToClose(
 // ---------------------------------------------------------------------------------------------
 // Snapshot of every live figure the close must not change.
 
-type Snapshot = {
+const LOCS: Loc[] = ["MS", "NM"];
+
+type StoreSnapshot = {
   customers: Map<string, number>;
   oldDues: number;
   pattiUnpaid: number;
   cash: number;
   bank: number;
   cjHeld: number;
+};
+
+type Snapshot = {
+  stores: Record<Loc, StoreSnapshot>;
   stock: Map<string, { name: string; main: number; nm: number }>;
 };
 
 const FUTURE = "9999-12-31";
 
-async function snapshot(exec: DbExecutor): Promise<Snapshot> {
-  const customers = await getCustomerBalances(exec);
-  const dues = await getOldDuesSummary(exec);
+async function storeSnapshot(exec: DbExecutor, loc: Loc): Promise<StoreSnapshot> {
+  const customers = await getCustomerBalances(loc, exec);
+  const dues = await getOldDuesSummary(loc, exec);
   const [patti] = await exec
     .select({ s: sql<string>`coalesce(sum(${schema.pattiBills.net}), 0)` })
     .from(schema.pattiBills)
-    .where(sql`${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = ''`);
-  const cash = await cashBalanceBefore("Cash", FUTURE, exec);
-  const bank = await cashBalanceBefore("UPI", FUTURE, exec);
-  const cj = await getCjTotals(exec);
-  const lots = await getLotsWithStock({ includeDeleted: true }, exec);
+    .where(
+      sql`(${schema.pattiBills.paidMode} IS NULL OR ${schema.pattiBills.paidMode} = '') AND coalesce(${schema.pattiBills.loc}, 'MS') = ${loc}`,
+    );
+  const cash = await cashBalanceBefore("Cash", FUTURE, loc, exec);
+  const bank = await cashBalanceBefore("UPI", FUTURE, loc, exec);
+  const cj = await getCjTotals(loc, exec);
   return {
     customers: new Map(customers.map((c) => [c.name, c.balance])),
     oldDues: dues.outstanding,
@@ -114,6 +123,13 @@ async function snapshot(exec: DbExecutor): Promise<Snapshot> {
     cash,
     bank,
     cjHeld: cj.outstanding,
+  };
+}
+
+async function snapshot(exec: DbExecutor): Promise<Snapshot> {
+  const lots = await getLotsWithStock({ includeDeleted: true }, exec);
+  return {
+    stores: { MS: await storeSnapshot(exec, "MS"), NM: await storeSnapshot(exec, "NM") },
     stock: new Map(lots.map((l) => [l.id, { name: l.name, main: l.stkM, nm: l.stkN }])),
   };
 }
@@ -123,14 +139,19 @@ function compareSnapshots(a: Snapshot, b: Snapshot): string[] {
   const money = (label: string, x: number, y: number) => {
     if (Math.abs(x - y) > 0.005) diffs.push(`${label}: ${r2(x)} → ${r2(y)}`);
   };
-  for (const name of new Set([...a.customers.keys(), ...b.customers.keys()])) {
-    money(`Credit for ${name}`, a.customers.get(name) ?? 0, b.customers.get(name) ?? 0);
+  for (const loc of LOCS) {
+    const x = a.stores[loc];
+    const y = b.stores[loc];
+    const store = locLabel(loc);
+    for (const name of new Set([...x.customers.keys(), ...y.customers.keys()])) {
+      money(`${store} credit for ${name}`, x.customers.get(name) ?? 0, y.customers.get(name) ?? 0);
+    }
+    money(`${store} old dues outstanding`, x.oldDues, y.oldDues);
+    money(`${store} unpaid patti`, x.pattiUnpaid, y.pattiUnpaid);
+    money(`${store} cash in hand`, x.cash, y.cash);
+    money(`${store} bank / UPI`, x.bank, y.bank);
+    money(`${store} CJ money held`, x.cjHeld, y.cjHeld);
   }
-  money("Old dues outstanding", a.oldDues, b.oldDues);
-  money("Unpaid patti", a.pattiUnpaid, b.pattiUnpaid);
-  money("Cash in hand", a.cash, b.cash);
-  money("Bank / UPI", a.bank, b.bank);
-  money("CJ money held", a.cjHeld, b.cjHeld);
   for (const id of new Set([...a.stock.keys(), ...b.stock.keys()])) {
     const x = a.stock.get(id) ?? { name: id, main: 0, nm: 0 };
     const y = b.stock.get(id) ?? { name: x.name, main: 0, nm: 0 };
@@ -152,14 +173,21 @@ type OpeningPayment = typeof schema.openingPayments.$inferSelect;
 type PattiBill = typeof schema.pattiBills.$inferSelect;
 
 export type CarryForward = {
+  /** Main store's closing. In archives made before the stores were separated: the whole firm's. */
   closing: { date: string; cash: number; bank: number };
+  /** New Mahavir's closing. Missing in archives made before the stores were separated. */
+  closingNm?: { cash: number; bank: number };
+  /** Main store's CJ carry (the whole firm's in older archives). */
   cjMoved: number;
   cjOpening: number;
+  cjMovedNm?: number;
+  cjOpeningNm?: number;
   stock: { lotId: string; lotName: string; main: number; nm: number }[];
 };
 
 export type ArchiveData = {
-  version: 1;
+  /** 1 = made before the stores were separated, 2 = per-store closings and CJ. */
+  version: 1 | 2;
   fy: string;
   closedThrough: string;
   closedAt: string;
@@ -252,11 +280,11 @@ function sortRemoved(r: Removed) {
   byKey(r.openingPayments, (x) => x.id);
   byKey(r.pattiBills, (x) => x.id);
   byKey(r.expenses, (x) => x.id);
-  byKey(r.hamaliPaid, (x) => x.date);
+  byKey(r.hamaliPaid, (x) => `${x.date}:${x.loc}`);
   byKey(r.cjSettlements, (x) => x.id);
   byKey(r.stockIn, (x) => x.id);
   byKey(r.transfers, (x) => x.id);
-  byKey(r.closings, (x) => x.date);
+  byKey(r.closings, (x) => `${x.date}:${x.loc}`);
 }
 
 /** What differs between the archive the owner checked and the rows that would be removed now. */
@@ -270,7 +298,10 @@ function diffRemoved(checked: Removed, now: Removed): string[] {
   });
 }
 
-export type CloseInput = { fy: string; cash: number; bank: number; userId: string };
+/** The owner's count on the last day of the year, per store. */
+export type StoreCounts = Record<Loc, { cash: number; bank: number }>;
+
+export type CloseInput = { fy: string; counts: StoreCounts; userId: string };
 
 type Mode = { kind: "dry-run" } | { kind: "remove"; checked: Removed };
 
@@ -285,7 +316,7 @@ type Built = {
 };
 
 export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode): Promise<Built> {
-  const { fy, cash, bank, userId } = input;
+  const { fy, counts, userId } = input;
   if (!FY_RE.test(fy)) throw new Error("Invalid financial year.");
   const { end, nextStart } = fyBounds(fy);
   if (end >= today()) throw new Error(`${fy} has not ended yet. It can be closed after ${end}.`);
@@ -309,14 +340,17 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
     if (latest && fy <= latest.fy) throw new Error(`${fy} is already closed.`);
   }
 
-  // 1. The owner's count on the last day anchors every later cash/bank balance.
-  await tx
-    .insert(schema.closings)
-    .values({ date: end, cash: cash.toString(), bank: bank.toString(), createdBy: userId })
-    .onConflictDoUpdate({
-      target: schema.closings.date,
-      set: { cash: cash.toString(), bank: bank.toString() },
-    });
+  // 1. The owner's count on the last day anchors every later cash/bank balance, per store.
+  for (const loc of LOCS) {
+    const { cash, bank } = counts[loc];
+    await tx
+      .insert(schema.closings)
+      .values({ date: end, loc, cash: cash.toString(), bank: bank.toString(), createdBy: userId })
+      .onConflictDoUpdate({
+        target: [schema.closings.date, schema.closings.loc],
+        set: { cash: cash.toString(), bank: bank.toString() },
+      });
+  }
 
   const before = await snapshot(tx);
 
@@ -383,7 +417,7 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
       .where(lte(schema.cjSettlements.date, end)),
     stockIn: await tx.select().from(schema.stockIn).where(lte(schema.stockIn.date, end)),
     transfers: await tx.select().from(schema.transfers).where(lte(schema.transfers.date, end)),
-    // The closing on the last day stays: it is the cash/bank anchor from now on.
+    // The closings on the last day stay: they are each store's cash/bank anchor from now on.
     closings: await tx.select().from(schema.closings).where(lt(schema.closings.date, end)),
   };
   sortRemoved(removed);
@@ -437,14 +471,21 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
     settings: await tx.select().from(schema.settings),
   };
 
-  // 3. Carry forward what the removed rows contributed to running totals.
-  const cjMovedCents =
-    removed.payments.filter((p) => p.mode === "CJ").reduce((s, p) => s + cents(p.amount), 0) -
-    removed.cjSettlements.reduce((s, c) => s + cents(c.amount), 0);
+  // 3. Carry forward what the removed rows contributed to running totals. CJ is per store: a
+  //    receipt belongs to its bill's store, a settlement to its own.
+  const billLoc = new Map(removed.bills.map((b) => [b.id, b.loc]));
+  const atStore = (v: string | null | undefined, loc: Loc) => (v === "NM" ? "NM" : "MS") === loc;
+  const cjMovedFor = (loc: Loc) =>
+    removed.payments
+      .filter((p) => p.mode === "CJ" && atStore(billLoc.get(p.billId), loc))
+      .reduce((s, p) => s + cents(p.amount), 0) -
+    removed.cjSettlements.filter((c) => atStore(c.loc, loc)).reduce((s, c) => s + cents(c.amount), 0);
+  const cjMovedCents = cjMovedFor("MS");
+  const cjMovedNmCents = cjMovedFor("NM");
   const cjOpening = cents(reference.settings[0]?.cjOpening ?? 0) + cjMovedCents;
+  const cjOpeningNm = cents(reference.settings[0]?.cjOpeningNm ?? 0) + cjMovedNmCents;
 
   // Stock (mirrors getLotsWithStock): Main = in − out + back − sold at Main; NM = out − back − sold at NM.
-  const billLoc = new Map(removed.bills.map((b) => [b.id, b.loc]));
   const delta = new Map<string, { main: number; nm: number }>();
   const bump = (lotId: string, main: number, nm: number) => {
     const d = delta.get(lotId) ?? { main: 0, nm: 0 };
@@ -468,16 +509,19 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
     .map(([lotId, d]) => ({ lotId, lotName: lotName.get(lotId) ?? "", main: d.main, nm: d.nm }));
 
   const carry: CarryForward = {
-    closing: { date: end, cash, bank },
+    closing: { date: end, cash: counts.MS.cash, bank: counts.MS.bank },
+    closingNm: { cash: counts.NM.cash, bank: counts.NM.bank },
     cjMoved: cjMovedCents / 100,
     cjOpening: cjOpening / 100,
+    cjMovedNm: cjMovedNmCents / 100,
+    cjOpeningNm: cjOpeningNm / 100,
     stock: stockCarry,
   };
 
   // 4. Build the archive. On removal the pending row becomes the final archive in the same
   //    transaction, so it is only marked closed if the whole close succeeds.
   const data: ArchiveData = {
-    version: 1,
+    version: 2,
     fy,
     closedThrough: end,
     closedAt: new Date().toISOString(),
@@ -565,13 +609,17 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
     }));
   if (stockRows.length) await tx.insert(schema.stockIn).values(stockRows);
   if (transferRows.length) await tx.insert(schema.transfers).values(transferRows);
-  if (cjMovedCents !== 0) {
+  if (cjMovedCents !== 0 || cjMovedNmCents !== 0) {
+    const cj = {
+      cjOpening: (cjOpening / 100).toString(),
+      cjOpeningNm: (cjOpeningNm / 100).toString(),
+    };
     await tx
       .insert(schema.settings)
-      .values({ id: 1, cjOpening: (cjOpening / 100).toString() })
+      .values({ id: 1, ...cj })
       .onConflictDoUpdate({
         target: schema.settings.id,
-        set: { cjOpening: (cjOpening / 100).toString(), updatedAt: new Date() },
+        set: { ...cj, updatedAt: new Date() },
       });
   }
 
@@ -636,9 +684,18 @@ export async function confirmArchive(fy: string, userId: string): Promise<CloseR
   if (!row || row.status !== "pending") {
     throw new Error(`There is no ${fy} archive waiting for a check.`);
   }
-  const { cash, bank } = row.data.carryForward.closing;
+  const carry = row.data.carryForward;
+  if (!carry.closingNm) {
+    throw new Error(
+      `The ${fy} archive was made before Main store and New Mahavir were separated. Discard it and create it again.`,
+    );
+  }
+  const counts: StoreCounts = {
+    MS: { cash: carry.closing.cash, bank: carry.closing.bank },
+    NM: carry.closingNm,
+  };
   const built = await db.transaction((tx) =>
-    runYearClose(tx, { fy, cash, bank, userId }, { kind: "remove", checked: row.data.removed }),
+    runYearClose(tx, { fy, counts, userId }, { kind: "remove", checked: row.data.removed }),
   );
   return built.result;
 }

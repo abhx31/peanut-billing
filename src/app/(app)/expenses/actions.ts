@@ -14,7 +14,6 @@ const addSchema = z.object({
   note: z.string().trim().max(240).optional().default(""),
   amount: z.number().positive(),
   mode: z.enum(["Cash", "UPI"]),
-  loc: z.enum(["MS", "NM"]).optional(),
 });
 
 const delSchema = z.object({ id: z.string().uuid() });
@@ -28,8 +27,7 @@ export async function addExpense(input: z.input<typeof addSchema>): Promise<Resu
   const closed = await closedDateError(parsed.data.date);
   if (closed) return { ok: false, error: closed };
 
-  // Explicit loc from the form wins; fall back to current cookie.
-  const loc = parsed.data.loc ?? (await getCurrentLoc());
+  const loc = await getCurrentLoc();
 
   await db.insert(schema.expenses).values({
     date: parsed.data.date,

@@ -4,7 +4,8 @@ import { FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
-import { getGstBillsForMonth, getLotCosts, getLotsWithStock } from "@/lib/queries";
+import { getGstBillsForMonth, getLotCosts, getLotsWithStock, lotStockAt } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, fyOf, money, pad2, r2, today } from "@/lib/format";
 import { GstBillForm } from "./gst-bill-form";
 import { ExcelButton } from "@/components/excel-button";
@@ -23,6 +24,7 @@ export default async function GstBillPage({ searchParams }: Props) {
   const currentFy = fyOf(today());
   const sp = await searchParams;
   const month = sp.m || today().slice(0, 7);
+  const loc = await getCurrentLoc();
   const [customers, settingsRow, lots, nextNoRow, lotCosts, monthBills] = await Promise.all([
     db
       .select()
@@ -38,7 +40,7 @@ export default async function GstBillPage({ searchParams }: Props) {
       .where(and(eq(schema.bills.kind, "gst"), eq(schema.bills.fy, currentFy)))
       .then((r) => r[0]),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
-    getGstBillsForMonth(month, isOwner),
+    getGstBillsForMonth(month, isOwner, loc),
   ]);
   const profile = (settingsRow?.gstProfile ?? null) as GstProfile | null;
   const nextInvoiceNo = Number(nextNoRow?.max ?? 0) + 1;
@@ -113,14 +115,14 @@ export default async function GstBillPage({ searchParams }: Props) {
           gstin: c.gstin,
           address: c.address,
         }))}
-        lots={lots.map((l) => ({ id: l.id, name: l.name, left: l.stkM }))}
+        lots={lots.map((l) => ({ id: l.id, name: l.name, left: lotStockAt(l, loc).left }))}
         nextInvoiceNo={invoiceNo}
         currentFy={currentFy}
         lotCosts={isOwner ? lotCosts : null}
       />
       <Card>
         <CardHeader>
-          <CardTitle>Download GST invoices</CardTitle>
+          <CardTitle>Download GST invoices · {locLabel(loc)}</CardTitle>
         </CardHeader>
         <CardContent>
           <ExcelButton report="gst" pickDate label="GST bills (Excel)" />
@@ -129,7 +131,7 @@ export default async function GstBillPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>GST invoices</CardTitle>
+          <CardTitle>GST invoices · {locLabel(loc)}</CardTitle>
           <MonthPicker value={month} />
         </CardHeader>
         <CardContent>

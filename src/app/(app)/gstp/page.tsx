@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries-patti";
 import { getLotsWithStock, getSettings } from "@/lib/queries";
 import { db, schema } from "@/db";
+import { atLoc, getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, fyOf, money, pad2, today } from "@/lib/format";
 import { GstPurchaseForm } from "./gst-purchase-form";
 import { DeleteGstPurchaseButton } from "./delete-gst-purchase-button";
@@ -27,12 +28,13 @@ export default async function GstPurchasePage({ searchParams }: Props) {
   const sp = await searchParams;
   const month = sp.m || today().slice(0, 7); // YYYY-MM
   const currentFy = fyOf(today());
+  const loc = await getCurrentLoc();
 
   const [settingsRow, lots, purchases, summary, nextNoRow] = await Promise.all([
     getSettings(),
     getLotsWithStock(),
-    getGstPurchasesForMonth(month),
-    getGstMonthlySummary(month),
+    getGstPurchasesForMonth(month, loc),
+    getGstMonthlySummary(month, loc),
     db
       .select({
         max: sql<number>`coalesce(max(${schema.pattiBills.no}), 0)::int`,
@@ -42,6 +44,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
         and(
           eq(schema.pattiBills.kind, "gstp"),
           eq(schema.pattiBills.fy, currentFy),
+          atLoc(schema.pattiBills.loc, loc),
         ),
       )
       .then((r) => r[0]),
@@ -107,7 +110,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>GST purchases in {monthLabel}</CardTitle>
+          <CardTitle>{locLabel(loc)} GST purchases in {monthLabel}</CardTitle>
           <MonthPicker value={month} />
         </CardHeader>
         <CardContent>
@@ -213,7 +216,9 @@ export default async function GstPurchasePage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>GST summary: tax on sales vs tax I can claim back</CardTitle>
+          <CardTitle>
+            GST summary · {locLabel(loc)}: tax on sales vs tax I can claim back
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

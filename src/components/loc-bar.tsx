@@ -42,6 +42,9 @@ export function LocBar({ loc }: Props) {
           <span>
             Working at <b>{loc === "NM" ? "New Mahavir" : "Main store"}</b>
           </span>
+          <span className="hidden sm:inline text-xs font-normal opacity-75">
+            · every page shows only this store&apos;s bills, money and stock
+          </span>
         </div>
         <div className="flex gap-1 rounded-md bg-background/20 p-0.5">
           <button

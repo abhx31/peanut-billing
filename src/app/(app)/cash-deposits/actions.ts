@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
+import { getCurrentLoc } from "@/lib/loc";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -29,11 +30,13 @@ export async function addCashDeposit(input: z.input<typeof saveSchema>): Promise
   }
   const closed = await closedDateError(parsed.data.date);
   if (closed) return { ok: false, error: closed };
+  const loc = await getCurrentLoc();
 
   await db.insert(schema.cashDeposits).values({
     date: parsed.data.date,
     amount: parsed.data.amount.toString(),
     note: parsed.data.note || null,
+    loc,
     createdBy: session.user.id,
   });
   revalidateAll();

@@ -28,7 +28,6 @@ import { addExpense } from "../expenses/actions";
 
 type Mode = "Cash" | "UPI" | "CJ";
 type ExpMode = "Cash" | "UPI";
-type Loc = "MS" | "NM";
 
 const EXP_SUGGESTIONS = [
   "Hamali / labour",
@@ -169,14 +168,7 @@ export function ReceiveQuickButton({
   );
 }
 
-export function ExpenseQuickButton({
-  defaultDate,
-  defaultLoc,
-}: {
-  defaultDate: string;
-  defaultLoc: Loc;
-}) {
-
+export function ExpenseQuickButton({ defaultDate }: { defaultDate: string }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [date, setDate] = useState(defaultDate);
@@ -184,7 +176,6 @@ export function ExpenseQuickButton({
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<ExpMode>("Cash");
-  const [loc, setLoc] = useState<Loc>(defaultLoc);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -200,7 +191,6 @@ export function ExpenseQuickButton({
         note: note.trim(),
         amount: n,
         mode,
-        loc,
       });
       if (!res.ok) {
         toast.error(res.error);
@@ -230,8 +220,9 @@ export function ExpenseQuickButton({
         <DialogHeader>
           <DialogTitle>Add expense</DialogTitle>
           <DialogDescription>
-            Adds an expense directly on the chosen date. For Hamali payments
-            use the Hamali tab (so the hm flag is set correctly).
+            Adds an expense for the store you are working at, on the chosen
+            date. For Hamali payments use the Hamali tab (so the hm flag is
+            set correctly).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
@@ -272,7 +263,7 @@ export function ExpenseQuickButton({
               placeholder="Vehicle no, vendor name, etc."
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="qe-amt">Amount (₹)</Label>
               <Input
@@ -296,27 +287,6 @@ export function ExpenseQuickButton({
                 <SelectContent>
                   <SelectItem value="Cash" label="Cash">Cash</SelectItem>
                   <SelectItem value="UPI" label="UPI">UPI</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Store</Label>
-              <Select
-                value={loc}
-                onValueChange={(v) => setLoc((v as Loc) ?? "MS")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(v) => (v === "NM" ? "New Mahavir" : "Main store")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MS" label="Main store">
-                    Main store
-                  </SelectItem>
-                  <SelectItem value="NM" label="New Mahavir">
-                    New Mahavir
-                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

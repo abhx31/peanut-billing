@@ -14,6 +14,8 @@ type Props = {
   hamaliDefault: number;
   openingCash: number;
   openingBank: number;
+  openingCashNm: number;
+  openingBankNm: number;
   letterheadImage: string | null;
 };
 
@@ -28,6 +30,8 @@ export function SettingsForm(initial: Props) {
   const [hamali, setHamali] = useState(String(initial.hamaliDefault));
   const [openCash, setOpenCash] = useState(String(initial.openingCash));
   const [openBank, setOpenBank] = useState(String(initial.openingBank));
+  const [openCashNm, setOpenCashNm] = useState(String(initial.openingCashNm));
+  const [openBankNm, setOpenBankNm] = useState(String(initial.openingBankNm));
   // `undefined` = unchanged, send nothing; `""` = user cleared it; string = new image.
   const [letterhead, setLetterhead] = useState<string | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -66,11 +70,15 @@ export function SettingsForm(initial: Props) {
     const hamaliN = Number(hamali);
     const openCashN = Number(openCash);
     const openBankN = Number(openBank);
+    const openCashNmN = Number(openCashNm);
+    const openBankNmN = Number(openBankNm);
     if (
       !firm.trim() ||
       !Number.isFinite(hamaliN) ||
       !Number.isFinite(openCashN) ||
-      !Number.isFinite(openBankN)
+      !Number.isFinite(openBankN) ||
+      !Number.isFinite(openCashNmN) ||
+      !Number.isFinite(openBankNmN)
     ) {
       toast.error("Fill all fields with valid values.");
       return;
@@ -81,6 +89,8 @@ export function SettingsForm(initial: Props) {
         hamaliDefault: hamaliN,
         openingCash: openCashN,
         openingBank: openBankN,
+        openingCashNm: openCashNmN,
+        openingBankNm: openBankNmN,
         letterheadImage: letterhead,
       });
       if (!res.ok) {
@@ -117,9 +127,9 @@ export function SettingsForm(initial: Props) {
       </FormGrid>
       <FormGrid cols={2}>
         <Field
-          label="Opening cash in hand (₹)"
+          label="Main store · opening cash in hand (₹)"
           htmlFor="oc"
-          hint="Only used before the first closing is saved; after that the daily ledger uses the latest closing."
+          hint="Each store has its own. Only used before that store's first closing is saved; after that its daily ledger uses its latest closing."
         >
           <Input
             id="oc"
@@ -130,7 +140,7 @@ export function SettingsForm(initial: Props) {
             onChange={(e) => setOpenCash(e.target.value)}
           />
         </Field>
-        <Field label="Opening bank / UPI balance (₹)" htmlFor="ob">
+        <Field label="Main store · opening bank / UPI balance (₹)" htmlFor="ob">
           <Input
             id="ob"
             type="number"
@@ -138,6 +148,26 @@ export function SettingsForm(initial: Props) {
             step="0.01"
             value={openBank}
             onChange={(e) => setOpenBank(e.target.value)}
+          />
+        </Field>
+        <Field label="New Mahavir · opening cash in hand (₹)" htmlFor="ocn">
+          <Input
+            id="ocn"
+            type="number"
+            min="0"
+            step="0.01"
+            value={openCashNm}
+            onChange={(e) => setOpenCashNm(e.target.value)}
+          />
+        </Field>
+        <Field label="New Mahavir · opening bank / UPI balance (₹)" htmlFor="obn">
+          <Input
+            id="obn"
+            type="number"
+            min="0"
+            step="0.01"
+            value={openBankNm}
+            onChange={(e) => setOpenBankNm(e.target.value)}
           />
         </Field>
       </FormGrid>

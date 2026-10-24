@@ -6,6 +6,7 @@ import {
   getCustomerNotes,
   getPendingBillsByCustomer,
 } from "@/lib/queries";
+import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { BackupButtons } from "./backup-buttons";
 import { BalancesTable } from "./balances-table";
 import { ExcelButton } from "@/components/excel-button";
@@ -17,9 +18,10 @@ export default async function BalancesPage() {
   const isOwner = session.user.role === "owner";
   // Only owner/editor can save a note; staff see them read-only.
   const canEditNotes = session.user.role === "owner" || session.user.role === "editor";
+  const loc = await getCurrentLoc();
   const [all, pending, notes] = await Promise.all([
-    getCustomerBalances(),
-    getPendingBillsByCustomer(),
+    getCustomerBalances(loc),
+    getPendingBillsByCustomer(loc),
     getCustomerNotes(),
   ]);
 
@@ -50,7 +52,7 @@ export default async function BalancesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Customer balances (credit given)</CardTitle>
+          <CardTitle>Customer balances (credit given) · {locLabel(loc)}</CardTitle>
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (

@@ -85,11 +85,19 @@ export default async function ArchivePage({ params, searchParams }: Props) {
           value={String(data.removed.expenses.length)}
           sub={money(expenses)}
         />
-        <Stat
-          title="Closing cash / bank"
-          value={money(data.carryForward.closing.cash)}
-          sub={`Bank ${money(data.carryForward.closing.bank)} · ${carriedBags} bags carried`}
-        />
+        {data.carryForward.closingNm ? (
+          <Stat
+            title="Closing cash / bank (Main · New Mahavir)"
+            value={`${money(data.carryForward.closing.cash)} · ${money(data.carryForward.closingNm.cash)}`}
+            sub={`Bank ${money(data.carryForward.closing.bank)} · ${money(data.carryForward.closingNm.bank)} · ${carriedBags} bags carried`}
+          />
+        ) : (
+          <Stat
+            title="Closing cash / bank"
+            value={money(data.carryForward.closing.cash)}
+            sub={`Bank ${money(data.carryForward.closing.bank)} · ${carriedBags} bags carried`}
+          />
+        )}
       </section>
 
       <Card>

@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
-import { getCurrentLoc } from "@/lib/loc";
+import { atLoc, getCurrentLoc } from "@/lib/loc";
 import { customerKey } from "@/lib/queries";
 
 const itemSchema = z.object({
@@ -75,11 +75,12 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
         }
       }
 
-      // Compute the customer's balance BEFORE this bill. Used both for the
-      // snapshot stored on the bill and for the overpayment cascade.
+      // Compute the customer's balance with THIS store BEFORE this bill. Used
+      // both for the snapshot stored on the bill and for the overpayment
+      // cascade — which never reaches the other store's dues.
       const key = customerKey(d.customer);
-      const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key}`;
-      const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key}`;
+      const nameMatches = sql`lower(regexp_replace(trim(${schema.bills.customer}), '\\s+', ' ', 'g')) = ${key} AND ${atLoc(schema.bills.loc, loc)}`;
+      const dueNameMatches = sql`lower(regexp_replace(trim(${schema.openingDues.customer}), '\\s+', ' ', 'g')) = ${key} AND ${atLoc(schema.openingDues.loc, loc)}`;
       const [{ s: billsSum } = { s: "0" }] = await tx
         .select({ s: sql<string>`coalesce(sum(${schema.bills.total}), 0)` })
         .from(schema.bills)
@@ -95,7 +96,10 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
       const [{ s: duePaysSum } = { s: "0" }] = await tx
         .select({ s: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)` })
         .from(schema.openingPayments)
-        .where(sql`lower(regexp_replace(trim(${schema.openingPayments.customer}), '\\s+', ' ', 'g')) = ${key}`);
+        .innerJoin(
+          schema.openingDues,
+          sql`${schema.openingDues.id} = ${schema.openingPayments.openingDueId} AND ${dueNameMatches}`,
+        );
       const prev = r2(
         Number(billsSum ?? 0) +
           Number(duesSum ?? 0) -
@@ -258,6 +262,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
               amount: "0",
               date: d.date,
               note: "Advance received",
+              loc: loc === "NM" ? "NM" : "MS",
               createdBy: session.user.id,
             })
             .returning({ id: schema.openingDues.id });

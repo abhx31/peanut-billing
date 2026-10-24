@@ -115,8 +115,9 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
 
   try {
     const result = await db.transaction(async (tx) => {
+      // Each store runs its own 01..NN patti series.
       const noRes = await tx.execute<{ no: number }>(
-        sql`select next_patti_no(${fy}) as no`,
+        sql`select next_patti_no_for_loc(${fy}, NULL, ${loc === "NM" ? "NM" : "MS"}) as no`,
       );
       const no = noRes.rows[0].no;
 
@@ -127,6 +128,7 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
           fy,
           date: d.date,
           party: d.party,
+          loc: loc === "NM" ? "NM" : "MS",
           lotName: topLotName,
           weightsText: topWeights,
           bags: bagsTotal,

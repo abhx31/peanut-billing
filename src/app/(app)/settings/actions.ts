@@ -12,6 +12,8 @@ const settingsSchema = z.object({
   hamaliDefault: z.number().min(0),
   openingCash: z.number().min(0),
   openingBank: z.number().min(0),
+  openingCashNm: z.number().min(0),
+  openingBankNm: z.number().min(0),
   letterheadImage: z
     .string()
     .max(2_000_000) // ~1.5 MB raw image after base64 overhead
@@ -53,6 +55,8 @@ export async function updateSettings(
     hamaliDefault: parsed.data.hamaliDefault.toString(),
     openingCash: parsed.data.openingCash.toString(),
     openingBank: parsed.data.openingBank.toString(),
+    openingCashNm: parsed.data.openingCashNm.toString(),
+    openingBankNm: parsed.data.openingBankNm.toString(),
     updatedAt: new Date(),
   };
   if (lh !== undefined) updateSet.letterheadImage = lh === "" ? null : lh;
@@ -65,6 +69,8 @@ export async function updateSettings(
       hamaliDefault: parsed.data.hamaliDefault.toString(),
       openingCash: parsed.data.openingCash.toString(),
       openingBank: parsed.data.openingBank.toString(),
+      openingCashNm: parsed.data.openingCashNm.toString(),
+      openingBankNm: parsed.data.openingBankNm.toString(),
       letterheadImage: lh && lh !== "" ? lh : null,
     })
     .onConflictDoUpdate({

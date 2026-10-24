@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOwner } from "@/lib/auth-helpers";
 import { getAllBills } from "@/lib/queries";
 import { db, schema } from "@/db";
+import { atLoc, getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, fyOf, money, pad2, r2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { FYFilter } from "./fy-filter";
@@ -24,10 +25,11 @@ type Props = { searchParams: Promise<{ fy?: string; m?: string }> };
 export default async function ProfitPage({ searchParams }: Props) {
   await requireOwner();
   const sp = await searchParams;
+  const loc = await getCurrentLoc();
 
   const [allBills, expenses] = await Promise.all([
-    getAllBills(true),
-    db.select().from(schema.expenses),
+    getAllBills(true, loc),
+    db.select().from(schema.expenses).where(atLoc(schema.expenses.loc, loc)),
   ]);
 
   const allFys = Array.from(
@@ -127,7 +129,7 @@ export default async function ProfitPage({ searchParams }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Profit</CardTitle>
+          <CardTitle>Profit · {locLabel(loc)}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4">

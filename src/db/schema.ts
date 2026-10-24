@@ -224,6 +224,7 @@ export const openingDues = pgTable("opening_dues", {
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   date: date("date", { mode: "string" }).notNull(),
   note: text("note"),
+  loc: text("loc"), // null = Main store, "NM" = New Mahavir
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -259,14 +260,20 @@ export const gstCustomers = pgTable("gst_customers", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// Counted closing balances per day. closing.date is the business day; becomes next day's opening.
-export const closings = pgTable("closings", {
-  date: date("date", { mode: "string" }).primaryKey(),
-  cash: numeric("cash", { precision: 14, scale: 2 }),
-  bank: numeric("bank", { precision: 14, scale: 2 }),
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+// Counted closing balances per store per day. closing.date is the business day; becomes that
+// store's next-day opening.
+export const closings = pgTable(
+  "closings",
+  {
+    date: date("date", { mode: "string" }).notNull(),
+    loc: text("loc").notNull().default("MS"), // "MS" = Main store, "NM" = New Mahavir
+    cash: numeric("cash", { precision: 14, scale: 2 }),
+    bank: numeric("bank", { precision: 14, scale: 2 }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.date, t.loc] })],
+);
 
 // CJ (go-between) handing collected money back to the owner as Cash/UPI.
 export const cjSettlements = pgTable("cj_settlements", {
@@ -275,6 +282,7 @@ export const cjSettlements = pgTable("cj_settlements", {
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   mode: paymentModeEnum("mode").notNull(), // Cash or UPI only in practice
   note: text("note"),
+  loc: text("loc"), // null = Main store, "NM" = New Mahavir
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -286,21 +294,27 @@ export const cashDeposits = pgTable("cash_deposits", {
   date: date("date", { mode: "string" }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   note: text("note"),
+  loc: text("loc"), // null = Main store, "NM" = New Mahavir
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// Hamali paid-out record per day (one per date). References the expense entry it created.
-export const hamaliPaid = pgTable("hamali_paid", {
-  date: date("date", { mode: "string" }).primaryKey(),
-  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
-  mode: paymentModeEnum("mode").notNull(),
-  expenseId: uuid("expense_id")
-    .notNull()
-    .references(() => expenses.id, { onDelete: "cascade" }),
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+// Hamali paid-out record per store per day. References the expense entry it created.
+export const hamaliPaid = pgTable(
+  "hamali_paid",
+  {
+    date: date("date", { mode: "string" }).notNull(),
+    loc: text("loc").notNull().default("MS"), // "MS" = Main store, "NM" = New Mahavir
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    mode: paymentModeEnum("mode").notNull(),
+    expenseId: uuid("expense_id")
+      .notNull()
+      .references(() => expenses.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.date, t.loc] })],
+);
 
 // Patti (purchase) bills. Also holds GST purchase bills — distinguished by
 // the `kind` column: null = regular purchase patti, "gstp" = GST purchase.
@@ -314,6 +328,7 @@ export const pattiBills = pgTable(
     fy: text("fy").notNull(),
     date: date("date", { mode: "string" }).notNull(),
     party: text("party").notNull(),
+    loc: text("loc"), // null = Main store, "NM" = New Mahavir
     lotName: text("lot_name"),
     weightsText: text("weights_text"),
     bags: integer("bags").notNull(),
@@ -348,8 +363,9 @@ export const pattiBills = pgTable(
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("patti_kind_fy_no_uq").on(
+    uniqueIndex("patti_kind_loc_fy_no_uq").on(
       sql`coalesce(${t.kind}, '')`,
+      sql`coalesce(${t.loc}, 'MS')`,
       t.fy,
       t.no,
     ),
@@ -379,10 +395,14 @@ export const settings = pgTable("settings", {
   id: integer("id").primaryKey().default(1),
   firm: text("firm").notNull().default("Peanut Traders"),
   hamaliDefault: numeric("hamali_default", { precision: 14, scale: 2 }).notNull().default("10"),
+  // Main store's opening balances. New Mahavir's are the *_nm columns below.
   openingCash: numeric("opening_cash", { precision: 14, scale: 2 }).notNull().default("0"),
   openingBank: numeric("opening_bank", { precision: 14, scale: 2 }).notNull().default("0"),
   // CJ money carried forward from closed financial years.
   cjOpening: numeric("cj_opening", { precision: 14, scale: 2 }).notNull().default("0"),
+  openingCashNm: numeric("opening_cash_nm", { precision: 14, scale: 2 }).notNull().default("0"),
+  openingBankNm: numeric("opening_bank_nm", { precision: 14, scale: 2 }).notNull().default("0"),
+  cjOpeningNm: numeric("cj_opening_nm", { precision: 14, scale: 2 }).notNull().default("0"),
   // GST firm profile: { name, addr, fssai, gstin, state, code, email, bh, bn, ba, bi, decl }
   gstProfile: jsonb("gst_profile"),
   // Map of fy → first GST invoice number (if the firm started mid-FY with paper invoices).
@@ -473,6 +493,7 @@ export const hamaliLoads = pgTable("hamali_loads", {
   ratePerBag: numeric("rate_per_bag", { precision: 10, scale: 2 }).notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   note: text("note"),
+  loc: text("loc"), // null = Main store, "NM" = New Mahavir
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
