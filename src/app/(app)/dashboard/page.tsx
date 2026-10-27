@@ -30,7 +30,7 @@ import { getCjTotals } from "@/lib/queries-cj";
 import { getOldDuesSummary } from "@/lib/queries-recv";
 import { db, schema } from "@/db";
 import { atLoc, getCurrentLoc, locLabel } from "@/lib/loc";
-import { fmtDate, money, pad2, today } from "@/lib/format";
+import { fmtDate, money, moneyRounded, pad2, today } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -158,7 +158,7 @@ export default async function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
           title={`Sales today · ${storeName}`}
-          value={money(salesToday)}
+          value={moneyRounded(salesToday)}
           sub={`${billsHere.length} bill${billsHere.length === 1 ? "" : "s"}`}
           icon={Receipt}
           delta={salesDelta}
@@ -166,21 +166,21 @@ export default async function DashboardPage() {
         />
         <KPICard
           title="Cash in hand"
-          value={money(cashBal)}
+          value={moneyRounded(cashBal)}
           sub="Book balance"
           icon={Banknote}
           href="/ledger"
         />
         <KPICard
           title="Bank / UPI"
-          value={money(upiBal)}
+          value={moneyRounded(upiBal)}
           sub="Book balance"
           icon={Wallet}
           href="/ledger"
         />
         <KPICard
           title="Owed by customers"
-          value={money(pendingCredit)}
+          value={moneyRounded(pendingCredit)}
           sub={`${dueCount} with pending bills${dues.outstanding > 0.5 ? ` · incl ${money(dues.outstanding)} old` : ""}`}
           icon={CreditCard}
           tone={pendingCredit > 0.5 ? "warn" : undefined}
@@ -191,7 +191,7 @@ export default async function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard
           title="With CJ (to collect)"
-          value={money(cj.outstanding)}
+          value={moneyRounded(cj.outstanding)}
           sub={`Received today: ${money(cj.receivedToday)}`}
           icon={HandCoins}
           tone={cj.outstanding > 0.5 ? "warn" : undefined}
@@ -206,7 +206,7 @@ export default async function DashboardPage() {
         />
         <KPICard
           title="Old dues (to collect)"
-          value={money(dues.outstanding)}
+          value={moneyRounded(dues.outstanding)}
           sub={`${dues.customers} customer${dues.customers === 1 ? "" : "s"}`}
           icon={CreditCard}
           tone={dues.outstanding > 0.5 ? "warn" : undefined}
@@ -215,7 +215,7 @@ export default async function DashboardPage() {
         {isPrivileged && (
           <KPICard
             title="Purchases not yet paid"
-            value={money(pattiUnpaid)}
+            value={moneyRounded(pattiUnpaid)}
             sub="Purchases pending payment"
             icon={ShoppingBasket}
             tone={pattiUnpaid > 0.5 ? "warn" : undefined}
@@ -464,43 +464,43 @@ function KPICard({ title, value, sub, icon: Icon, href, tone, delta }: KPIProps)
       className={`h-full transition-all hover:shadow-md hover:-translate-y-0.5 ${href ? "cursor-pointer" : ""}`}
     >
       <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-              {title}
-            </div>
-            <div
-              className={`mt-1.5 text-2xl font-bold tabular-nums tracking-tight ${tone === "warn" ? "text-destructive" : ""}`}
-            >
-              {value}
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              {sub && <span>{sub}</span>}
-              {delta !== undefined && delta !== 0 && (
-                <span
-                  className={`inline-flex items-center gap-0.5 font-medium ${
-                    delta > 0 ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {delta > 0 ? (
-                    <ArrowUpRight className="h-3 w-3" />
-                  ) : (
-                    <ArrowDownRight className="h-3 w-3" />
-                  )}
-                  {Math.abs(delta).toFixed(0)}%
-                </span>
-              )}
-            </div>
+        {/* Title and icon share the top row so the figure below gets the
+            card's full width — large lakh / crore amounts never run into the icon. */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 text-xs uppercase tracking-wider text-muted-foreground font-medium leading-snug">
+            {title}
           </div>
           <div
-            className={`shrink-0 grid h-10 w-10 place-items-center rounded-lg ${
+            className={`shrink-0 grid h-8 w-8 place-items-center rounded-lg ${
               tone === "warn"
                 ? "bg-destructive/10 text-destructive"
                 : "bg-primary/10 text-primary"
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
           </div>
+        </div>
+        <div
+          className={`mt-2 text-2xl font-bold tabular-nums tracking-tight whitespace-nowrap ${tone === "warn" ? "text-destructive" : ""}`}
+        >
+          {value}
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          {sub && <span>{sub}</span>}
+          {delta !== undefined && delta !== 0 && (
+            <span
+              className={`inline-flex items-center gap-0.5 font-medium ${
+                delta > 0 ? "text-success" : "text-destructive"
+              }`}
+            >
+              {delta > 0 ? (
+                <ArrowUpRight className="h-3 w-3" />
+              ) : (
+                <ArrowDownRight className="h-3 w-3" />
+              )}
+              {Math.abs(delta).toFixed(0)}%
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>

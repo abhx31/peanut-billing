@@ -60,7 +60,8 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-action"
       className={cn(
-        "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
+        // Toolbar beside the title on wider screens; drops under it on phones.
+        "col-start-2 row-span-2 row-start-1 self-start justify-self-end flex flex-wrap items-center justify-end gap-2 max-sm:col-span-2 max-sm:col-start-1 max-sm:row-span-1 max-sm:row-start-auto max-sm:justify-self-stretch max-sm:justify-start max-sm:pt-2",
         className
       )}
       {...props}

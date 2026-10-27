@@ -3,26 +3,24 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Input } from "@/components/ui/input";
 
+/** Compact month picker for a card's header toolbar. Writes `?m=YYYY-MM`. */
 export function MonthPicker({ value }: { value: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium" htmlFor="gp-month">
-        Month
-      </label>
-      <Input
-        id="gp-month"
-        type="month"
-        defaultValue={value}
-        className="w-44"
-        onChange={(e) => {
-          const p = new URLSearchParams(sp?.toString() ?? "");
-          p.set("m", e.target.value);
-          router.push(`${pathname}?${p.toString()}`);
-        }}
-      />
-    </div>
+    <Input
+      id="gp-month"
+      type="month"
+      aria-label="Month"
+      title="Month"
+      defaultValue={value}
+      className="h-8 w-40 text-sm"
+      onChange={(e) => {
+        const p = new URLSearchParams(sp?.toString() ?? "");
+        p.set("m", e.target.value);
+        router.push(`${pathname}?${p.toString()}`);
+      }}
+    />
   );
 }

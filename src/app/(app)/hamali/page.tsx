@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Printer, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireSession } from "@/lib/auth-helpers";
 import {
@@ -56,15 +56,15 @@ export default async function HamaliPage({ searchParams }: Props) {
             <Scale className="h-4 w-4 text-primary" />
             Hamali for a date · {locLabel(loc)}
           </CardTitle>
-          <div className="flex items-end gap-3 flex-wrap">
+          <CardAction>
             <DateFilter paramKey="d" value={date} />
             <Link href={`/hamali/print?d=${date}`} target="_blank">
               <Button type="button" variant="outline" size="sm">
-                <Printer className="mr-2 h-4 w-4" />
-                Print statement
+                <Printer className="mr-1.5 h-4 w-4" />
+                Print
               </Button>
             </Link>
-          </div>
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">
           <SumGrid
@@ -212,7 +212,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                         </td>
                         {isPrivileged && (
                           <td className="py-2 pr-0 text-right">
-                            <div className="flex gap-1 justify-end flex-wrap">
+                            <div className="flex gap-1 justify-end items-center">
                               <HamaliLoadDialog
                                 mode="edit"
                                 id={l.id}

@@ -224,13 +224,13 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
     >
       <DialogTrigger
         render={
-          <Button type="button" size="sm" variant="outline">
+          <Button type="button" size="icon-sm" variant="outline" title="Edit">
             <Pencil className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Edit</span>
+            <span className="sr-only">Edit</span>
           </Button>
         }
       />
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit sale patti P {pad2(billNo)}</DialogTitle>
           <DialogDescription>

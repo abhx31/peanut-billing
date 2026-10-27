@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, eq, sql } from "drizzle-orm";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import {
@@ -111,7 +111,9 @@ export default async function GstPurchasePage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>{locLabel(loc)} GST purchases in {monthLabel}</CardTitle>
-          <MonthPicker value={month} />
+          <CardAction>
+            <MonthPicker value={month} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
@@ -188,7 +190,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                           )}
                         </td>
                         <td className="py-2 pr-0 text-right">
-                          <div className="flex gap-1 justify-end flex-wrap">
+                          <div className="flex gap-1 justify-end items-center">
                             <EditGstPurchaseDialog
                               id={p.id}
                               no={p.no}

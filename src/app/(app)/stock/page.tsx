@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Printer } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
 import { getLotsWithStock, getStockHistory, getLotCosts, lotStockAt } from "@/lib/queries";
@@ -49,15 +49,15 @@ export default async function StockPage({ searchParams }: Props) {
           <CardTitle>
             {asOf ? `Closing stock on ${fmtDate(asOf)}` : "Stock left"} · {storeName}
           </CardTitle>
-          <div className="flex items-end gap-3 flex-wrap">
+          <CardAction>
             <DateFilter paramKey="d" value={asOf ?? today()} />
             <Link href={asOf ? `/stock/print?d=${asOf}` : "/stock/print"} target="_blank">
               <Button type="button" variant="outline" size="sm">
-                <Printer className="mr-2 h-4 w-4" />
-                Print stock left
+                <Printer className="mr-1.5 h-4 w-4" />
+                Print
               </Button>
             </Link>
-          </div>
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">
           <SumGrid items={totals} />

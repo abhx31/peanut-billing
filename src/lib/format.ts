@@ -1,8 +1,19 @@
 export const r2 = (v: number) => Math.round(v * 100) / 100;
 
+/** ₹ amount: whole rupees as-is (₹77,036), otherwise always two decimals (₹5,798.40). */
 export const money = (v: number | string) => {
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return "₹" + r2(n || 0).toLocaleString("en-IN");
+  const n = r2((typeof v === "string" ? parseFloat(v) : v) || 0);
+  const digits = Math.abs(n).toLocaleString(
+    "en-IN",
+    Number.isInteger(n) ? undefined : { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  );
+  return (n < 0 ? "-₹" : "₹") + digits;
+};
+
+/** ₹ amount rounded to the rupee — for headline figures (dashboard cards). */
+export const moneyRounded = (v: number | string) => {
+  const n = Math.round((typeof v === "string" ? parseFloat(v) : v) || 0);
+  return (n < 0 ? "-₹" : "₹") + Math.abs(n).toLocaleString("en-IN");
 };
 
 export const num = (v: unknown) => {

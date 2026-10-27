@@ -1,5 +1,5 @@
 import { Wallet, Pencil } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
@@ -55,15 +55,18 @@ export default async function ReceivablesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-3 flex-wrap">
-            Old dues · {storeName}
-            {hiddenCount > 0 && (
-              <span className="text-xs font-normal text-muted-foreground">
-                ({hiddenCount} paid or advance {hiddenCount === 1 ? "entry" : "entries"} hidden — see Balances → Statement for the full history)
-              </span>
-            )}
-          </CardTitle>
-          <ExcelButton report="receivables" />
+          <CardTitle>Old dues · {storeName}</CardTitle>
+          {hiddenCount > 0 && (
+            <CardDescription>
+              {hiddenCount} paid or advance {hiddenCount === 1 ? "entry" : "entries"} hidden — see
+              Balances → Statement for the full history.
+            </CardDescription>
+          )}
+          <CardAction>
+            <ExcelButton report="receivables" label="Excel" />
+          </CardAction>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <SumGrid
             items={[
               ["Old dues entered", money(summary.total)],
@@ -72,8 +75,6 @@ export default async function ReceivablesPage() {
               ["Customers", String(summary.customers)],
             ]}
           />
-        </CardHeader>
-        <CardContent>
           {dues.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {allDues.length === 0
@@ -110,7 +111,7 @@ export default async function ReceivablesPage() {
                         {d.note ?? ""}
                       </td>
                       <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
+                        <div className="flex gap-1 justify-end items-center">
                           {d.due > 0.5 && (
                             <ReceiveDueDialog
                               id={d.id}

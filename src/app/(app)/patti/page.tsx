@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
@@ -80,11 +80,13 @@ export default async function PattiPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>{locLabel(loc)} patti bills on this date</CardTitle>
-          <DateFilter paramKey="d" value={date} />
-          <ExcelButton report="patti" date={date} />
-          <p className="text-sm text-muted-foreground">
+          <CardDescription>
             Total net: <b>{money(total)}</b> · Not paid: <b>{money(unpaid)}</b>
-          </p>
+          </CardDescription>
+          <CardAction>
+            <DateFilter paramKey="d" value={date} />
+            <ExcelButton report="patti" date={date} label="Excel" />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {bills.length === 0 ? (
@@ -144,7 +146,7 @@ export default async function PattiPage({ searchParams }: Props) {
                           )}
                         </td>
                         <td className="py-2 pr-0 text-right">
-                          <div className="flex gap-1 justify-end flex-wrap">
+                          <div className="flex gap-1 justify-end items-center">
                             <EditPattiDialog
                               pattiId={b.id}
                               pattiNo={b.no}
@@ -208,7 +210,7 @@ export default async function PattiPage({ searchParams }: Props) {
                         {money(b.balance)}
                       </td>
                       <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
+                        <div className="flex gap-1 justify-end items-center">
                           <EditSalePattiDialog
                             billId={b.id}
                             billNo={b.no}

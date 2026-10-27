@@ -54,7 +54,7 @@ export function ExcelButton({
           type="date"
           value={picked}
           onChange={(e) => setPicked(e.target.value)}
-          className="w-auto"
+          className="h-8 w-40 text-sm"
           aria-label="Date"
         />
       )}

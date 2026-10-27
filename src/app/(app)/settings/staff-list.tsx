@@ -84,7 +84,7 @@ export function StaffList({ users, currentUserId }: Props) {
                   {u.createdAt.toISOString().slice(0, 10)}
                 </td>
                 <td className="py-2 pr-0 text-right">
-                  <div className="flex gap-1 justify-end flex-wrap">
+                  <div className="flex gap-1 justify-end items-center">
                     <ResetPasswordDialog userId={u.id} userName={u.name ?? u.email} />
                     {canModify && (
                       <ToggleDisabledButton
@@ -103,12 +103,11 @@ export function StaffList({ users, currentUserId }: Props) {
                         trigger={
                           <Button
                             type="button"
-                            size="sm"
+                            size="icon-sm"
                             variant="outline"
-                            className="text-destructive"
-                          >
+                            className="text-destructive" title="Delete">
                             <Trash2 className="h-3.5 w-3.5" />
-                            <span className="sr-only sm:not-sr-only sm:ml-1">Delete</span>
+                            <span className="sr-only">Delete</span>
                           </Button>
                         }
                       />

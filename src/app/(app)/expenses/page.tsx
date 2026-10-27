@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import { getExpensesByDate } from "@/lib/queries";
@@ -40,11 +40,13 @@ export default async function ExpensesPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>{storeName} expenses on this date</CardTitle>
-          <ExcelButton report="expenses" date={date} />
+          <CardAction>
+            <DateFilter paramKey="d" value={date} />
+            <ExcelButton report="expenses" date={date} label="Excel" />
+          </CardAction>
         </CardHeader>
         <CardContent>
-          <DateFilter paramKey="d" value={date} />
-          <div className="overflow-x-auto mt-4">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground border-b">

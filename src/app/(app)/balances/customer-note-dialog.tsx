@@ -75,7 +75,7 @@ export function CustomerNoteDialog({ customer, note }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Note for {customer}</DialogTitle>
           <DialogDescription>
