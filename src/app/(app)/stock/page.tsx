@@ -5,18 +5,24 @@ import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth-helpers";
 import { getLotsWithStock, getStockHistory, getLotCosts, lotStockAt } from "@/lib/queries";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
-import { fmtDate, money, r2 } from "@/lib/format";
+import { fmtDate, money, r2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
+import { DateFilter } from "@/components/date-filter";
 
 export const dynamic = "force-dynamic";
 
-export default async function StockPage() {
+type Props = { searchParams: Promise<{ d?: string }> };
+
+export default async function StockPage({ searchParams }: Props) {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
   const loc = await getCurrentLoc();
   const storeName = locLabel(loc);
+  // A picked date shows the closing stock at the end of that day.
+  const sp = await searchParams;
+  const asOf = sp.d && /^\d{4}-\d{2}-\d{2}$/.test(sp.d) ? sp.d : undefined;
   const [allLots, history, costs] = await Promise.all([
-    getLotsWithStock(),
+    getLotsWithStock({ asOf }),
     getStockHistory(loc, 30),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
   ]);
@@ -40,9 +46,12 @@ export default async function StockPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Stock left · {storeName}</CardTitle>
-          <div>
-            <Link href="/stock/print" target="_blank">
+          <CardTitle>
+            {asOf ? `Closing stock on ${fmtDate(asOf)}` : "Stock left"} · {storeName}
+          </CardTitle>
+          <div className="flex items-end gap-3 flex-wrap">
+            <DateFilter paramKey="d" value={asOf ?? today()} />
+            <Link href={asOf ? `/stock/print?d=${asOf}` : "/stock/print"} target="_blank">
               <Button type="button" variant="outline" size="sm">
                 <Printer className="mr-2 h-4 w-4" />
                 Print stock left

@@ -9,7 +9,7 @@ import { hasPageSize, parsePageSize } from "@/lib/print-size";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ size?: string }> };
+type Props = { searchParams: Promise<{ size?: string; d?: string }> };
 
 export default async function PrintStockPage({ searchParams }: Props) {
   await requireSession();
@@ -17,8 +17,10 @@ export default async function PrintStockPage({ searchParams }: Props) {
   const size = parsePageSize(sp.size, "A4");
   const chosen = hasPageSize(sp.size);
   const loc = await getCurrentLoc();
+  // With a date: the closing stock at the end of that day.
+  const asOf = sp.d && /^\d{4}-\d{2}-\d{2}$/.test(sp.d) ? sp.d : undefined;
 
-  const [allLots, settings] = await Promise.all([getLotsWithStock(), getSettings()]);
+  const [allLots, settings] = await Promise.all([getLotsWithStock({ asOf }), getSettings()]);
   // Same rows as the Stock page: this store's lots only.
   const lots = allLots
     .map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }))
@@ -39,7 +41,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
 
       <PrintLetterhead letterheadImage={settings.letterheadImage} firm={settings.firm} />
       <div className="mb-4">
-        Stock left · {locLabel(loc)} — {fmtDate(today())}
+        {asOf ? "Closing stock" : "Stock left"} · {locLabel(loc)} — {fmtDate(asOf ?? today())}
       </div>
 
       <table className="print-table w-full border-collapse">
