@@ -1,4 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { requireOwner } from "@/lib/auth-helpers";
 import { getAllBills } from "@/lib/queries";
 import { db, schema } from "@/db";
@@ -130,12 +137,13 @@ export default async function ProfitPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Profit · {locLabel(loc)}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-4">
+          <CardDescription>Accounting period runs 1 Apr – 31 Mar.</CardDescription>
+          <CardAction>
             <FYFilter options={allFys} value={fy} />
             <MonthFilter options={monthOptions} value={month} />
-          </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
           <SumGrid
             items={[
               ["Total profit", money(totalProfit)],
@@ -143,7 +151,7 @@ export default async function ProfitPage({ searchParams }: Props) {
               ["Profit after expenses", money(totalProfit - exp)],
               ["Sales (before hamali & GST)", money(sales)],
               ["Bills", String(bills.length)],
-              ["Kg sold", r2(kgSold).toString()],
+              ["Kg sold", r2(kgSold).toLocaleString("en-IN")],
               ["Profit per kg", money(kgSold ? totalProfit / kgSold : 0)],
             ]}
           />
