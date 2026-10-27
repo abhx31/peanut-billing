@@ -40,22 +40,22 @@ export function LedgerTAccount({
           {Array.from({ length: rows }).map((_, i) => (
             <tr key={i} className="border-b border-gray-200 last:border-0">
               <td className="py-1.5 pr-4">{debits[i]?.label ?? ""}</td>
-              <td className="py-1.5 pr-4 text-right tabular-nums">
+              <td className="py-1.5 pr-4 text-right tabular-nums whitespace-nowrap">
                 {debits[i] ? money(debits[i].amount) : ""}
               </td>
               <td className="py-1.5 pr-4 pl-4 border-l border-gray-200">
                 {credits[i]?.label ?? ""}
               </td>
-              <td className="py-1.5 pr-0 text-right tabular-nums">
+              <td className="py-1.5 pr-0 text-right tabular-nums whitespace-nowrap">
                 {credits[i] ? money(credits[i].amount) : ""}
               </td>
             </tr>
           ))}
           <tr className="font-semibold border-t-2 border-gray-400">
             <td className="py-1.5 pr-4">Total</td>
-            <td className="py-1.5 pr-4 text-right tabular-nums">{money(totalDr)}</td>
+            <td className="py-1.5 pr-4 text-right tabular-nums whitespace-nowrap">{money(totalDr)}</td>
             <td className="py-1.5 pr-4 pl-4 border-l border-gray-200">Total</td>
-            <td className="py-1.5 pr-0 text-right tabular-nums">{money(totalCr)}</td>
+            <td className="py-1.5 pr-0 text-right tabular-nums whitespace-nowrap">{money(totalCr)}</td>
           </tr>
         </tbody>
       </table>

@@ -1,17 +1,8 @@
-import { and, eq, sql } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  cashBalanceBefore,
-  getAllPaymentsOnDate,
-  getBillsByDate,
-  getCashDepositsOnDate,
-  getCustomerBalances,
-  getExpensesByDate,
-  getSettings,
-} from "@/lib/queries";
-import { db, schema } from "@/db";
+import { getCustomerBalances } from "@/lib/queries";
+import { getLedgerDay } from "@/lib/ledger-day";
 import { requireSession } from "@/lib/auth-helpers";
-import { atLoc, getCurrentLoc, locLabel, openingsFor } from "@/lib/loc";
+import { getCurrentLoc, locLabel, openingsFor } from "@/lib/loc";
 import { fmtDate, money, pad2, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { SumGrid } from "@/components/sum-grid";
@@ -43,165 +34,32 @@ export default async function LedgerPage({ searchParams }: Props) {
   // Everything below is the current store's own book only.
   const loc = await getCurrentLoc();
 
-  const [
+  const [day, customerBalances] = await Promise.all([
+    getLedgerDay(date, loc, isOwner),
+    getCustomerBalances(loc),
+  ]);
+  const {
+    settings,
     bills,
     pays,
     expenses,
-    settings,
-    openCash,
-    openBank,
-    existingClosing,
-    cjSettlementsToday,
-    cjSettlementsBeforeRow,
-    cjReceivedBeforeRow,
-    pattiPaidCJBeforeRow,
-    customerBalances,
-    openingPaymentsToday,
-    pattiPaidTodayByMode,
+    openingPayments: openingPaymentsToday,
     pattiPaidToday,
     depositsToday,
-  ] = await Promise.all([
-    getBillsByDate(date, isOwner, loc),
-    getAllPaymentsOnDate(date, loc),
-    getExpensesByDate(date, loc),
-    getSettings(),
-    cashBalanceBefore("Cash", date, loc),
-    cashBalanceBefore("UPI", date, loc),
-    db.query.closings.findFirst({
-      where: and(eq(schema.closings.date, date), eq(schema.closings.loc, loc)),
-    }),
-    db
-      .select({ mode: schema.cjSettlements.mode, amount: schema.cjSettlements.amount })
-      .from(schema.cjSettlements)
-      .where(and(eq(schema.cjSettlements.date, date), atLoc(schema.cjSettlements.loc, loc))),
-    db
-      .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
-      .from(schema.cjSettlements)
-      .where(sql`${schema.cjSettlements.date} < ${date} AND ${atLoc(schema.cjSettlements.loc, loc)}`)
-      .then((r) => r[0]),
-    db
-      .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
-      .from(schema.payments)
-      .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
-      .where(
-        sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} < ${date} AND ${atLoc(schema.bills.loc, loc)}`,
-      )
-      .then((r) => r[0]),
-    db
-      .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
-      .from(schema.pattiPayments)
-      .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
-      .where(
-        sql`${schema.pattiPayments.mode} = 'CJ' AND ${schema.pattiPayments.date} < ${date} AND ${atLoc(schema.pattiBills.loc, loc)}`,
-      )
-      .then((r) => r[0]),
-    getCustomerBalances(loc),
-    db
-      .select({
-        id: schema.openingPayments.id,
-        customer: schema.openingPayments.customer,
-        mode: schema.openingPayments.mode,
-        amount: schema.openingPayments.amount,
-        loc: schema.openingPayments.loc,
-        note: schema.openingPayments.note,
-        dueNote: schema.openingDues.note,
-        dueAmount: schema.openingDues.amount,
-      })
-      .from(schema.openingPayments)
-      .leftJoin(
-        schema.openingDues,
-        eq(schema.openingDues.id, schema.openingPayments.openingDueId),
-      )
-      .where(
-        and(eq(schema.openingPayments.date, date), atLoc(schema.openingPayments.loc, loc)),
-      ),
-    // Aggregate only — always fetched regardless of role, so the Cash/Bank/CJ
-    // closing balances stay correct for everyone. Who got paid (the detailed
-    // breakdown below) stays owner-only.
-    db
-      .select({
-        mode: schema.pattiPayments.mode,
-        s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)`,
-      })
-      .from(schema.pattiPayments)
-      .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
-      .where(and(eq(schema.pattiPayments.date, date), atLoc(schema.pattiBills.loc, loc)))
-      .groupBy(schema.pattiPayments.mode),
-    isOwner
-      ? db
-          .select({
-            id: schema.pattiPayments.id,
-            pattiNo: schema.pattiBills.no,
-            party: schema.pattiBills.party,
-            mode: schema.pattiPayments.mode,
-            amount: schema.pattiPayments.amount,
-          })
-          .from(schema.pattiPayments)
-          .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
-          .where(and(eq(schema.pattiPayments.date, date), atLoc(schema.pattiBills.loc, loc)))
-          .orderBy(schema.pattiBills.no)
-      : Promise.resolve(
-          [] as {
-            id: string;
-            pattiNo: number;
-            party: string;
-            mode: string;
-            amount: string;
-          }[],
-        ),
-    getCashDepositsOnDate(date, loc),
-  ]);
+    existingClosing,
+  } = day;
 
-  const cashIn =
-    pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0) +
-    openingPaymentsToday
-      .filter((p) => p.mode === "Cash")
-      .reduce((s, p) => s + Number(p.amount), 0);
-  const upiIn =
-    pays.filter((p) => p.mode === "UPI").reduce((s, p) => s + Number(p.amount), 0) +
-    openingPaymentsToday
-      .filter((p) => p.mode === "UPI")
-      .reduce((s, p) => s + Number(p.amount), 0);
-  const cjIn =
-    pays.filter((p) => p.mode === "CJ").reduce((s, p) => s + Number(p.amount), 0) +
-    openingPaymentsToday
-      .filter((p) => p.mode === "CJ")
-      .reduce((s, p) => s + Number(p.amount), 0);
-
-  const cashOut = expenses
-    .filter((e) => e.mode === "Cash")
-    .reduce((s, e) => s + Number(e.amount), 0);
-  const upiOut = expenses
-    .filter((e) => e.mode === "UPI")
-    .reduce((s, e) => s + Number(e.amount), 0);
-  const cjSettledCash = cjSettlementsToday
-    .filter((x) => x.mode === "Cash")
-    .reduce((s, x) => s + Number(x.amount), 0);
-  const cjSettledUpi = cjSettlementsToday
-    .filter((x) => x.mode === "UPI")
-    .reduce((s, x) => s + Number(x.amount), 0);
-  const pattiPaidByMode = new Map(
-    pattiPaidTodayByMode.map((r) => [r.mode, Number(r.s)]),
-  );
-  const pattiPaidCash = pattiPaidByMode.get("Cash") ?? 0;
-  const pattiPaidUpi = pattiPaidByMode.get("UPI") ?? 0;
-  // CJ paying a supplier directly on our behalf — reduces CJ's held balance,
-  // never touches our own Cash/Bank.
-  const pattiPaidCJ = pattiPaidByMode.get("CJ") ?? 0;
+  const byMode = <T extends { mode: string; amount: string }>(rows: T[], mode: string) =>
+    rows.filter((r) => r.mode === mode).reduce((s, r) => s + Number(r.amount), 0);
+  const cashOut = byMode(expenses, "Cash");
+  const upiOut = byMode(expenses, "UPI");
+  const pattiPaidCash = byMode(pattiPaidToday, "Cash");
+  const pattiPaidUpi = byMode(pattiPaidToday, "UPI");
+  const pattiPaidCJ = byMode(pattiPaidToday, "CJ");
   const opening = openingsFor(settings, loc);
-  const cjOpening =
-    opening.cj +
-    Number(cjReceivedBeforeRow?.s ?? 0) -
-    Number(cjSettlementsBeforeRow?.s ?? 0) -
-    Number(pattiPaidCJBeforeRow?.s ?? 0);
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
-  const depositTotal = depositsToday.reduce((s, d) => s + Number(d.amount), 0);
-  const bookCashClose =
-    openCash + cashIn + cjSettledCash - cashOut - pattiPaidCash - depositTotal;
-  const bookBankClose =
-    openBank + upiIn + cjSettledUpi - upiOut - pattiPaidUpi + depositTotal;
 
   return (
     <div className="space-y-6">
@@ -254,8 +112,8 @@ export default async function LedgerPage({ searchParams }: Props) {
         <CardContent>
           <CloseDayCard
             date={date}
-            bookCash={bookCashClose}
-            bookBank={bookBankClose}
+            bookCash={day.cash.closing}
+            bookBank={day.bank.closing}
             existingCash={existingClosing?.cash ?? null}
             existingBank={existingClosing?.bank ?? null}
             canEdit={canEditClosing}
@@ -268,21 +126,7 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>Cash in hand</CardTitle>
         </CardHeader>
         <CardContent>
-          <LedgerTAccount
-            debits={[
-              { label: "To Opening balance b/d", amount: openCash },
-              { label: "To Cash received", amount: cashIn },
-              { label: "To From CJ (settled)", amount: cjSettledCash },
-            ]}
-            credits={[
-              { label: "By Cash expenses", amount: cashOut },
-              ...(isOwner
-                ? [{ label: "By Purchases paid (cash)", amount: pattiPaidCash }]
-                : []),
-              { label: "By Deposited to bank", amount: depositTotal },
-              { label: "By Closing balance c/d", amount: bookCashClose },
-            ]}
-          />
+          <LedgerTAccount debits={day.cash.debits} credits={day.cash.credits} />
         </CardContent>
       </Card>
 
@@ -291,21 +135,7 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>Bank / UPI</CardTitle>
         </CardHeader>
         <CardContent>
-          <LedgerTAccount
-            debits={[
-              { label: "To Opening balance b/d", amount: openBank },
-              { label: "To UPI received", amount: upiIn },
-              { label: "To From CJ (settled)", amount: cjSettledUpi },
-              { label: "To Cash deposited", amount: depositTotal },
-            ]}
-            credits={[
-              { label: "By UPI expenses", amount: upiOut },
-              ...(isOwner
-                ? [{ label: "By Purchases paid (UPI)", amount: pattiPaidUpi }]
-                : []),
-              { label: "By Closing balance c/d", amount: bookBankClose },
-            ]}
-          />
+          <LedgerTAccount debits={day.bank.debits} credits={day.bank.credits} />
         </CardContent>
       </Card>
 
@@ -314,22 +144,7 @@ export default async function LedgerPage({ searchParams }: Props) {
           <CardTitle>CJ (money held by CJ)</CardTitle>
         </CardHeader>
         <CardContent>
-          <LedgerTAccount
-            debits={[
-              { label: "To Opening balance b/d", amount: cjOpening },
-              { label: "To Received via CJ", amount: cjIn },
-            ]}
-            credits={[
-              { label: "By CJ paid you", amount: cjSettledCash + cjSettledUpi },
-              ...(isOwner
-                ? [{ label: "By Paid to supplier via CJ", amount: pattiPaidCJ }]
-                : []),
-              {
-                label: "By Closing balance c/d",
-                amount: cjOpening + cjIn - cjSettledCash - cjSettledUpi - pattiPaidCJ,
-              },
-            ]}
-          />
+          <LedgerTAccount debits={day.cj.debits} credits={day.cj.credits} />
         </CardContent>
       </Card>
 
@@ -401,14 +216,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                     </tr>
                   ))}
                   {openingPaymentsToday.map((p) => {
-                    // Opening-payments cover two cases:
-                    //   1. Real receipt against a pre-app old due (dueAmount > 0,
-                    //      note usually blank or user-provided).
-                    //   2. Overpayment cascade — the parent opening_due was created
-                    //      with amount=0 and note="Advance received".
-                    const isAdvance =
-                      Number(p.dueAmount ?? 0) === 0 ||
-                      (p.dueNote ?? "").toLowerCase().includes("advance");
+                    const { isAdvance } = p;
                     return (
                       <tr key={`op-${p.id}`} className="border-b last:border-0">
                         <td className="py-2 pr-4 text-muted-foreground">

@@ -1,11 +1,4 @@
-import {
-  cashBalanceBefore,
-  getAllPaymentsOnDate,
-  getBillsByDate,
-  getCashDepositsOnDate,
-  getExpensesByDate,
-  getSettings,
-} from "@/lib/queries";
+import { getLedgerDay } from "@/lib/ledger-day";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, r2, today } from "@/lib/format";
@@ -28,25 +21,16 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
   const isOwner = session.user.role === "owner";
   const loc = await getCurrentLoc();
 
-  const [bills, pays, expenses, settings, openCash, openBank, depositsToday] = await Promise.all([
-    getBillsByDate(date, isOwner, loc),
-    getAllPaymentsOnDate(date, loc),
-    getExpensesByDate(date, loc),
-    getSettings(),
-    cashBalanceBefore("Cash", date, loc),
-    cashBalanceBefore("UPI", date, loc),
-    getCashDepositsOnDate(date, loc),
-  ]);
+  // Same itemised book as the Daily ledger page.
+  const day = await getLedgerDay(date, loc, isOwner);
+  const { settings, bills, expenses } = day;
 
-  const cashIn = pays.filter((p) => p.mode === "Cash").reduce((s, p) => s + Number(p.amount), 0);
-  const upiIn = pays.filter((p) => p.mode === "UPI").reduce((s, p) => s + Number(p.amount), 0);
   const cashOut = expenses
     .filter((e) => e.mode === "Cash")
     .reduce((s, e) => s + Number(e.amount), 0);
   const upiOut = expenses
     .filter((e) => e.mode === "UPI")
     .reduce((s, e) => s + Number(e.amount), 0);
-  const depositTotal = depositsToday.reduce((s, d) => s + Number(d.amount), 0);
   const sales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
@@ -68,38 +52,17 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
 
       <div className="mb-4">
         <h2 className="font-semibold mb-1">Cash in hand</h2>
-        <LedgerTAccount
-          debits={[
-            { label: "To Opening balance b/d", amount: openCash },
-            { label: "To Cash received", amount: cashIn },
-          ]}
-          credits={[
-            { label: "By Cash expenses", amount: cashOut },
-            { label: "By Deposited to bank", amount: depositTotal },
-            {
-              label: "By Closing balance c/d",
-              amount: openCash + cashIn - cashOut - depositTotal,
-            },
-          ]}
-        />
+        <LedgerTAccount debits={day.cash.debits} credits={day.cash.credits} />
       </div>
 
       <div className="mb-4">
         <h2 className="font-semibold mb-1">Bank / UPI</h2>
-        <LedgerTAccount
-          debits={[
-            { label: "To Opening balance b/d", amount: openBank },
-            { label: "To UPI received", amount: upiIn },
-            { label: "To Cash deposited", amount: depositTotal },
-          ]}
-          credits={[
-            { label: "By UPI expenses", amount: upiOut },
-            {
-              label: "By Closing balance c/d",
-              amount: openBank + upiIn - upiOut + depositTotal,
-            },
-          ]}
-        />
+        <LedgerTAccount debits={day.bank.debits} credits={day.bank.credits} />
+      </div>
+
+      <div className="mb-4">
+        <h2 className="font-semibold mb-1">CJ (money held by CJ)</h2>
+        <LedgerTAccount debits={day.cj.debits} credits={day.cj.credits} />
       </div>
 
       <Section title="Day result">
