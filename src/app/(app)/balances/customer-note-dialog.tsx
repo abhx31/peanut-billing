@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { StickyNote, Pencil } from "lucide-react";
@@ -28,11 +28,12 @@ export function CustomerNoteDialog({ customer, note }: Props) {
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState(note);
 
-  // Keep the textarea in sync when the row's note changes between opens
-  // (e.g. another tab saves one).
-  useEffect(() => {
-    if (open) setDraft(note);
-  }, [open, note]);
+  // Load the row's current note into the textarea each time the dialog opens
+  // (it may have changed since, e.g. another tab saved one).
+  function onOpenChange(next: boolean) {
+    if (next) setDraft(note);
+    setOpen(next);
+  }
 
   function save() {
     startTransition(async () => {
@@ -50,7 +51,7 @@ export function CustomerNoteDialog({ customer, note }: Props) {
   const hasNote = note.trim().length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button
