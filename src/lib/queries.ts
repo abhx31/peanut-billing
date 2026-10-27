@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQLWrapper } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, sql, type SQLWrapper } from "drizzle-orm";
 import { db, schema, type DbExecutor } from "@/db";
 import { pad2 } from "@/lib/format";
 import { atLoc, openingsFor, type Loc } from "@/lib/loc";
@@ -28,10 +28,17 @@ export type LotWithStock = {
   deletedAt: Date | null;
 };
 
+/**
+ * Stock per lot. With `asOf` (YYYY-MM-DD), only movements dated on or before
+ * that day count — i.e. the closing stock at the end of that day. Every bag
+ * movement is dated (stock added, transfers, bills), so any past day's closing
+ * stock can be worked out without saving it.
+ */
 export async function getLotsWithStock(
-  opts: { includeDeleted?: boolean } = {},
+  opts: { includeDeleted?: boolean; asOf?: string } = {},
   exec: DbExecutor = db,
 ): Promise<LotWithStock[]> {
+  const { asOf } = opts;
   const addedRows = await exec
     .select({
       lotId: schema.stockIn.lotId,
@@ -39,6 +46,7 @@ export async function getLotsWithStock(
       bagsAddedNM: sql<number>`coalesce(sum(case when ${schema.stockIn.loc} = 'NM' then ${schema.stockIn.bags} else 0 end), 0)::int`,
     })
     .from(schema.stockIn)
+    .where(asOf ? lte(schema.stockIn.date, asOf) : undefined)
     .groupBy(schema.stockIn.lotId);
   const addedMap = new Map(
     addedRows.map((r) => [r.lotId, { total: r.bagsAdded, nm: r.bagsAddedNM }]),
@@ -55,6 +63,7 @@ export async function getLotsWithStock(
     })
     .from(schema.billItems)
     .innerJoin(schema.bills, eq(schema.billItems.billId, schema.bills.id))
+    .where(asOf ? lte(schema.bills.date, asOf) : undefined)
     .groupBy(schema.billItems.lotId);
   const soldMap = new Map(soldRows.map((r) => [r.lotId, r]));
 
@@ -66,6 +75,7 @@ export async function getLotsWithStock(
       back: sql<number>`coalesce(sum(case when ${schema.transfers.dir} = 'back' then ${schema.transfers.bags} else 0 end), 0)::int`,
     })
     .from(schema.transfers)
+    .where(asOf ? lte(schema.transfers.date, asOf) : undefined)
     .groupBy(schema.transfers.lotId);
   const xferMap = new Map(xferRows.map((r) => [r.lotId, r]));
 

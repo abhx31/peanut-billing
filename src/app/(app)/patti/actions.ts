@@ -332,7 +332,7 @@ export async function updatePatti(
       if (bill.stock && bill.stockLotId) {
         await tx
           .update(schema.stockIn)
-          .set({ bags: bagsTotal })
+          .set({ bags: bagsTotal, date: d.date })
           .where(and(eq(schema.stockIn.src, "patti"), eq(schema.stockIn.ref, d.pattiId)));
       }
     });

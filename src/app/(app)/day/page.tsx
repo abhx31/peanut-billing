@@ -28,14 +28,19 @@ export default async function DailySummaryPage({ searchParams }: Props) {
   const loc = await getCurrentLoc();
   const storeName = locLabel(loc);
 
-  const [bills, pays, allLots, balances] = await Promise.all([
+  const [bills, pays, allLots, lotsOnDate, balances] = await Promise.all([
     getBillsByDate(date, isOwner, loc),
     getAllPaymentsOnDate(date, loc),
     getLotsWithStock(),
+    // The "Stock left" table is the closing stock at the end of this date.
+    getLotsWithStock({ asOf: date }),
     getCustomerBalances(loc),
   ]);
+  // Current stock, for the edit-bill dialog's "bags left" hints.
   const lotsHere = allLots.map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }));
-  const lots = lotsHere.filter((l) => l.known);
+  const lots = lotsOnDate
+    .map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }))
+    .filter((l) => l.known);
 
   const totalSales = bills.reduce((s, b) => s + b.total, 0);
   const credit = bills.reduce((s, b) => s + b.balance, 0);
@@ -158,7 +163,9 @@ export default async function DailySummaryPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock left · {storeName}</CardTitle>
+          <CardTitle>
+            Closing stock on {fmtDate(date)} · {storeName}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
