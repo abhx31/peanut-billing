@@ -56,7 +56,7 @@ export function StatementDialog({ customer }: { customer: string }) {
           </Button>
         }
       />
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between gap-2 pr-6">
             <span>Statement — {customer}</span>
@@ -80,7 +80,7 @@ export function StatementDialog({ customer }: { customer: string }) {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
               <Tile label="Old due" value={money(data.totals.openingDue)} />
               <Tile label="Billed" value={money(data.totals.billed)} />
               <Tile label="Received" value={money(data.totals.received)} />
@@ -116,7 +116,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                     if (r.kind === "due") {
                       return (
                         <tr key={`due-${r.id}`} className="border-b last:border-0">
-                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap">{fmtDate(r.date)}</td>
                           <td className="py-2 pr-4">Old due</td>
                           <td className="py-2 pr-4 text-muted-foreground">
                             {r.note ?? ""}
@@ -132,8 +132,8 @@ export function StatementDialog({ customer }: { customer: string }) {
                     if (r.kind === "bill") {
                       return (
                         <tr key={`bill-${r.id}`} className="border-b last:border-0">
-                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
-                          <td className="py-2 pr-4">
+                          <td className="py-2 pr-4 whitespace-nowrap">{fmtDate(r.date)}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap">
                             Bill{" "}
                             <span className="font-mono">
                               {r.billKind === "gst" ? "GST " : ""}
@@ -161,7 +161,7 @@ export function StatementDialog({ customer }: { customer: string }) {
                           onClick={canOpen ? () => toggleDay(r.id) : undefined}
                           aria-expanded={canOpen ? isOpen : undefined}
                         >
-                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
+                          <td className="py-2 pr-4 whitespace-nowrap">{fmtDate(r.date)}</td>
                           <td className="py-2 pr-4 font-medium whitespace-nowrap">
                             {canOpen &&
                               (isOpen ? (
@@ -227,7 +227,7 @@ function Tile({
     <div className="rounded-md bg-muted/50 p-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
-        className={`tabular-nums ${strong ? "font-bold" : "font-semibold"} ${tone === "warn" ? "text-destructive" : ""}`}
+        className={`tabular-nums whitespace-nowrap ${strong ? "font-bold" : "font-semibold"} ${tone === "warn" ? "text-destructive" : ""}`}
       >
         {value}
       </div>

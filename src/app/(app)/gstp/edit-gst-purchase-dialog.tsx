@@ -222,7 +222,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit GST purchase GP {pad2(no)}</DialogTitle>
           <DialogDescription>

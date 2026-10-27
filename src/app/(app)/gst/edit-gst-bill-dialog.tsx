@@ -248,7 +248,7 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit GST invoice {pad2(billNo)}</DialogTitle>
           <DialogDescription>

@@ -230,7 +230,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
           </Button>
         }
       />
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit sale patti P {pad2(billNo)}</DialogTitle>
           <DialogDescription>

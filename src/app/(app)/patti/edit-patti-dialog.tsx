@@ -212,7 +212,7 @@ export function EditPattiDialog({ pattiId, pattiNo, lotNameSuggestions }: Props)
           </Button>
         }
       />
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit patti bill {pad2(pattiNo)}</DialogTitle>
           <DialogDescription>
