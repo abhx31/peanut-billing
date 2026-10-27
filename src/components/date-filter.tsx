@@ -1,10 +1,21 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
-export function DateFilter({ paramKey, value }: { paramKey: string; value: string }) {
+/**
+ * Compact date picker for a card's header toolbar — same height as the small
+ * buttons beside it. Writes the picked date to the `paramKey` URL param.
+ */
+export function DateFilter({
+  paramKey,
+  value,
+  label = "Date",
+}: {
+  paramKey: string;
+  value: string;
+  label?: string;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -16,16 +27,14 @@ export function DateFilter({ paramKey, value }: { paramKey: string; value: strin
   }
 
   return (
-    <div className="flex items-end gap-3 flex-wrap">
-      <div className="space-y-2">
-        <Label htmlFor={`date-${paramKey}`}>Date</Label>
-        <Input
-          id={`date-${paramKey}`}
-          type="date"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      </div>
-    </div>
+    <Input
+      id={`date-${paramKey}`}
+      type="date"
+      aria-label={label}
+      title={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 w-40 text-sm"
+    />
   );
 }

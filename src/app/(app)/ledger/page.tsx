@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCustomerBalances } from "@/lib/queries";
 import { getLedgerDay } from "@/lib/ledger-day";
 import { requireSession } from "@/lib/auth-helpers";
@@ -15,6 +15,7 @@ import {
 } from "./quick-entry-buttons";
 import { DeleteReceiptButton } from "./delete-receipt-button";
 import Link from "next/link";
+import { Printer } from "lucide-react";
 import { ExcelButton } from "@/components/excel-button";
 import { LedgerTAccount } from "@/components/ledger-t-account";
 import { CashDepositDialog } from "../cash-deposits/cash-deposit-dialog";
@@ -66,25 +67,23 @@ export default async function LedgerPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Daily ledger · {locLabel(loc)}</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardDescription>
             Only {locLabel(loc)}&apos;s bills, receipts, expenses and cash. Switch store at the top to
             see the other store&apos;s book.
-          </p>
+          </CardDescription>
+          <CardAction>
+            <DateFilter paramKey="d" value={date} />
+            <Link href={`/ledger/print?d=${date}`} target="_blank">
+              <Button type="button" variant="outline" size="sm">
+                <Printer className="mr-1.5 h-4 w-4" />
+                Print
+              </Button>
+            </Link>
+            <ExcelButton report="ledger" date={date} label="Ledger" />
+            <ExcelButton report="day" date={date} label="Full day report" />
+          </CardAction>
         </CardHeader>
-        <CardContent className="flex items-end gap-3 flex-wrap">
-          <DateFilter paramKey="d" value={date} />
-          <Link href={`/ledger/print?d=${date}`} target="_blank">
-            <Button type="button" variant="outline" size="sm">
-              Print ledger
-            </Button>
-          </Link>
-          <ExcelButton report="ledger" date={date} label="Ledger (Excel)" />
-          <ExcelButton
-            report="day"
-            date={date}
-            label="Full day report (Excel)"
-            variant="default"
-          />
+        <CardContent className="flex items-center gap-2 flex-wrap">
           <ReceiveQuickButton
             defaultDate={date}
             customerNames={customerBalances.map((c) => c.name)}
@@ -103,11 +102,11 @@ export default async function LedgerPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Close the day</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardDescription>
             After entering all of {locLabel(loc)}&apos;s bills and expenses for {fmtDate(date)},
             count this store&apos;s cash and (if you can) check its bank balance, then save it as
             the closing. Tomorrow&apos;s opening for {locLabel(loc)} uses this number.
-          </p>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <CloseDayCard

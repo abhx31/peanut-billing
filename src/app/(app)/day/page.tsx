@@ -7,7 +7,7 @@ import {
   lotStockAt,
 } from "@/lib/queries";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtDate, money, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { BillRowActions } from "../bills/bill-row-actions";
@@ -66,12 +66,12 @@ export default async function DailySummaryPage({ searchParams }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Daily summary · {storeName}</CardTitle>
+          <CardAction>
+            <DateFilter paramKey="d" value={date} />
+          </CardAction>
         </CardHeader>
         <CardContent>
-          <DateFilter paramKey="d" value={date} />
-          <div className="mt-4">
-            <SumGrid items={summary} />
-          </div>
+          <SumGrid items={summary} />
         </CardContent>
       </Card>
 

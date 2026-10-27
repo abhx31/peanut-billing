@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { FileText } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
 import { getGstBillsForMonth, getLotCosts, getLotsWithStock, lotStockAt } from "@/lib/queries";
@@ -122,17 +122,11 @@ export default async function GstBillPage({ searchParams }: Props) {
       />
       <Card>
         <CardHeader>
-          <CardTitle>Download GST invoices · {locLabel(loc)}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ExcelButton report="gst" pickDate label="GST bills (Excel)" />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>GST invoices · {locLabel(loc)}</CardTitle>
-          <MonthPicker value={month} />
+          <CardAction>
+            <MonthPicker value={month} />
+            <ExcelButton report="gst" pickDate label="Day's GST bills" />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {monthBills.length === 0 ? (
