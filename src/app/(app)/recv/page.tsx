@@ -111,7 +111,7 @@ export default async function ReceivablesPage() {
                         {d.note ?? ""}
                       </td>
                       <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
+                        <div className="flex gap-1 justify-end items-center">
                           {d.due > 0.5 && (
                             <ReceiveDueDialog
                               id={d.id}

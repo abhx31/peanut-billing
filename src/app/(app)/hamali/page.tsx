@@ -212,7 +212,7 @@ export default async function HamaliPage({ searchParams }: Props) {
                         </td>
                         {isPrivileged && (
                           <td className="py-2 pr-0 text-right">
-                            <div className="flex gap-1 justify-end flex-wrap">
+                            <div className="flex gap-1 justify-end items-center">
                               <HamaliLoadDialog
                                 mode="edit"
                                 id={l.id}

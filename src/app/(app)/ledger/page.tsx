@@ -315,7 +315,7 @@ export default async function LedgerPage({ searchParams }: Props) {
                       </td>
                       {canEditClosing && (
                         <td className="py-2 pr-0 text-right">
-                          <div className="flex gap-1 justify-end flex-wrap">
+                          <div className="flex gap-1 justify-end items-center">
                             <CashDepositDialog
                               mode="edit"
                               id={d.id}

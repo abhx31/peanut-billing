@@ -16,7 +16,7 @@ type Props = {
 
 export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
   return (
-    <div className="flex gap-1 justify-end flex-wrap">
+    <div className="flex gap-1 justify-end items-center">
       <TextPromptDialog
         title={`Rename "${lotName}"`}
         description="Only the go-forward label changes — past bills keep showing the lot name as it was when each bill was made."
@@ -26,9 +26,9 @@ export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
         successMessage="Lot renamed"
         onConfirm={async (name) => renameLot({ lotId, name })}
         trigger={
-          <Button type="button" size="sm" variant="outline">
+          <Button type="button" size="icon-sm" variant="outline" title="Rename">
             <Pencil className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Rename</span>
+            <span className="sr-only">Rename</span>
           </Button>
         }
       />
@@ -70,9 +70,9 @@ export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
         successMessage="Lot deleted"
         onConfirm={() => deleteLot({ lotId })}
         trigger={
-          <Button type="button" size="sm" variant="outline" className="text-destructive">
+          <Button type="button" size="icon-sm" variant="outline" className="text-destructive" title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Delete</span>
+            <span className="sr-only">Delete</span>
           </Button>
         }
       />

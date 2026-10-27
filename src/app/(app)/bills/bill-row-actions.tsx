@@ -27,11 +27,11 @@ export function BillRowActions({
 }: Props) {
   const label = `${labelPrefix}${pad2(billNo)}`;
   return (
-    <div className="flex gap-1 justify-end flex-wrap">
+    <div className="flex gap-1 justify-end items-center">
       <Link href={`/bills/${billId}/print`} target="_blank">
-        <Button type="button" size="sm" variant="outline">
+        <Button type="button" size="icon-sm" variant="outline" title="Print">
           <Printer className="h-3.5 w-3.5" />
-          <span className="sr-only sm:not-sr-only sm:ml-1">Print</span>
+          <span className="sr-only">Print</span>
         </Button>
       </Link>
       {balance > 0.5 && (
@@ -52,9 +52,9 @@ export function BillRowActions({
         successMessage={`${noun[0]?.toUpperCase()}${noun.slice(1)} deleted`}
         onConfirm={() => deleteBill({ id: billId })}
         trigger={
-          <Button type="button" size="sm" variant="outline" className="text-destructive">
+          <Button type="button" size="icon-sm" variant="outline" className="text-destructive" title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Delete</span>
+            <span className="sr-only">Delete</span>
           </Button>
         }
       />

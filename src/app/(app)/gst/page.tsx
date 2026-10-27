@@ -165,7 +165,7 @@ export default async function GstBillPage({ searchParams }: Props) {
                         {money(b.balance)}
                       </td>
                       <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
+                        <div className="flex gap-1 justify-end items-center">
                           <EditGstBillDialog
                             billId={b.id}
                             billNo={b.no}

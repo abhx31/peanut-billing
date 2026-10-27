@@ -53,9 +53,9 @@ export function ResetPasswordDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button type="button" size="sm" variant="outline">
+          <Button type="button" size="icon-sm" variant="outline" title="Reset password">
             <KeyRound className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:ml-1">Reset password</span>
+            <span className="sr-only">Reset password</span>
           </Button>
         }
       />

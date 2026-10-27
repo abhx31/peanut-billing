@@ -190,7 +190,7 @@ export default async function GstPurchasePage({ searchParams }: Props) {
                           )}
                         </td>
                         <td className="py-2 pr-0 text-right">
-                          <div className="flex gap-1 justify-end flex-wrap">
+                          <div className="flex gap-1 justify-end items-center">
                             <EditGstPurchaseDialog
                               id={p.id}
                               no={p.no}

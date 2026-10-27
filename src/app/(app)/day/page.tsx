@@ -125,7 +125,7 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                         <td className="py-2 pr-4 text-right">{money(b.profit ?? 0)}</td>
                       )}
                       <td className="py-2 pr-0 text-right">
-                        <div className="flex gap-1 justify-end flex-wrap">
+                        <div className="flex gap-1 justify-end items-center">
                           {canEditBill && b.items.length > 0 && (
                             <EditBillDialog
                               billId={b.id}
