@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 import { getCurrentLoc } from "@/lib/loc";
 import type {
   GstHeaderExtras,
@@ -259,7 +260,7 @@ export async function saveGstBill(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not save the GST invoice.",
+      error: errorMessage(err, "Could not save the GST invoice."),
     };
   }
 }
@@ -512,7 +513,7 @@ export async function updateGstBill(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not update the GST invoice.",
+      error: errorMessage(err, "Could not update the GST invoice."),
     };
   }
 }
