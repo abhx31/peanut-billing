@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
-import { FileText, Printer } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +21,17 @@ export function StatementDialog({ customer }: { customer: string }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Row | null>(null);
   const [pending, startTransition] = useTransition();
+  // Receipt days whose breakdown is open.
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
+
+  function toggleDay(id: string) {
+    setOpenDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function load() {
     startTransition(async () => {
@@ -60,7 +71,8 @@ export function StatementDialog({ customer }: { customer: string }) {
             </Link>
           </DialogTitle>
           <DialogDescription>
-            Every old due, bill and receipt for this customer, in date order.
+            Every old due, bill and receipt for this customer, in date order. Each day&apos;s
+            receipts are one total — click it to see which bills it cleared.
           </DialogDescription>
         </DialogHeader>
 
@@ -138,26 +150,56 @@ export function StatementDialog({ customer }: { customer: string }) {
                         </tr>
                       );
                     }
-                    // receipt — one row per actual Receive, grouped across
-                    // every old-due / bill it was applied to.
+                    // receipt — the day's total received; opens into what it
+                    // cleared when it covered more than one bill / old due.
+                    const canOpen = r.parts.length > 1;
+                    const isOpen = openDays.has(r.id);
                     return (
-                      <tr
-                        key={`rcpt-${r.id}`}
-                        className="border-b last:border-0 text-success"
-                      >
-                        <td className="py-2 pr-4">{fmtDate(r.date)}</td>
-                        <td className="py-2 pr-4">Receipt</td>
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {r.appliedTo}
-                        </td>
-                        <td className="py-2 pr-4">{r.mode}</td>
-                        <td className="py-2 pr-4 text-xs text-muted-foreground">
-                          {r.note ?? ""}
-                        </td>
-                        <td className="py-2 pr-4 text-right">
-                          −{money(r.amount)}
-                        </td>
-                      </tr>
+                      <Fragment key={`rcpt-${r.id}`}>
+                        <tr
+                          className={`border-b last:border-0 text-success ${canOpen ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                          onClick={canOpen ? () => toggleDay(r.id) : undefined}
+                          aria-expanded={canOpen ? isOpen : undefined}
+                        >
+                          <td className="py-2 pr-4">{fmtDate(r.date)}</td>
+                          <td className="py-2 pr-4 font-medium whitespace-nowrap">
+                            {canOpen &&
+                              (isOpen ? (
+                                <ChevronDown className="inline h-3.5 w-3.5 mr-1" />
+                              ) : (
+                                <ChevronRight className="inline h-3.5 w-3.5 mr-1" />
+                              ))}
+                            Received
+                          </td>
+                          <td className="py-2 pr-4 font-mono text-xs">
+                            {canOpen ? `${r.parts.length} entries` : r.appliedTo}
+                          </td>
+                          <td className="py-2 pr-4">{r.mode}</td>
+                          <td className="py-2 pr-4 text-xs text-muted-foreground">
+                            {canOpen ? "" : (r.note ?? "")}
+                          </td>
+                          <td className="py-2 pr-4 text-right font-semibold whitespace-nowrap">
+                            −{money(r.amount)}
+                          </td>
+                        </tr>
+                        {canOpen &&
+                          isOpen &&
+                          r.parts.map((p, i) => (
+                            <tr
+                              key={`rcpt-${r.id}-${i}`}
+                              className="border-b last:border-0 bg-muted/30 text-xs"
+                            >
+                              <td className="py-1.5 pr-4" />
+                              <td className="py-1.5 pr-4 pl-5 text-muted-foreground">cleared</td>
+                              <td className="py-1.5 pr-4 font-mono">{p.label}</td>
+                              <td className="py-1.5 pr-4">{p.mode}</td>
+                              <td className="py-1.5 pr-4 text-muted-foreground">{p.note ?? ""}</td>
+                              <td className="py-1.5 pr-4 text-right whitespace-nowrap">
+                                −{money(p.amount)}
+                              </td>
+                            </tr>
+                          ))}
+                      </Fragment>
                     );
                   })}
                 </tbody>

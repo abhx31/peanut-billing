@@ -779,17 +779,26 @@ export type StatementRow =
       total: number;
     }
   | {
-      // One row per actual Receive — every payments/opening_payments row
-      // inserted by that click is summed into one amount here, so this
-      // reflects exactly what the customer paid, not its per-bill split.
+      // One row per day: everything the customer paid that day, summed, so
+      // the total received is visible at a glance. `parts` is what it cleared
+      // (each bill / old due, with its mode), shown when the row is opened.
       kind: "receipt";
       id: string;
       date: string;
       amount: number;
-      mode: "Cash" | "UPI" | "CJ";
+      /** "Cash", or e.g. "Cash + UPI" when the day mixed modes. */
+      mode: string;
       appliedTo: string;
       note: string | null;
+      parts: StatementReceiptPart[];
     };
+
+export type StatementReceiptPart = {
+  label: string;
+  mode: "Cash" | "UPI" | "CJ";
+  amount: number;
+  note: string | null;
+};
 
 /** A customer's statement with ONE store. */
 export async function getCustomerStatement(name: string, loc: Loc): Promise<{
@@ -907,67 +916,52 @@ export async function getCustomerStatement(name: string, loc: Loc): Promise<{
       total: Number(b.total),
     });
   }
-  // Group every payments/opening_payments row by the Receive click that
-  // created it (receiptGroupId), so the statement shows what the customer
-  // actually paid instead of how it was split across old dues / bills. Rows
-  // from before this grouping existed (receiptGroupId is null) each form
-  // their own group of one, preserving today's behaviour for old data.
-  type Group = {
-    date: string;
-    mode: "Cash" | "UPI" | "CJ";
-    amount: number;
-    note: string | null;
-    createdAt: Date;
-    applied: string[];
-  };
-  const groups = new Map<string, Group>();
-  function addToGroup(
-    groupKey: string,
-    date: string,
-    mode: string,
-    amount: number,
-    note: string | null,
-    createdAt: Date,
-    appliedLabel: string,
-  ) {
-    const g = groups.get(groupKey);
-    if (g) {
-      g.amount += amount;
-      if (!g.note && note) g.note = note;
-      if (createdAt < g.createdAt) g.createdAt = createdAt;
-      if (!g.applied.includes(appliedLabel)) g.applied.push(appliedLabel);
+  // One receipt row per day: every payments / opening_payments row dated that
+  // day is summed, so the statement shows the day's total received. Each row
+  // keeps what it cleared (bill or old due, and mode) as `parts`; the same bill
+  // paid twice in one mode on one day is merged into one part.
+  type Day = { parts: StatementReceiptPart[]; createdAt: Date };
+  const days = new Map<string, Day>();
+  function addPart(date: string, part: StatementReceiptPart, createdAt: Date) {
+    const d = days.get(date) ?? { parts: [], createdAt };
+    if (createdAt < d.createdAt) d.createdAt = createdAt;
+    const same = d.parts.find((x) => x.label === part.label && x.mode === part.mode);
+    if (same) {
+      same.amount += part.amount;
+      if (!same.note && part.note) same.note = part.note;
     } else {
-      groups.set(groupKey, {
-        date,
-        mode: mode as "Cash" | "UPI" | "CJ",
-        amount,
-        note,
-        createdAt,
-        applied: [appliedLabel],
-      });
+      d.parts.push(part);
     }
+    days.set(date, d);
   }
   for (const p of payments) {
-    const key = p.receiptGroupId ?? `solo-${p.id}`;
     const label = `${p.billKind === "gst" ? "GST " : p.billKind === "psale" ? "P " : ""}Bill ${pad2(p.billNo)}`;
-    addToGroup(key, p.date, p.mode, Number(p.amount), p.note, p.createdAt, label);
+    addPart(
+      p.date,
+      { label, mode: p.mode, amount: Number(p.amount), note: p.note },
+      p.createdAt,
+    );
   }
   for (const p of duePayments) {
-    const key = p.receiptGroupId ?? `solo-${p.id}`;
     const isAdvance =
       Number(p.dueAmount ?? 0) === 0 ||
       (p.dueNote ?? "").toLowerCase().includes("advance");
-    addToGroup(key, p.date, p.mode, Number(p.amount), p.note, p.createdAt, isAdvance ? "Advance" : "Old due");
+    addPart(
+      p.date,
+      { label: isAdvance ? "Advance" : "Old due", mode: p.mode, amount: Number(p.amount), note: p.note },
+      p.createdAt,
+    );
   }
-  for (const [id, g] of groups) {
+  for (const [date, d] of days) {
     rows.push({
       kind: "receipt",
-      id,
-      date: g.date,
-      amount: g.amount,
-      mode: g.mode,
-      appliedTo: g.applied.join(", "),
-      note: g.note,
+      id: `day-${date}`,
+      date,
+      amount: d.parts.reduce((s, x) => s + x.amount, 0),
+      mode: Array.from(new Set(d.parts.map((x) => x.mode))).join(" + "),
+      appliedTo: Array.from(new Set(d.parts.map((x) => x.label))).join(", "),
+      note: d.parts.map((x) => x.note).filter(Boolean).join("; ") || null,
+      parts: d.parts,
     });
   }
   rows.sort(

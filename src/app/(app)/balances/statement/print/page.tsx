@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth-helpers";
 import { getCustomerStatement, getSettings } from "@/lib/queries";
@@ -97,17 +98,35 @@ export default async function PrintStatementPage({ searchParams }: Props) {
                 </tr>
               );
             }
+            // The day's total received, then (if it cleared more than one
+            // bill / old due) one indented line per part.
+            const split = r.parts.length > 1;
             return (
-              <tr key={`rcpt-${r.id}`}>
-                <td className="py-1">{fmtDate(r.date)}</td>
-                <td className="py-1">Receipt</td>
-                <td className="py-1 text-gray-500">
-                  {r.appliedTo}
-                  {r.note ? ` — ${r.note}` : ""}
-                </td>
-                <td className="py-1">{r.mode}</td>
-                <td className="py-1 text-right">−{money(r.amount)}</td>
-              </tr>
+              <Fragment key={`rcpt-${r.id}`}>
+                <tr>
+                  <td className="py-1">{fmtDate(r.date)}</td>
+                  <td className="py-1 font-semibold">Received</td>
+                  <td className="py-1 text-gray-500">
+                    {split ? "" : r.appliedTo}
+                    {!split && r.note ? ` — ${r.note}` : ""}
+                  </td>
+                  <td className="py-1">{r.mode}</td>
+                  <td className="py-1 text-right font-semibold">−{money(r.amount)}</td>
+                </tr>
+                {split &&
+                  r.parts.map((p, i) => (
+                    <tr key={`rcpt-${r.id}-${i}`} className="text-gray-600">
+                      <td className="py-0.5" />
+                      <td className="py-0.5 pl-3">cleared</td>
+                      <td className="py-0.5">
+                        {p.label}
+                        {p.note ? ` — ${p.note}` : ""}
+                      </td>
+                      <td className="py-0.5">{p.mode}</td>
+                      <td className="py-0.5 text-right">−{money(p.amount)}</td>
+                    </tr>
+                  ))}
+              </Fragment>
             );
           })}
         </tbody>
