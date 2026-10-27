@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2 } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 import { atLoc, getCurrentLoc } from "@/lib/loc";
 import { customerKey } from "@/lib/queries";
 
@@ -296,7 +297,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
     revalidatePath("/ledger");
     return { ok: true, billId: result.billId, billNo: result.billNo, fy };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Could not save the bill.";
+    const msg = errorMessage(err, "Could not save the bill.");
     return { ok: false, error: msg };
   }
 }

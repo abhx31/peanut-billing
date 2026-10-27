@@ -105,7 +105,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
         {bill.customerPhone && <> &nbsp;·&nbsp; Ph: {bill.customerPhone}</>}
       </div>
 
-      <table className="w-full text-sm border-collapse mb-3">
+      <table className="print-table w-full text-sm border-collapse mb-3">
         <thead>
           <tr>
             <th className="text-left border-b border-gray-500 py-1">Lot / quality</th>
@@ -184,7 +184,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
       {pays.length > 0 && (
         <div className="mt-6 text-xs">
           <div className="font-semibold mb-1">Payments received</div>
-          <table className="w-full border-collapse">
+          <table className="print-table w-full border-collapse">
             <thead>
               <tr>
                 <th className="text-left border-b border-gray-400 py-1">Date</th>
@@ -730,7 +730,7 @@ function SalePattiPrint({
         Buyer: <b>{bill.customer}</b>
       </div>
 
-      <table className="w-full text-sm border-collapse mb-3">
+      <table className="print-table w-full text-sm border-collapse mb-3">
         <thead>
           <tr>
             <th className="text-left border-b border-gray-500 py-1">Lot</th>

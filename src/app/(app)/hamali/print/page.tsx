@@ -57,7 +57,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
       {h.bills.length === 0 ? (
         <p className="text-sm mb-3">No hamali on sale bills this date.</p>
       ) : (
-        <table className="w-full border-collapse mb-3">
+        <table className="print-table w-full border-collapse mb-3">
           <thead>
             <tr>
               <th className="text-left border-b border-gray-500 py-1">Bill no.</th>
@@ -98,7 +98,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
       {loads.length === 0 ? (
         <p className="text-sm mb-3">No loads unloaded this date.</p>
       ) : (
-        <table className="w-full border-collapse mb-3">
+        <table className="print-table w-full border-collapse mb-3">
           <thead>
             <tr>
               <th className="text-right border-b border-gray-500 py-1">Bags</th>

@@ -8,6 +8,7 @@ import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
+import { errorMessage } from "@/lib/errors";
 
 const saleItemSchema = z.object({
   lotId: z.string().uuid(),
@@ -174,7 +175,7 @@ export async function saveSalePatti(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not save the sale patti.",
+      error: errorMessage(err, "Could not save the sale patti."),
     };
   }
 }
@@ -380,7 +381,7 @@ export async function updateSalePatti(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Could not update the sale patti.",
+      error: errorMessage(err, "Could not update the sale patti."),
     };
   }
 }

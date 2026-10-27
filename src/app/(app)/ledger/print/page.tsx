@@ -115,11 +115,14 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
       {bills.length > 0 && (
         <>
           <h2 className="font-semibold mt-6 mb-2">Sales</h2>
-          <table className="w-full border-collapse mb-4">
+          <table className="print-table w-full border-collapse mb-4">
             <thead>
               <tr>
-                {["#", "Customer", "Lot", "Bags", "Kg", "Total", "Paid", "Balance"].map((h) => (
-                  <th key={h} className="text-left border-b border-gray-500 py-1 text-xs">
+                {["#", "Customer", "Lot", "Bags", "Kg", "Total", "Paid", "Balance"].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`${i >= 3 ? "text-right" : "text-left"} border-b border-gray-500 py-1 text-xs`}
+                  >
                     {h}
                   </th>
                 ))}
@@ -146,11 +149,14 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
       {expenses.length > 0 && (
         <>
           <h2 className="font-semibold mt-6 mb-2">Expenses</h2>
-          <table className="w-full border-collapse">
+          <table className="print-table w-full border-collapse">
             <thead>
               <tr>
-                {["Category", "Note", "Paid by", "Amount"].map((h) => (
-                  <th key={h} className="text-left border-b border-gray-500 py-1 text-xs">
+                {["Category", "Note", "Paid by", "Amount"].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`${i === 3 ? "text-right" : "text-left"} border-b border-gray-500 py-1 text-xs`}
+                  >
                     {h}
                   </th>
                 ))}

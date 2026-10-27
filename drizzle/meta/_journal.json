@@ -148,6 +148,13 @@
       "when": 1793100000000,
       "tag": "0020_store_separation",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0021_bill_no_skip_taken",
+      "breakpoints": true
     }
   ]
 }

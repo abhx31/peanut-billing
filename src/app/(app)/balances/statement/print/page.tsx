@@ -52,7 +52,7 @@ export default async function PrintStatementPage({ searchParams }: Props) {
         <Tile label="Balance" value={money(data.totals.balance)} strong />
       </div>
 
-      <table className="w-full text-xs border-collapse">
+      <table className="print-table w-full text-xs border-collapse">
         <thead>
           <tr>
             <th className="text-left border-b border-gray-500 py-1">Date</th>
