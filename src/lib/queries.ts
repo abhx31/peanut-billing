@@ -388,6 +388,7 @@ export async function getAllPaymentsOnDate(date: string, loc: Loc) {
       id: schema.payments.id,
       billId: schema.payments.billId,
       billNo: schema.bills.no,
+      billKind: schema.bills.kind,
       customer: schema.bills.customer,
       billLoc: schema.bills.loc,
       mode: schema.payments.mode,

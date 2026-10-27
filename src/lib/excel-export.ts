@@ -1,13 +1,8 @@
 import ExcelJS from "exceljs";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
-import {
-  cashBalanceBefore,
-  getAllPaymentsOnDate,
-  getBillsByDate,
-  getCustomerBalances,
-  getExpensesByDate,
-} from "@/lib/queries";
+import { getCustomerBalances, getExpensesByDate } from "@/lib/queries";
+import { getLedgerDay, type LedgerAccount } from "@/lib/ledger-day";
 import { getOldDues } from "@/lib/queries-recv";
 import { getPattiBillsByDate } from "@/lib/queries-patti";
 import { pad2 } from "@/lib/format";
@@ -124,22 +119,37 @@ function sheet(wb: ExcelJS.Workbook, name: string) {
 
 // ---------------------------------------------------------------------------------------------
 
+/** A T-account as a four-column table: receipts (Dr) beside payments (Cr). */
+function accountTable(w: SheetWriter, a: LedgerAccount) {
+  const rows = Array.from({ length: Math.max(a.debits.length, a.credits.length) }, (_, i) => ({
+    dr: a.debits[i]?.label,
+    drAmt: a.debits[i]?.amount,
+    cr: a.credits[i]?.label,
+    crAmt: a.credits[i]?.amount,
+  }));
+  w.table(
+    [
+      { header: "Receipts (Dr)", key: "dr", width: 40 },
+      { header: "Amount", key: "drAmt", width: 14, money: true },
+      { header: "Payments (Cr)", key: "cr", width: 40 },
+      { header: "Amount", key: "crAmt", width: 14, money: true },
+    ],
+    rows,
+    {
+      dr: "Total",
+      drAmt: sum(a.debits, (l) => l.amount),
+      cr: "Total",
+      crAmt: sum(a.credits, (l) => l.amount),
+    },
+  );
+}
+
 async function ledgerSheet(wb: ExcelJS.Workbook, date: string, v: Viewer, loc: Loc) {
-  const [bills, pays, expenses, openCash, openBank, closing] = await Promise.all([
-    getBillsByDate(date, v.isOwner, loc),
-    getAllPaymentsOnDate(date, loc),
-    getExpensesByDate(date, loc),
-    cashBalanceBefore("Cash", date, loc),
-    cashBalanceBefore("UPI", date, loc),
-    db.query.closings.findFirst({
-      where: and(eq(schema.closings.date, date), eq(schema.closings.loc, loc)),
-    }),
-  ]);
-  // Same arithmetic as the Daily ledger page.
+  // Same itemised book as the Daily ledger page.
+  const day = await getLedgerDay(date, loc, v.isOwner);
+  const { bills, pays, expenses, existingClosing: closing } = day;
   const by = <T extends { mode: string; amount: string }>(rows: T[], mode: string) =>
     sum(rows.filter((r) => r.mode === mode), (r) => n(r.amount));
-  const cashIn = by(pays, "Cash");
-  const upiIn = by(pays, "UPI");
   const cashOut = by(expenses, "Cash");
   const upiOut = by(expenses, "UPI");
   const sales = sum(bills, (b) => b.total);
@@ -149,21 +159,13 @@ async function ledgerSheet(wb: ExcelJS.Workbook, date: string, v: Viewer, loc: L
   const w = sheet(wb, "Daily ledger");
   w.title(`Daily ledger · ${locLabel(loc)} — ${dmy(date)}`);
   w.section("Cash in hand");
-  w.pairs([
-    ["Opening", openCash],
-    ["Cash received", cashIn],
-    ["Cash expenses", cashOut],
-    ["Closing (book)", openCash + cashIn - cashOut],
-    ...(closing?.cash != null ? ([["Closing (counted)", n(closing.cash)]] as [string, number][]) : []),
-  ]);
+  accountTable(w, day.cash);
+  if (closing?.cash != null) w.pairs([["Closing (counted)", n(closing.cash)]]);
   w.section("Bank / UPI");
-  w.pairs([
-    ["Opening", openBank],
-    ["UPI received", upiIn],
-    ["UPI expenses", upiOut],
-    ["Closing (book)", openBank + upiIn - upiOut],
-    ...(closing?.bank != null ? ([["Closing (counted)", n(closing.bank)]] as [string, number][]) : []),
-  ]);
+  accountTable(w, day.bank);
+  if (closing?.bank != null) w.pairs([["Closing (counted)", n(closing.bank)]]);
+  w.section("CJ (money held by CJ)");
+  accountTable(w, day.cj);
   w.section("Day result");
   w.pairs([
     ["Sales (total)", sales],
