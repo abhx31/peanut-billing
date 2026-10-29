@@ -9,6 +9,7 @@ import { fmtDate, money, pad2 } from "@/lib/format";
 import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { PayPattiDialog } from "./pay-patti-dialog";
 import { DeletePattiPaymentButton } from "./delete-patti-payment-button";
+import { EditPattiPaymentDialog } from "./edit-patti-payment-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -138,11 +139,22 @@ export default async function PattiPaymentsPage() {
                       </td>
                       <td className="py-2 pr-4 text-right">{money(p.amount)}</td>
                       <td className="py-2 pr-0 text-right">
-                        <DeletePattiPaymentButton
-                          id={p.id}
-                          party={p.party}
-                          amount={p.amount}
-                        />
+                        <div className="flex gap-1 justify-end items-center">
+                          <EditPattiPaymentDialog
+                            id={p.id}
+                            billLabel={billLabel(p.pattiKind, p.pattiNo)}
+                            party={p.party}
+                            amount={Number(p.amount)}
+                            mode={p.mode}
+                            date={p.date}
+                            note={p.note}
+                          />
+                          <DeletePattiPaymentButton
+                            id={p.id}
+                            party={p.party}
+                            amount={p.amount}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}

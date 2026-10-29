@@ -23,9 +23,10 @@ export function DeletePattiPaymentButton({ id, party, amount }: Props) {
       trigger={
         <Button
           type="button"
-          size="sm"
-          variant="ghost"
+          size="icon-sm"
+          variant="outline"
           className="text-destructive"
+          title="Delete"
           aria-label="Delete payment"
         >
           <Trash2 className="h-3.5 w-3.5" />

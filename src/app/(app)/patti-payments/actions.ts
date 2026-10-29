@@ -116,9 +116,60 @@ export async function deletePattiPayment(
     where: eq(schema.pattiPayments.id, parsed.data.id),
   });
   if (!row) return { ok: false, error: "Payment not found." };
+  const closed = await closedDateError(row.date);
+  if (closed) return { ok: false, error: closed };
 
   await db.transaction(async (tx) => {
     await tx.delete(schema.pattiPayments).where(eq(schema.pattiPayments.id, parsed.data.id));
+    await recomputePaidCache(tx, row.pattiId);
+  });
+
+  revalidatePath("/patti");
+  revalidatePath("/gstp");
+  revalidatePath("/patti-payments");
+  revalidatePath("/ledger");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+const updateSchema = paySchema.omit({ pattiId: true }).extend({ id: z.string().uuid() });
+
+/**
+ * Correct a recorded purchase payment: amount, mode, date or note. The
+ * purchase bill's "fully paid" cache is recomputed afterwards, exactly as when
+ * a payment is added or deleted.
+ */
+export async function updatePattiPayment(
+  input: z.input<typeof updateSchema>,
+): Promise<Result> {
+  await requireOwnerOrEditor();
+  const parsed = updateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const row = await db.query.pattiPayments.findFirst({
+    where: eq(schema.pattiPayments.id, parsed.data.id),
+  });
+  if (!row) return { ok: false, error: "Payment not found." };
+  // Both the old and the new date must be in an open financial year.
+  if (parsed.data.date !== row.date) {
+    const closedOld = await closedDateError(row.date);
+    if (closedOld) return { ok: false, error: closedOld };
+  }
+  const closedNew = await closedDateError(parsed.data.date);
+  if (closedNew) return { ok: false, error: closedNew };
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.pattiPayments)
+      .set({
+        amount: parsed.data.amount.toString(),
+        mode: parsed.data.mode,
+        date: parsed.data.date,
+        note: parsed.data.note || null,
+      })
+      .where(eq(schema.pattiPayments.id, parsed.data.id));
     await recomputePaidCache(tx, row.pattiId);
   });
 
