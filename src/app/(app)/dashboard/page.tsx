@@ -66,8 +66,9 @@ export default async function DashboardPage() {
     getAllPaymentsOnDate(date, loc),
     getLotsWithStock(),
     getCustomerBalances(loc),
-    cashBalanceBefore("Cash", futureAnchor, loc),
-    cashBalanceBefore("UPI", futureAnchor, loc),
+    // Cash / bank balances are owner & editor only — not worked out for staff.
+    isPrivileged ? cashBalanceBefore("Cash", futureAnchor, loc) : Promise.resolve(0),
+    isPrivileged ? cashBalanceBefore("UPI", futureAnchor, loc) : Promise.resolve(0),
     getLatestBills(8, isOwner, loc),
     getSalesSeries(14, loc),
     getCjTotals(loc),
@@ -164,20 +165,24 @@ export default async function DashboardPage() {
           delta={salesDelta}
           href="/day"
         />
-        <KPICard
-          title="Cash in hand"
-          value={moneyRounded(cashBal)}
-          sub="Book balance"
-          icon={Banknote}
-          href="/ledger"
-        />
-        <KPICard
-          title="Bank / UPI"
-          value={moneyRounded(upiBal)}
-          sub="Book balance"
-          icon={Wallet}
-          href="/ledger"
-        />
+        {isPrivileged && (
+          <>
+            <KPICard
+              title="Cash in hand"
+              value={moneyRounded(cashBal)}
+              sub="Book balance"
+              icon={Banknote}
+              href="/ledger"
+            />
+            <KPICard
+              title="Bank / UPI"
+              value={moneyRounded(upiBal)}
+              sub="Book balance"
+              icon={Wallet}
+              href="/ledger"
+            />
+          </>
+        )}
         <KPICard
           title="Owed by customers"
           value={moneyRounded(pendingCredit)}

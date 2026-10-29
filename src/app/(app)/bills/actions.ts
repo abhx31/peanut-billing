@@ -21,9 +21,15 @@ const receiveForBillSchema = z.object({
 type Result = { ok: true } | { ok: false; error: string };
 
 export async function deleteBill(input: z.input<typeof deleteBillSchema>): Promise<Result> {
-  await requireSession();
+  const session = await requireSession();
   const parsed = deleteBillSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid bill id." };
+  if (session.user.role === "staff") {
+    const bill = await db.query.bills.findFirst({ where: eq(schema.bills.id, parsed.data.id) });
+    if (bill?.kind === "psale") {
+      return { ok: false, error: "Only the owner or an editor can delete a sale patti." };
+    }
+  }
 
   await db.delete(schema.bills).where(eq(schema.bills.id, parsed.data.id));
   revalidatePath("/day");

@@ -72,21 +72,6 @@ export default async function GstPurchasePage({ searchParams }: Props) {
     );
   }
 
-  if (lots.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a lot first</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm">
-          <Link href="/lots" className="underline">
-            Go to Lots →
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
   const totalPurchases = purchases.reduce((s, p) => s + Number(p.net ?? 0), 0);
   const totalTaxable = purchases.reduce(
     (s, p) => s + Number(p.taxable ?? 0),

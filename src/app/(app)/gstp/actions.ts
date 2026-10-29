@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -18,7 +18,8 @@ const supplierSchema = z.object({
 });
 
 const itemSchema = z.object({
-  lotId: z.string().uuid(),
+  // Typed lot name — any lot can be bought, not only ones already in the list.
+  lotName: z.string().trim().min(1, "Enter the lot for every line.").max(120),
   description: z.string().trim().max(160).optional().default("Ground Nuts"),
   hsn: z.string().trim().max(16).optional().default("12023090"),
   bags: z.number().int().positive(),
@@ -43,6 +44,57 @@ const saveSchema = z.object({
 type Result =
   | { ok: true; id: string; no: number; fy: string }
   | { ok: false; error: string };
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Lot-name match key: case and extra spaces don't matter ("Bold  50-55" = "bold 50-55"). */
+const lotKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Lot id for each typed lot name. A name that matches an existing lot reuses
+ * it; a new name becomes a new lot when `create` is set (the purchase adds its
+ * bags to stock, so the lot must exist to hold them), otherwise it stays
+ * unlinked (null) and is only recorded on the purchase.
+ */
+async function resolveLots(
+  tx: Tx,
+  names: string[],
+  create: boolean,
+  userId: string,
+): Promise<Map<string, string | null>> {
+  const byKey = new Map<string, { name: string; id: string | null }>();
+  for (const n of names) {
+    const k = lotKey(n);
+    if (!byKey.has(k)) byKey.set(k, { name: n.trim(), id: null });
+  }
+  const keys = [...byKey.keys()];
+  if (keys.length) {
+    const existing = await tx
+      .select({ id: schema.lots.id, name: schema.lots.name })
+      .from(schema.lots)
+      .where(
+        and(
+          isNull(schema.lots.deletedAt),
+          inArray(sql`lower(regexp_replace(trim(${schema.lots.name}), '\\s+', ' ', 'g'))`, keys),
+        ),
+      );
+    for (const l of existing) {
+      const entry = byKey.get(lotKey(l.name));
+      if (entry && !entry.id) entry.id = l.id;
+    }
+  }
+  if (create) {
+    for (const entry of byKey.values()) {
+      if (entry.id) continue;
+      const [lot] = await tx
+        .insert(schema.lots)
+        .values({ name: entry.name, createdBy: userId })
+        .returning({ id: schema.lots.id });
+      entry.id = lot.id;
+    }
+  }
+  return new Map(names.map((n) => [n, byKey.get(lotKey(n))?.id ?? null]));
+}
 
 export async function saveGstPurchase(
   input: z.input<typeof saveSchema>,
@@ -92,6 +144,13 @@ export async function saveGstPurchase(
       );
       const no = noRes.rows[0].no;
 
+      const lotIds = await resolveLots(
+        tx,
+        items.map((it) => it.lotName),
+        d.addToStock,
+        session.user.id,
+      );
+
       const [row] = await tx
         .insert(schema.pattiBills)
         .values({
@@ -112,7 +171,8 @@ export async function saveGstPurchase(
           invNo: d.invNo || null,
           invDate: d.invDate ?? null,
           items: items.map((it) => ({
-            lotId: it.lotId,
+            lotId: lotIds.get(it.lotName) ?? null,
+            lotName: it.lotName,
             description: it.description,
             hsn: it.hsn,
             bags: it.bags,
@@ -140,7 +200,7 @@ export async function saveGstPurchase(
       if (d.addToStock) {
         await tx.insert(schema.stockIn).values(
           items.map((it) => ({
-            lotId: it.lotId,
+            lotId: lotIds.get(it.lotName)!,
             bags: it.bags,
             date: d.date,
             loc: loc === "NM" ? "NM" : "MS",
@@ -190,7 +250,8 @@ export async function getGstPurchaseForEdit(id: string) {
   if (!bill || bill.kind !== "gstp") return null;
 
   type Item = {
-    lotId: string;
+    lotId?: string | null;
+    lotName?: string;
     description?: string;
     hsn?: string;
     bags: number;
@@ -205,6 +266,19 @@ export async function getGstPurchaseForEdit(id: string) {
     code?: string;
   };
 
+  const rawItems = (bill.items ?? []) as Item[];
+  const ids = rawItems.map((it) => it.lotId).filter((x): x is string => !!x);
+  const lotNames = new Map(
+    ids.length
+      ? (
+          await db
+            .select({ id: schema.lots.id, name: schema.lots.name })
+            .from(schema.lots)
+            .where(inArray(schema.lots.id, ids))
+        ).map((l) => [l.id, l.name])
+      : [],
+  );
+
   return {
     id: bill.id,
     no: bill.no,
@@ -217,8 +291,8 @@ export async function getGstPurchaseForEdit(id: string) {
     },
     invNo: bill.invNo ?? "",
     invDate: bill.invDate ?? "",
-    items: ((bill.items ?? []) as Item[]).map((it) => ({
-      lotId: it.lotId,
+    items: rawItems.map((it) => ({
+      lotName: it.lotName ?? (it.lotId ? lotNames.get(it.lotId) : undefined) ?? "",
       description: it.description ?? "Ground Nuts",
       hsn: it.hsn ?? "12023090",
       bags: it.bags,
@@ -244,11 +318,11 @@ const editSchema = z.object({
 });
 
 /**
- * Edit a GST purchase: supplier details, invoice no/date, item lines (lot,
- * description, HSN, bags, weight, price — add/remove lines too), GST % and
- * ITC claim. Whether stock was added, and which lot picker was used per
- * line, stays as originally recorded — if this purchase added stock, its
- * stock_in rows are rebuilt to match the edited item lines. Payments are
+ * Edit a GST purchase: supplier details, invoice no/date, item lines (typed
+ * lot name, description, HSN, bags, weight, price — add/remove lines too),
+ * GST % and ITC claim. Whether stock was added stays as originally recorded —
+ * if this purchase added stock, its stock_in rows are rebuilt to match the
+ * edited item lines (a new lot name creates that lot). Payments are
  * untouched — use the Payments recorded tab for those.
  */
 export async function updateGstPurchase(
@@ -295,6 +369,13 @@ export async function updateGstPurchase(
 
   try {
     await db.transaction(async (tx) => {
+      // A purchase that added stock needs every line's lot to exist.
+      const lotIds = await resolveLots(
+        tx,
+        items.map((it) => it.lotName),
+        !!bill.stock,
+        session.user.id,
+      );
       const update: Record<string, unknown> = {
         party: d.party,
         bags,
@@ -305,7 +386,7 @@ export async function updateGstPurchase(
         supplier: d.supplier,
         invNo: d.invNo || null,
         invDate: d.invDate ?? null,
-        items,
+        items: items.map((it) => ({ ...it, lotId: lotIds.get(it.lotName) ?? null })),
         pct: d.pct.toString(),
         taxable: taxable.toString(),
         tax: { intra, pct: d.pct, cgst, sgst, igst, roundOff },
@@ -324,7 +405,7 @@ export async function updateGstPurchase(
           .where(and(eq(schema.stockIn.src, "gstp"), eq(schema.stockIn.ref, d.id)));
         await tx.insert(schema.stockIn).values(
           items.map((it) => ({
-            lotId: it.lotId,
+            lotId: lotIds.get(it.lotName)!,
             bags: it.bags,
             date: d.date,
             loc: loc === "NM" ? "NM" : "MS",

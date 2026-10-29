@@ -32,7 +32,6 @@ type Props = {
 
 type CartItem = {
   key: string;
-  lotId: string;
   lotName: string;
   description: string;
   hsn: string;
@@ -65,7 +64,8 @@ export function GstPurchaseForm({
 
   // Current line + cart.
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [lotId, setLotId] = useState(lots[0]?.id ?? "");
+  // Typed freely: an existing lot is suggested, a new name becomes a new lot.
+  const [lotName, setLotName] = useState("");
   const [description, setDescription] = useState("Ground Nuts");
   const [hsn, setHsn] = useState("12023090");
   const [bags, setBags] = useState("");
@@ -83,12 +83,11 @@ export function GstPurchaseForm({
     const b = num(bags);
     const k = num(kg);
     const r = num(rate);
-    const lot = lots.find((l) => l.id === lotId);
-    if (!lot || b <= 0 || k <= 0 || r <= 0) return null;
+    const name = lotName.trim();
+    if (!name || b <= 0 || k <= 0 || r <= 0) return null;
     return {
       key: "current",
-      lotId: lot.id,
-      lotName: lot.name,
+      lotName: name,
       description: description.trim() || "Ground Nuts",
       hsn: hsn.trim() || "12023090",
       bags: b,
@@ -96,7 +95,7 @@ export function GstPurchaseForm({
       rate: r,
       amount: r2(k * r),
     };
-  }, [bags, kg, rate, lotId, description, hsn, lots]);
+  }, [bags, kg, rate, lotName, description, hsn]);
 
   const items = useMemo(
     () => (currentLine ? [...cart, currentLine] : cart),
@@ -134,6 +133,7 @@ export function GstPurchaseForm({
   }, [items, pct, intra, itcOn]);
 
   function clearLine() {
+    setLotName("");
     setBags("");
     setKg("");
     setRate("");
@@ -141,7 +141,7 @@ export function GstPurchaseForm({
 
   function addToCart() {
     if (!currentLine) {
-      toast.error("Pick a lot and fill bags, kg and rate.");
+      toast.error("Enter the lot and fill bags, kg and rate.");
       return;
     }
     setCart((xs) => [...xs, { ...currentLine, key: crypto.randomUUID() }]);
@@ -187,7 +187,7 @@ export function GstPurchaseForm({
         invNo: invNo.trim(),
         invDate: invDate || undefined,
         items: items.map((it) => ({
-          lotId: it.lotId,
+          lotName: it.lotName,
           description: it.description,
           hsn: it.hsn,
           bags: it.bags,
@@ -389,21 +389,24 @@ export function GstPurchaseForm({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Lot (bags are added to its stock)</Label>
-                <Select value={lotId} onValueChange={(v) => setLotId(v ?? "")}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Add a lot first">
-                      {(v) => lots.find((l) => l.id === v)?.name ?? "Add a lot first"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lots.map((l) => (
-                      <SelectItem key={l.id} value={l.id} label={l.name}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="gp-lot">Lot</Label>
+                <Input
+                  id="gp-lot"
+                  list="gp-lot-list"
+                  value={lotName}
+                  onChange={(e) => setLotName(e.target.value)}
+                  placeholder="Type a lot, e.g. Bold 50-55"
+                  autoComplete="off"
+                />
+                <datalist id="gp-lot-list">
+                  {lots.map((l) => (
+                    <option key={l.id} value={l.name} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">
+                  Pick an existing lot or type a new one — a new lot is created when its bags
+                  are added to stock.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gp-desc">Description of goods</Label>

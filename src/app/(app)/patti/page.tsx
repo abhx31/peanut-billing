@@ -1,6 +1,6 @@
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { requireOwnerOrEditor } from "@/lib/auth-helpers";
+import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import {
   getPattiBillsByDate,
@@ -30,8 +30,11 @@ export const dynamic = "force-dynamic";
 type Props = { searchParams: Promise<{ d?: string }> };
 
 export default async function PattiPage({ searchParams }: Props) {
-  const session = await requireOwnerOrEditor();
+  // Staff can open this page, create pattis and record payments; editing and
+  // deleting a patti stays with owner and editor.
+  const session = await requireSession();
   const isOwner = session.user.role === "owner";
+  const canEdit = isOwner || session.user.role === "editor";
   const sp = await searchParams;
   const date = sp.d || today();
   const loc = await getCurrentLoc();
@@ -147,18 +150,20 @@ export default async function PattiPage({ searchParams }: Props) {
                         </td>
                         <td className="py-2 pr-0 text-right">
                           <div className="flex gap-1 justify-end items-center">
-                            <EditPattiDialog
-                              pattiId={b.id}
-                              pattiNo={b.no}
-                              lotNameSuggestions={lotSuggestions}
-                            />
+                            {canEdit && (
+                              <EditPattiDialog
+                                pattiId={b.id}
+                                pattiNo={b.no}
+                                lotNameSuggestions={lotSuggestions}
+                              />
+                            )}
                             <PayPattiDialog
                               pattiId={b.id}
                               party={b.party}
                               net={Number(b.net)}
                               paid={paid}
                             />
-                            <DeletePattiButton id={b.id} />
+                            {canEdit && <DeletePattiButton id={b.id} />}
                           </div>
                         </td>
                       </tr>
@@ -211,17 +216,20 @@ export default async function PattiPage({ searchParams }: Props) {
                       </td>
                       <td className="py-2 pr-0 text-right">
                         <div className="flex gap-1 justify-end items-center">
-                          <EditSalePattiDialog
-                            billId={b.id}
-                            billNo={b.no}
-                            lots={saleLots}
-                          />
+                          {canEdit && (
+                            <EditSalePattiDialog
+                              billId={b.id}
+                              billNo={b.no}
+                              lots={saleLots}
+                            />
+                          )}
                           <BillRowActions
                             billId={b.id}
                             billNo={b.no}
                             balance={b.balance}
                             labelPrefix="P "
                             noun="sale patti"
+                            canDelete={canEdit}
                           />
                         </div>
                       </td>

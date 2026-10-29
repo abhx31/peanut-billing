@@ -4,7 +4,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { requireOwnerOrEditor } from "@/lib/auth-helpers";
+import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -70,7 +70,7 @@ const paySchema = z.object({
  * like a normal CJ settlement, but never touches our own Cash/Bank.
  */
 export async function payPattiBill(input: z.input<typeof paySchema>): Promise<Result> {
-  const session = await requireOwnerOrEditor();
+  const session = await requireSession();
   const parsed = paySchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
