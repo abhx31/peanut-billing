@@ -16,6 +16,8 @@ type Props = {
   labelPrefix?: string;
   /** Singular noun for dialogs/confirmations, e.g. "sale patti" instead of "bill". */
   noun?: string;
+  /** Hide Delete (e.g. staff on sale pattis). */
+  canDelete?: boolean;
 };
 
 export function BillRowActions({
@@ -24,6 +26,7 @@ export function BillRowActions({
   balance,
   labelPrefix = "",
   noun = "bill",
+  canDelete = true,
 }: Props) {
   const label = `${labelPrefix}${pad2(billNo)}`;
   return (
@@ -45,19 +48,27 @@ export function BillRowActions({
           }
         />
       )}
-      <ConfirmDestructive
-        title={`Delete this ${noun}?`}
-        description={`This will remove the ${noun} and return its bags to stock. All payments linked to it will also be deleted.`}
-        confirmLabel={`Delete ${noun}`}
-        successMessage={`${noun[0]?.toUpperCase()}${noun.slice(1)} deleted`}
-        onConfirm={() => deleteBill({ id: billId })}
-        trigger={
-          <Button type="button" size="icon-sm" variant="outline" className="text-destructive" title="Delete">
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="sr-only">Delete</span>
-          </Button>
-        }
-      />
+      {canDelete && (
+        <ConfirmDestructive
+          title={`Delete this ${noun}?`}
+          description={`This will remove the ${noun} and return its bags to stock. All payments linked to it will also be deleted.`}
+          confirmLabel={`Delete ${noun}`}
+          successMessage={`${noun[0]?.toUpperCase()}${noun.slice(1)} deleted`}
+          onConfirm={() => deleteBill({ id: billId })}
+          trigger={
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="text-destructive"
+              title="Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          }
+        />
+      )}
     </div>
   );
 }

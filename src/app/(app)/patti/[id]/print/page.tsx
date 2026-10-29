@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { requireOwnerOrEditor } from "@/lib/auth-helpers";
+import { requireSession } from "@/lib/auth-helpers";
 import { db, schema } from "@/db";
 import { getSettings } from "@/lib/queries";
 import { fmtDate, money, pad2, r2 } from "@/lib/format";
@@ -22,7 +22,7 @@ export default async function PrintPattiPage({ params, searchParams }: Props) {
   const sp = await searchParams;
   const size = parsePageSize(sp.size, "A5");
   const chosen = hasPageSize(sp.size);
-  await requireOwnerOrEditor();
+  await requireSession();
   const [patti, settings] = await Promise.all([
     db.query.pattiBills.findFirst({ where: eq(schema.pattiBills.id, id) }),
     getSettings(),

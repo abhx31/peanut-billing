@@ -4,7 +4,7 @@ import { eq, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { requireOwnerOrEditor } from "@/lib/auth-helpers";
+import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
@@ -40,7 +40,7 @@ type Result =
 export async function saveSalePatti(
   input: z.input<typeof saveSchema>,
 ): Promise<Result> {
-  const session = await requireOwnerOrEditor();
+  const session = await requireSession();
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

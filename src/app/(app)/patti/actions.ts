@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { requireOwnerOrEditor } from "@/lib/auth-helpers";
+import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { fyOf, r2 } from "@/lib/format";
@@ -43,7 +43,7 @@ type Result =
   | { ok: false; error: string };
 
 export async function savePatti(input: z.input<typeof savePattiSchema>): Promise<Result> {
-  const session = await requireOwnerOrEditor();
+  const session = await requireSession();
   const parsed = savePattiSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Enter seller name, bags, weight and price." };

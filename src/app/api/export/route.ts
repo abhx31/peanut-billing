@@ -17,8 +17,6 @@ export async function GET(req: Request) {
   if (!report || !REPORTS.includes(report)) return new Response("Unknown report", { status: 400 });
   const d = sp.get("d");
   const date = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today();
-  // Patti bills show purchase prices: owner and editor only, like the Patti page.
-  if (report === "patti" && !isPrivileged) return new Response("Forbidden", { status: 403 });
 
   // Reports are for the store the user is working at.
   const loc = await getCurrentLoc();
