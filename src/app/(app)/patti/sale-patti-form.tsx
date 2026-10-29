@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { FormSection, FormGrid, Field, FormActions } from "@/components/form";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
-import { money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
+import { money, num, pad2, parseBagWeights, r2, today, roundRupee } from "@/lib/format";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { saveSalePatti } from "./sale-actions";
 
@@ -107,17 +107,21 @@ export function SalePattiForm({ lots, customers, loc }: Props) {
   const calc = useMemo(() => {
     const bagsTotal = items.reduce((s, i) => s + i.bags, 0);
     const kgTotal = r2(items.reduce((s, i) => s + i.kg, 0));
-    const amount = r2(items.reduce((s, i) => s + i.amount, 0));
+    // Same sum and rounding as saving the sale patti: net to the nearest
+    // rupee, the paise difference shown as Round off.
+    const amount = r2(items.reduce((s, i) => s + i.kg * i.rate, 0));
     const cd = cdOn ? r2((amount * num(cdPct)) / 100) : 0;
     const labor = labOn ? r2(bagsTotal * num(labRate)) : 0;
     const broker = brOn ? r2(bagsTotal * num(brRate)) : 0;
     const trans = transportOn ? num(transport) : 0;
-    const net = r2(amount - cd - labor + brSign * broker - trans);
+    const preRound = r2(amount - cd - labor + brSign * broker - trans);
+    const net = roundRupee(preRound);
+    const roundOff = r2(net - preRound);
     // On us — tracked for the Hamali tab only, never part of net/balance.
     const hamali = hamaliOn ? r2(bagsTotal * num(hamaliRate)) : 0;
     const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(net - paid);
-    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, hamali, net, paid, balance };
+    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, hamali, roundOff, net, paid, balance };
   }, [
     items,
     cdOn,
@@ -518,6 +522,12 @@ export function SalePattiForm({ lots, customers, loc }: Props) {
           {transportOn && <SumCell label="Transport (−)" value={money(calc.trans)} />}
           {hamaliOn && (
             <SumCell label="Hamali (on us, not billed)" value={money(calc.hamali)} />
+          )}
+          {Math.abs(calc.roundOff) >= 0.005 && (
+            <SumCell
+              label="Round off"
+              value={`${calc.roundOff < 0 ? "−" : "+"}${money(Math.abs(calc.roundOff))}`}
+            />
           )}
           <SumCell label="Net receivable" value={money(calc.net)} strong />
           <SumCell label="Balance" value={money(calc.balance)} danger={calc.balance > 0.5} />

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 import { errorMessage } from "@/lib/errors";
 import { getCurrentLoc } from "@/lib/loc";
 import type {
@@ -114,7 +114,7 @@ export async function saveGstBill(
   const sgst = intra ? r2(taxTotal - cgst) : 0;
   const igst = intra ? 0 : taxTotal;
   const preRound = r2(taxable + cgst + sgst + igst);
-  const total = Math.round(preRound);
+  const total = roundRupee(preRound);
   const roundOff = r2(total - preRound);
   const taxBreakdown: GstTaxBreakdown = {
     intra,
@@ -413,7 +413,7 @@ export async function updateGstBill(
   const sgst = intra ? r2(taxTotal - cgst) : 0;
   const igst = intra ? 0 : taxTotal;
   const preRound = r2(taxable + cgst + sgst + igst);
-  const total = Math.round(preRound);
+  const total = roundRupee(preRound);
   const roundOff = r2(total - preRound);
   const taxBreakdown: GstTaxBreakdown = {
     intra,

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { FormSection, FormGrid, Field, FormActions } from "@/components/form";
 import { Segmented } from "@/components/segmented";
-import { money, num, parseBagWeights, pad2, r2, today } from "@/lib/format";
+import { money, num, parseBagWeights, pad2, r2, today, roundRupee } from "@/lib/format";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { savePatti } from "./actions";
 
@@ -105,8 +105,12 @@ export function PattiForm({ lotNameSuggestions, lots, loc }: Props) {
     const labor = labOn ? r2(bagsTotal * num(labRate)) : 0;
     const broker = brOn ? r2(bagsTotal * num(brRate)) : 0;
     const trans = transportOn ? num(transport) : 0;
-    const net = r2(amount - cd - labor + brSign * broker - trans);
-    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, net };
+    // Same rounding as saving the patti: net to the nearest rupee, the paise
+    // difference shown as Round off.
+    const preRound = r2(amount - cd - labor + brSign * broker - trans);
+    const net = roundRupee(preRound);
+    const roundOff = r2(net - preRound);
+    return { bagsTotal, kgTotal, amount, cd, labor, broker, trans, roundOff, net };
   }, [items, cdOn, cdPct, labOn, labRate, brOn, brRate, brSign, transportOn, transport]);
 
   function clearCurrentLine() {
@@ -530,6 +534,12 @@ export function PattiForm({ lotNameSuggestions, lots, loc }: Props) {
             />
           )}
           {transportOn && <SumCell label="Transport (−)" value={money(calc.trans)} />}
+          {Math.abs(calc.roundOff) >= 0.005 && (
+            <SumCell
+              label="Round off"
+              value={`${calc.roundOff < 0 ? "−" : "+"}${money(Math.abs(calc.roundOff))}`}
+            />
+          )}
           <SumCell label="Net payable" value={money(calc.net)} strong />
         </div>
       </FormSection>

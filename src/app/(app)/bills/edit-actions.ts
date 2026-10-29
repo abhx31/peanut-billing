@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 import { closedDateError } from "@/lib/year-close";
 
 const editItemSchema = z.object({
@@ -146,7 +146,7 @@ export async function editBill(
     const gstPct = Number(bill.gstPercent);
     const newGst = r2((newAmount * gstPct) / 100);
     // Match the create path: round the invoice total to the nearest rupee.
-    const newTotal = Math.round(newAmount + newHamali + newGst);
+    const newTotal = roundRupee(newAmount + newHamali + newGst);
 
     const update: Record<string, unknown> = {
       amount: newAmount.toString(),

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fyOf, money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
+import { fyOf, money, num, pad2, parseBagWeights, r2, today, roundRupee } from "@/lib/format";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { saveBill } from "./actions";
 
@@ -103,7 +103,12 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
     const totalKg = items.reduce((s, i) => s + i.kg, 0);
     const amount = r2(items.reduce((s, i) => s + i.amount, 0));
     const hamali = r2(totalBags * num(hamaliPerBag));
-    const total = r2(amount + hamali);
+    // Same rounding as saving the bill (roundRupee: paise above 50 up, else
+    // down), with the paise difference shown as Round off. Otherwise the screen
+    // shows e.g. ₹6,562.70, ₹6,562 is collected, and the saved ₹6,563 bill is ₹1 short.
+    const preRound = r2(amount + hamali);
+    const total = roundRupee(preRound);
+    const roundOff = r2(total - preRound);
     const paid = credit ? 0 : num(cash) + num(upi) + num(cj);
     const balance = r2(total - paid);
     const profit = lotCosts
@@ -114,7 +119,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
           }, 0),
         )
       : null;
-    return { totalBags, totalKg, amount, hamali, total, paid, balance, profit };
+    return { totalBags, totalKg, amount, hamali, roundOff, total, paid, balance, profit };
   }, [items, hamaliPerBag, cash, upi, cj, credit, lotCosts]);
 
   const fy = fyOf(date);
@@ -578,6 +583,12 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
             />
             <SumCell label="Amount" value={money(calc.amount)} />
             <SumCell label="Hamali" value={money(calc.hamali)} />
+            {Math.abs(calc.roundOff) >= 0.005 && (
+              <SumCell
+                label="Round off"
+                value={`${calc.roundOff < 0 ? "−" : "+"}${money(Math.abs(calc.roundOff))}`}
+              />
+            )}
             <SumCell label="This bill total" value={money(calc.total)} strong />
             {previousBalance > 0 && (
               <SumCell

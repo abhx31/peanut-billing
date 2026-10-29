@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { stateNameFromCode, INDIA_STATES } from "@/lib/india-states";
-import { money, num, pad2, r2 } from "@/lib/format";
+import { money, num, pad2, r2, roundRupee } from "@/lib/format";
 import { getGstPurchaseForEdit, updateGstPurchase } from "./actions";
 
 type Lot = { id: string; name: string };
@@ -147,7 +147,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
   );
   const intra = (firmStateCode ?? "").trim() === (stateCode ?? "").trim();
   const totalTax = r2((taxable * (num(pct) || 0)) / 100);
-  const net = Math.round(taxable + totalTax);
+  const net = roundRupee(taxable + totalTax);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();

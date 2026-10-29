@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PattiAdjustmentsFields } from "@/components/patti-adjustments-fields";
-import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
+import { money, num, pad2, parseBagWeights, r2, roundRupee } from "@/lib/format";
 import { getPattiForEdit, updatePatti } from "./actions";
 
 type Row = {
@@ -144,7 +144,7 @@ export function EditPattiDialog({ pattiId, pattiNo, lotNameSuggestions }: Props)
   const labor = labOn ? r2(bagsTotal * (num(labRate) || 0)) : 0;
   const broker = brOn ? r2(bagsTotal * (num(brRate) || 0)) : 0;
   const trans = transportOn ? num(transport) || 0 : 0;
-  const net = Math.round(amount - cd - labor + brSign * broker - trans);
+  const net = roundRupee(amount - cd - labor + brSign * broker - trans);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();

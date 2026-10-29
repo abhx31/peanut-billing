@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { PattiAdjustmentsFields } from "@/components/patti-adjustments-fields";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
-import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
+import { money, num, pad2, parseBagWeights, r2, roundRupee } from "@/lib/format";
 import { getSalePattiForEdit, updateSalePatti } from "./sale-actions";
 
 type Lot = { id: string; name: string; left: number };
@@ -159,7 +159,7 @@ export function EditSalePattiDialog({ billId, billNo, lots }: Props) {
   const labor = labOn ? r2(bagsTotal * (num(labRate) || 0)) : 0;
   const broker = brOn ? r2(bagsTotal * (num(brRate) || 0)) : 0;
   const trans = transportOn ? num(transport) || 0 : 0;
-  const net = Math.round(amount - cd - labor + brSign * broker - trans);
+  const net = roundRupee(amount - cd - labor + brSign * broker - trans);
   const hamali = hamaliOn ? r2(bagsTotal * (num(hamaliRate) || 0)) : 0;
 
   function submit(e: React.FormEvent) {

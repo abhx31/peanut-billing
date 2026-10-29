@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 import { errorMessage } from "@/lib/errors";
 import { atLoc, getCurrentLoc } from "@/lib/loc";
 import { customerKey } from "@/lib/queries";
@@ -58,7 +58,7 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
   const gst = r2((totalAmount * d.gstPercent) / 100);
   // Round the invoice total to the nearest rupee; the ±paise difference shows
   // on the print as a Round Off line.
-  const total = Math.round(totalAmount + hamali + gst);
+  const total = roundRupee(totalAmount + hamali + gst);
 
   const paidNow = r2((d.payCash ?? 0) + (d.payUpi ?? 0) + (d.payCj ?? 0));
 

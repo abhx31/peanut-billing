@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
-import { money, num, pad2, r2 } from "@/lib/format";
+import { money, num, pad2, r2, roundRupee } from "@/lib/format";
 import { getGstBillForEdit, updateGstBill } from "./actions";
 
 type Lot = { id: string; name: string };
@@ -185,7 +185,7 @@ export function EditGstBillDialog({ billId, billNo, lots }: Props) {
     rows.reduce((s, r) => s + (num(r.kgStr) || 0) * (num(r.rateStr) || 0), 0),
   );
   const taxTotal = r2((taxable * (num(gstPercent) || 0)) / 100);
-  const total = Math.round(taxable + taxTotal);
+  const total = roundRupee(taxable + taxTotal);
   const hamali = hamaliOn ? r2(bagsTotal * (num(hamaliRate) || 0)) : 0;
 
   function submit(e: React.FormEvent) {

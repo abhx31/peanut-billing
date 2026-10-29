@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { requireOwnerOrEditor } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc, toLoc } from "@/lib/loc";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 
 const supplierSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -130,7 +130,7 @@ export async function saveGstPurchase(
   const sgst = intra ? r2(totalTax - cgst) : 0;
   const igst = intra ? 0 : totalTax;
   const preRound = r2(taxable + cgst + sgst + igst);
-  const net = Math.round(preRound);
+  const net = roundRupee(preRound);
   const roundOff = r2(net - preRound);
   const paidMode = d.paidMode === "" ? null : d.paidMode;
   const paidDate = paidMode ? d.date : null;
@@ -361,7 +361,7 @@ export async function updateGstPurchase(
   const sgst = intra ? r2(totalTax - cgst) : 0;
   const igst = intra ? 0 : totalTax;
   const preRound = r2(taxable + cgst + sgst + igst);
-  const net = Math.round(preRound);
+  const net = roundRupee(preRound);
   const roundOff = r2(net - preRound);
   const itc = d.itcOn ? totalTax : 0;
   // Rebuilt stock stays at the store this purchase belongs to.

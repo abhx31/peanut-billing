@@ -18,7 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIA_STATES, stateNameFromCode } from "@/lib/india-states";
-import { money, num, pad2, r2, today } from "@/lib/format";
+import { money, num, pad2, r2, today, roundRupee } from "@/lib/format";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { saveGstPurchase } from "./actions";
 
@@ -117,7 +117,7 @@ export function GstPurchaseForm({
     const sgst = intra ? r2(totalTax - cgst) : 0;
     const igst = intra ? 0 : totalTax;
     const preRound = r2(taxable + cgst + sgst + igst);
-    const net = Math.round(preRound);
+    const net = roundRupee(preRound);
     const roundOff = r2(net - preRound);
     const bagsTotal = items.reduce((s, i) => s + i.bags, 0);
     const kgTotal = r2(items.reduce((s, i) => s + i.kg, 0));

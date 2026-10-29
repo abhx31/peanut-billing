@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { money, num, pad2, parseBagWeights, r2 } from "@/lib/format";
+import { money, num, pad2, parseBagWeights, r2, roundRupee } from "@/lib/format";
 import { editBill } from "./edit-actions";
 
 type Lot = { id: string; name: string; left: number };
@@ -142,7 +142,7 @@ export function EditBillDialog({
       rows.reduce((s, r) => s + (num(r.kgStr) || 0) * (num(r.rateStr) || 0), 0),
     );
     const hamaliTotal = r2(totalBags * (num(hamali) || 0));
-    const total = Math.round(amount + hamaliTotal);
+    const total = roundRupee(amount + hamaliTotal);
     return { totalBags, amount, hamaliTotal, total };
   }, [rows, hamali]);
 

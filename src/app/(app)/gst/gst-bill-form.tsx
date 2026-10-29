@@ -18,7 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
-import { money, num, parseBagWeights, r2, today } from "@/lib/format";
+import { money, num, parseBagWeights, r2, today, roundRupee } from "@/lib/format";
 import type { GstProfile } from "@/lib/gst-types";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { saveGstBill } from "./actions";
@@ -159,7 +159,7 @@ export function GstBillForm({
     const sgst = intra ? r2(taxTotal - cgst) : 0;
     const igst = intra ? 0 : taxTotal;
     const preRound = r2(taxable + cgst + sgst + igst);
-    const total = Math.round(preRound);
+    const total = roundRupee(preRound);
     const roundOff = r2(total - preRound);
     // On us — tracked for the Hamali tab only, never part of the invoice total.
     const hamali = hamaliOn ? r2(bagsTotal * num(hamaliRate)) : 0;

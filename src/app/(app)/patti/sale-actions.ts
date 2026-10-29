@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 import { errorMessage } from "@/lib/errors";
 
 const saleItemSchema = z.object({
@@ -59,7 +59,7 @@ export async function saveSalePatti(
   const broker = r2(bagsTotal * d.brRate);
   // Round the sale-patti net to the nearest rupee; the ±paise difference
   // surfaces on the print as a Round Off line.
-  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+  const net = roundRupee(amount - cd - labor + d.brSign * broker - d.transport);
   const total = net;
   // Hamali the firm absorbs itself — tracked for the Hamali tab only, never
   // added to what the buyer owes (net/total above are unaffected).
@@ -300,7 +300,7 @@ export async function updateSalePatti(
   const cd = r2((amount * d.cdPct) / 100);
   const labor = r2(bagsTotal * d.labRate);
   const broker = r2(bagsTotal * d.brRate);
-  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+  const net = roundRupee(amount - cd - labor + d.brSign * broker - d.transport);
   const hamali = r2(bagsTotal * d.hamaliPerBag);
 
   try {

@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
-import { fyOf, r2 } from "@/lib/format";
+import { fyOf, r2, roundRupee } from "@/lib/format";
 
 const pattiItemSchema = z.object({
   lotName: z.string().trim().max(120).optional().default(""),
@@ -101,7 +101,7 @@ export async function savePatti(input: z.input<typeof savePattiSchema>): Promise
   const broker = r2(bagsTotal * d.brRate);
   // Round the patti net to the nearest rupee; the ±paise difference surfaces
   // on the print as a Round Off line.
-  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+  const net = roundRupee(amount - cd - labor + d.brSign * broker - d.transport);
   const paidMode = d.paidMode === "" ? null : d.paidMode;
   const paidDate = paidMode ? d.date : null;
   const addToStock = d.addToStock && !!d.stockLotId;
@@ -300,7 +300,7 @@ export async function updatePatti(
   const cd = r2((amount * d.cdPct) / 100);
   const labor = r2(bagsTotal * d.labRate);
   const broker = r2(bagsTotal * d.brRate);
-  const net = Math.round(amount - cd - labor + d.brSign * broker - d.transport);
+  const net = roundRupee(amount - cd - labor + d.brSign * broker - d.transport);
 
   try {
     await db.transaction(async (tx) => {

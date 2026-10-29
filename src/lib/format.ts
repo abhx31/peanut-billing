@@ -1,5 +1,18 @@
 export const r2 = (v: number) => Math.round(v * 100) / 100;
 
+/**
+ * Bill / patti total to the whole rupee: paise above 50 go up, 50 and below
+ * go down — ₹6,562.30 → ₹6,562, ₹6,562.50 → ₹6,562, ₹6,562.70 → ₹6,563.
+ * Works on the paise-rounded value, so float noise can't tip a total.
+ */
+export const roundRupee = (v: number) => {
+  const p = r2(v);
+  const abs = Math.abs(p);
+  const whole = Math.floor(abs);
+  const rounded = r2(abs - whole) > 0.5 ? whole + 1 : whole;
+  return p < 0 ? -rounded : rounded;
+};
+
 /** ₹ amount: whole rupees as-is (₹77,036), otherwise always two decimals (₹5,798.40). */
 export const money = (v: number | string) => {
   const n = r2((typeof v === "string" ? parseFloat(v) : v) || 0);
