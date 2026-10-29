@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INDIA_STATES, stateNameFromCode } from "@/lib/india-states";
 import { money, num, pad2, r2, today } from "@/lib/format";
+import { useFormDraft } from "@/lib/use-form-draft";
 import { saveGstPurchase } from "./actions";
 
 type Lot = { id: string; name: string };
@@ -28,6 +29,8 @@ type Props = {
   firmStateCode: string;
   nextNo: number;
   currentFy: string;
+  /** Store the draft is kept for ("MS" / "NM"). */
+  loc: "MS" | "NM";
 };
 
 type CartItem = {
@@ -46,6 +49,7 @@ export function GstPurchaseForm({
   firmStateCode,
   nextNo,
   currentFy,
+  loc,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -164,6 +168,62 @@ export function GstPurchaseForm({
     clearLine();
   }
 
+  // An unsaved GST purchase survives the tab being dropped (phone call, app
+  // switch, reload) — kept on this device until it's saved.
+  const draft = useFormDraft({
+    key: `gst-purchase:${loc}`,
+    value: {
+      date,
+      party,
+      gstin,
+      stateCode,
+      address,
+      invNo,
+      invDate,
+      pct,
+      itcOn,
+      addToStock,
+      paidMode,
+      cart,
+      lotName,
+      description,
+      hsn,
+      bags,
+      kg,
+      rate,
+    },
+    isEmpty: (v) =>
+      !v.party.trim() &&
+      !v.gstin.trim() &&
+      !v.invNo.trim() &&
+      v.cart.length === 0 &&
+      !v.lotName.trim() &&
+      !v.bags &&
+      !v.kg &&
+      !v.rate,
+    restore: (v) => {
+      setDate(v.date);
+      setParty(v.party);
+      setGstin(v.gstin);
+      setStateCode(v.stateCode);
+      setAddress(v.address);
+      setInvNo(v.invNo);
+      setInvDate(v.invDate);
+      setPct(v.pct);
+      setItcOn(v.itcOn);
+      setAddToStock(v.addToStock);
+      setPaidMode(v.paidMode);
+      setCart(v.cart);
+      setLotName(v.lotName);
+      setDescription(v.description);
+      setHsn(v.hsn);
+      setBags(v.bags);
+      setKg(v.kg);
+      setRate(v.rate);
+    },
+    discard: reset,
+  });
+
   function submit(mode: "save" | "save-view") {
     if (!party.trim()) {
       toast.error("Enter supplier name.");
@@ -204,6 +264,7 @@ export function GstPurchaseForm({
         toast.error(res.error);
         return;
       }
+      draft.clear();
       toast.success(`Saved GST purchase GP ${pad2(res.no)} · ${res.fy}`);
       if (mode === "save-view") {
         // Future: once a GST-purchase print page exists, open it here.

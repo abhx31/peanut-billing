@@ -73,11 +73,13 @@ export default async function PattiPage({ searchParams }: Props) {
       <PattiTabs
         purchase={
           <PattiForm
+            key={loc}
             lotNameSuggestions={lotSuggestions}
             lots={lots.map((l) => ({ id: l.id, name: l.name }))}
+            loc={loc}
           />
         }
-        sale={<SalePattiForm lots={saleLots} customers={customerNames} />}
+        sale={<SalePattiForm key={loc} lots={saleLots} customers={customerNames} loc={loc} />}
       />
 
       <Card>

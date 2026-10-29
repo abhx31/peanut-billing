@@ -17,6 +17,7 @@ import {
 import { FormSection, FormGrid, Field, FormActions } from "@/components/form";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
+import { useFormDraft } from "@/lib/use-form-draft";
 import { saveSalePatti } from "./sale-actions";
 
 type Lot = { id: string; name: string; left: number };
@@ -24,6 +25,8 @@ type Lot = { id: string; name: string; left: number };
 type Props = {
   lots: Lot[];
   customers: string[];
+  /** Store the draft is kept for ("MS" / "NM"). */
+  loc: "MS" | "NM";
 };
 
 type CartItem = {
@@ -37,7 +40,7 @@ type CartItem = {
   amount: number;
 };
 
-export function SalePattiForm({ lots, customers }: Props) {
+export function SalePattiForm({ lots, customers, loc }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -143,6 +146,91 @@ export function SalePattiForm({ lots, customers }: Props) {
     // user can still switch it on the next line.
   }
 
+  function resetForm() {
+    setBuyer("");
+    setCart([]);
+    clearCurrentLine();
+    setCdOn(false);
+    setLabOn(false);
+    setBrOn(false);
+    setBrSign(1);
+    setTransportOn(false);
+    setTransport("");
+    setHamaliOn(true);
+    setHamaliRate("10");
+    setCash("");
+    setUpi("");
+    setCj("");
+    setCredit(false);
+  }
+
+  // An unsaved sale patti survives the tab being dropped (phone call, app
+  // switch, reload) — kept on this device until it's saved.
+  const draft = useFormDraft({
+    key: `sale-patti:${loc}`,
+    value: {
+      date,
+      buyer,
+      cart,
+      lotId,
+      bags,
+      weights,
+      kg,
+      rate,
+      cdOn,
+      cdPct,
+      labOn,
+      labRate,
+      brOn,
+      brRate,
+      brSign,
+      transportOn,
+      transport,
+      hamaliOn,
+      hamaliRate,
+      credit,
+      cash,
+      upi,
+      cj,
+    },
+    isEmpty: (v) =>
+      !v.buyer.trim() &&
+      v.cart.length === 0 &&
+      !v.bags &&
+      !v.weights.trim() &&
+      !v.kg &&
+      !v.rate &&
+      !v.cash &&
+      !v.upi &&
+      !v.cj,
+    restore: (v) => {
+      setDate(v.date);
+      setBuyer(v.buyer);
+      setCart(v.cart);
+      if (lots.some((l) => l.id === v.lotId)) setLotId(v.lotId);
+      setBags(v.bags);
+      setWeights(v.weights);
+      setKg(v.kg);
+      setRate(v.rate);
+      setCdOn(v.cdOn);
+      setCdPct(v.cdPct);
+      setLabOn(v.labOn);
+      setLabRate(v.labRate);
+      setBrOn(v.brOn);
+      setBrRate(v.brRate);
+      setBrSign(v.brSign);
+      setTransportOn(v.transportOn);
+      setTransport(v.transport);
+      setHamaliOn(v.hamaliOn);
+      setHamaliRate(v.hamaliRate);
+      setCredit(v.credit);
+      setCash(v.cash);
+      setUpi(v.upi);
+      setCj(v.cj);
+    },
+    discard: resetForm,
+  });
+
   function addToCart() {
     if (!currentLine) {
       toast.error("Pick a lot and fill in bags, weight and price before adding this lot.");
@@ -212,25 +300,12 @@ export function SalePattiForm({ lots, customers }: Props) {
         toast.error(res.error);
         return;
       }
+      draft.clear();
       toast.success(`Saved sale patti P ${pad2(res.no)} · net ${money(calc.net)}`);
       if (mode === "save-print") {
         window.open(`/bills/${res.billId}/print`, "_blank");
       }
-      setBuyer("");
-      setCart([]);
-      clearCurrentLine();
-      setCdOn(false);
-      setLabOn(false);
-      setBrOn(false);
-      setBrSign(1);
-      setTransportOn(false);
-      setTransport("");
-      setHamaliOn(true);
-      setHamaliRate("10");
-      setCash("");
-      setUpi("");
-      setCj("");
-      setCredit(false);
+      resetForm();
       router.refresh();
     });
   }

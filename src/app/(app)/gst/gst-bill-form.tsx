@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { HamaliOnUsField } from "@/components/hamali-on-us-field";
 import { money, num, parseBagWeights, r2, today } from "@/lib/format";
 import type { GstProfile } from "@/lib/gst-types";
+import { useFormDraft } from "@/lib/use-form-draft";
 import { saveGstBill } from "./actions";
 
 type Lot = { id: string; name: string; left: number };
@@ -39,6 +40,8 @@ type Props = {
   nextInvoiceNo: number;
   currentFy: string;
   lotCosts: Record<string, string> | null;
+  /** Store the draft is kept for ("MS" / "NM"). */
+  loc: "MS" | "NM";
 };
 
 type CartItem = {
@@ -61,6 +64,7 @@ export function GstBillForm({
   nextInvoiceNo,
   currentFy,
   lotCosts,
+  loc,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -218,6 +222,96 @@ export function GstBillForm({
     setCredit(false);
   }
 
+  // An unsaved GST invoice survives the tab being dropped (phone call, app
+  // switch, reload) — kept on this device until it's saved. Buyer and
+  // transport details stay filled after a save by design, so only lines and
+  // payments decide whether there is a draft worth keeping.
+  const draft = useFormDraft({
+    key: `gst-bill:${loc}`,
+    value: {
+      date,
+      buyerId,
+      consigneeSame,
+      consigneeId,
+      gstPercent,
+      ewb,
+      veh,
+      through,
+      destination,
+      dn,
+      mp,
+      rf,
+      or,
+      bo,
+      bd,
+      dd,
+      dt,
+      lr,
+      td,
+      cart,
+      lotId,
+      description,
+      hsn,
+      bags,
+      weights,
+      kg,
+      rate,
+      amountOverride,
+      hamaliOn,
+      hamaliRate,
+      credit,
+      cash,
+      upi,
+      cj,
+    },
+    isEmpty: (v) =>
+      v.cart.length === 0 &&
+      !v.bags &&
+      !v.weights.trim() &&
+      !v.kg &&
+      !v.rate &&
+      !v.cash &&
+      !v.upi &&
+      !v.cj,
+    restore: (v) => {
+      setDate(v.date);
+      setConsigneeSame(v.consigneeSame);
+      setGstPercent(v.gstPercent);
+      setEwb(v.ewb);
+      setVeh(v.veh);
+      setThrough(v.through);
+      setDestination(v.destination);
+      setDn(v.dn);
+      setMp(v.mp);
+      setRf(v.rf);
+      setOr(v.or);
+      setBo(v.bo);
+      setBd(v.bd);
+      setDd(v.dd);
+      setDt(v.dt);
+      setLr(v.lr);
+      setTd(v.td);
+      setCart(v.cart);
+      setDescription(v.description);
+      setHsn(v.hsn);
+      setBags(v.bags);
+      setWeights(v.weights);
+      setKg(v.kg);
+      setRate(v.rate);
+      setAmountOverride(v.amountOverride);
+      setHamaliOn(v.hamaliOn);
+      setHamaliRate(v.hamaliRate);
+      setCredit(v.credit);
+      setCash(v.cash);
+      setUpi(v.upi);
+      setCj(v.cj);
+      if (customers.some((c) => c.id === v.buyerId)) setBuyerId(v.buyerId);
+      if (customers.some((c) => c.id === v.consigneeId)) setConsigneeId(v.consigneeId);
+      if (lots.some((l) => l.id === v.lotId)) setLotId(v.lotId);
+    },
+    discard: reset,
+  });
+
   function submit(mode: "save" | "save-view" | "save-print") {
     if (!buyerId) {
       toast.error("Pick a buyer.");
@@ -268,6 +362,7 @@ export function GstBillForm({
         toast.error(res.error);
         return;
       }
+      draft.clear();
       toast.success(`Saved GST invoice ${res.no} · ${res.fy}`);
       if (mode === "save-view") {
         window.open(`/bills/${res.billId}/print`, "_blank");

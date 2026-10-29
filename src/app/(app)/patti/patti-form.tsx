@@ -18,11 +18,14 @@ import {
 import { FormSection, FormGrid, Field, FormActions } from "@/components/form";
 import { Segmented } from "@/components/segmented";
 import { money, num, parseBagWeights, pad2, r2, today } from "@/lib/format";
+import { useFormDraft } from "@/lib/use-form-draft";
 import { savePatti } from "./actions";
 
 type Props = {
   lotNameSuggestions: string[];
   lots: { id: string; name: string }[];
+  /** Store the draft is kept for ("MS" / "NM"). */
+  loc: "MS" | "NM";
 };
 
 type CartItem = {
@@ -35,7 +38,7 @@ type CartItem = {
   amount: number;
 };
 
-export function PattiForm({ lotNameSuggestions, lots }: Props) {
+export function PattiForm({ lotNameSuggestions, lots, loc }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -114,6 +117,79 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
     setRate("");
   }
 
+  function resetForm() {
+    setParty("");
+    setCart([]);
+    clearCurrentLine();
+    setCdOn(false);
+    setLabOn(false);
+    setBrOn(false);
+    setBrSign(-1);
+    setTransportOn(false);
+    setTransport("");
+    setPaidMode("");
+    setAddToStock(false);
+  }
+
+  // An unsaved patti survives the tab being dropped (phone call, app switch,
+  // reload) — kept on this device until it's saved.
+  const draft = useFormDraft({
+    key: `patti:${loc}`,
+    value: {
+      date,
+      party,
+      cart,
+      lotName,
+      bags,
+      weights,
+      kg,
+      rate,
+      cdOn,
+      cdPct,
+      labOn,
+      labRate,
+      brOn,
+      brRate,
+      brSign,
+      transportOn,
+      transport,
+      paidMode,
+      addToStock,
+      stockLotId,
+    },
+    isEmpty: (v) =>
+      !v.party.trim() &&
+      v.cart.length === 0 &&
+      !v.lotName.trim() &&
+      !v.bags &&
+      !v.weights.trim() &&
+      !v.kg &&
+      !v.rate,
+    restore: (v) => {
+      setDate(v.date);
+      setParty(v.party);
+      setCart(v.cart);
+      setLotName(v.lotName);
+      setBags(v.bags);
+      setWeights(v.weights);
+      setKg(v.kg);
+      setRate(v.rate);
+      setCdOn(v.cdOn);
+      setCdPct(v.cdPct);
+      setLabOn(v.labOn);
+      setLabRate(v.labRate);
+      setBrOn(v.brOn);
+      setBrRate(v.brRate);
+      setBrSign(v.brSign);
+      setTransportOn(v.transportOn);
+      setTransport(v.transport);
+      setPaidMode(v.paidMode);
+      setAddToStock(v.addToStock);
+      if (lots.some((l) => l.id === v.stockLotId)) setStockLotId(v.stockLotId);
+    },
+    discard: resetForm,
+  });
+
   function addToCart() {
     if (!currentLine) {
       toast.error("Fill in bags, weight and price before adding this lot.");
@@ -156,21 +232,12 @@ export function PattiForm({ lotNameSuggestions, lots }: Props) {
         toast.error(res.error);
         return;
       }
+      draft.clear();
       toast.success(`Saved patti ${pad2(res.pattiNo)} · net ${money(calc.net)}`);
       if (mode === "save-print") {
         window.open(`/patti/${res.pattiId}/print`, "_blank");
       }
-      setParty("");
-      setCart([]);
-      clearCurrentLine();
-      setCdOn(false);
-      setLabOn(false);
-      setBrOn(false);
-      setBrSign(-1);
-      setTransportOn(false);
-      setTransport("");
-      setPaidMode("");
-      setAddToStock(false);
+      resetForm();
       router.refresh();
     });
   }

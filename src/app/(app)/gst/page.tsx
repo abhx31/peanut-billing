@@ -106,6 +106,7 @@ export default async function GstBillPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <GstBillForm
+        key={loc}
         profile={profile}
         customers={customers.map((c) => ({
           id: c.id,
@@ -119,6 +120,7 @@ export default async function GstBillPage({ searchParams }: Props) {
         nextInvoiceNo={invoiceNo}
         currentFy={currentFy}
         lotCosts={isOwner ? lotCosts : null}
+        loc={loc}
       />
       <Card>
         <CardHeader>

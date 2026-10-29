@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fyOf, money, num, pad2, parseBagWeights, r2, today } from "@/lib/format";
+import { useFormDraft } from "@/lib/use-form-draft";
 import { saveBill } from "./actions";
 
 type Lot = { id: string; name: string; left: number };
@@ -173,6 +174,56 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
     setCredit(false);
   }
 
+  // An unsaved bill survives the tab being dropped (phone call, app switch,
+  // reload) — it's kept on this device until the bill is saved.
+  const draft = useFormDraft({
+    key: `bill-new:${loc}`,
+    value: {
+      date,
+      customer,
+      customerPhone,
+      hamaliPerBag,
+      cart,
+      lotId,
+      bags,
+      weights,
+      kg,
+      rate,
+      credit,
+      cash,
+      upi,
+      cj,
+    },
+    isEmpty: (v) =>
+      !v.customer.trim() &&
+      !v.customerPhone.trim() &&
+      v.cart.length === 0 &&
+      !v.bags &&
+      !v.weights.trim() &&
+      !v.kg &&
+      !v.rate &&
+      !v.cash &&
+      !v.upi &&
+      !v.cj,
+    restore: (v) => {
+      setDate(v.date);
+      setCustomer(v.customer);
+      setCustomerPhone(v.customerPhone);
+      setHamaliPerBag(v.hamaliPerBag);
+      setCart(v.cart);
+      if (lots.some((l) => l.id === v.lotId)) setLotId(v.lotId);
+      setBags(v.bags);
+      setWeights(v.weights);
+      setKg(v.kg);
+      setRate(v.rate);
+      setCredit(v.credit);
+      setCash(v.cash);
+      setUpi(v.upi);
+      setCj(v.cj);
+    },
+    discard: reset,
+  });
+
   function validateAndWarn(): boolean {
     if (!customer.trim()) {
       toast.error("Enter a customer name.");
@@ -229,6 +280,7 @@ export function BillForm({ lots, hamaliDefault, customers, lotCosts, loc }: Prop
         toast.error(res.error);
         return;
       }
+      draft.clear();
       toast.success(`Saved bill ${pad2(res.billNo)} · ${fy}`);
       if (mode === "save-view") {
         window.open(`/bills/${res.billId}/print`, "_blank");

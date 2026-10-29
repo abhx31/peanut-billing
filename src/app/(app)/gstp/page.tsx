@@ -87,10 +87,12 @@ export default async function GstPurchasePage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <GstPurchaseForm
+        key={loc}
         lots={lots.map((l) => ({ id: l.id, name: l.name }))}
         firmStateCode={String(profile.stateCode ?? "")}
         nextNo={nextNo}
         currentFy={currentFy}
+        loc={loc}
       />
 
       <Card>
