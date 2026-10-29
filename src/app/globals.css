@@ -142,6 +142,21 @@
   --sidebar-ring: oklch(0.6 0.12 150);
 }
 
+/* When printing, the page is only as tall as what's on it. The app's
+   full-height page/body (and a print page's one-screen minimum height) would
+   otherwise push past one sheet — on a phone the "screen" is taller than an
+   A5/A4 page — and print an extra blank page. White background so dark mode
+   never prints grey. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
+    background: #fff !important;
+  }
+}
+
 @layer components {
   /* Tables on print pages: a gap between columns (flush at the outer edges) and
      equal-width digits so numbers line up down each column. */

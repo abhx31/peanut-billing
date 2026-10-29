@@ -28,7 +28,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
   const total = (f: (l: (typeof lots)[number]) => number) => lots.reduce((s, l) => s + f(l), 0);
 
   return (
-    <div className="bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
+    <div className="bg-white text-black min-h-screen p-6 print:min-h-0 print:p-0 mx-auto max-w-3xl text-sm">
       {chosen ? (
         <>
           <PrintSizeToggle current={size} />

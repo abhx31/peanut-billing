@@ -36,7 +36,7 @@ export default async function PrintLedgerPage({ searchParams }: Props) {
   const profit = isOwner ? bills.reduce((s, b) => s + (b.profit ?? 0), 0) : 0;
 
   return (
-    <div className="bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
+    <div className="bg-white text-black min-h-screen p-6 print:min-h-0 print:p-0 mx-auto max-w-3xl text-sm">
       {chosen ? (
         <>
           <PrintSizeToggle current={size} />

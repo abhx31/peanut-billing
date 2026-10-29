@@ -35,7 +35,7 @@ export default async function PrintHamaliPage({ searchParams }: Props) {
   const totalAmount = h.totalAmount + loadsTotal;
 
   return (
-    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
+    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 print:min-h-0 print:p-0 mx-auto max-w-3xl text-sm">
       {chosen ? (
         <>
           <PrintSizeToggle current={size} />

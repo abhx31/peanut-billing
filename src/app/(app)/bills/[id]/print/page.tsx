@@ -85,7 +85,7 @@ export default async function PrintBillPage({ params, searchParams }: Props) {
   const multiLine = bill.items.length > 1;
 
   return (
-    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl">
+    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 print:min-h-0 print:p-0 mx-auto max-w-3xl">
       {chosen ? (
         <>
           <PrintSizeToggle current={size} />
@@ -243,7 +243,7 @@ function GstInvoicePrint({
 
   return (
     <div
-      className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 mx-auto max-w-5xl gi"
+      className="print:bg-white print:text-black bg-white text-black min-h-screen p-4 print:min-h-0 print:p-0 mx-auto max-w-5xl gi"
     >
       {chosen ? (
         <>
@@ -709,7 +709,7 @@ function SalePattiPrint({
       : null;
 
   return (
-    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 mx-auto max-w-3xl text-sm">
+    <div className="print:bg-white print:text-black bg-white text-black min-h-screen p-6 print:min-h-0 print:p-0 mx-auto max-w-3xl text-sm">
       {chosen ? (
         <>
           <PrintSizeToggle current={size} />
