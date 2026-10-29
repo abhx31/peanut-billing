@@ -31,7 +31,7 @@ type Lot = { id: string; name: string };
 
 type Row = {
   key: string;
-  lotId: string;
+  lotName: string;
   description: string;
   hsn: string;
   bagsStr: string;
@@ -63,7 +63,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
   const [itcOn, setItcOn] = useState(true);
   const [rows, setRows] = useState<Row[]>([]);
 
-  const [newLotId, setNewLotId] = useState(lots[0]?.id ?? "");
+  const [newLotName, setNewLotName] = useState("");
   const [newDescription, setNewDescription] = useState("Ground Nuts");
   const [newHsn, setNewHsn] = useState("12023090");
   const [newBags, setNewBags] = useState("");
@@ -98,7 +98,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
     setRows(
       data.items.map((it) => ({
         key: crypto.randomUUID(),
-        lotId: it.lotId,
+        lotName: it.lotName,
         description: it.description,
         hsn: it.hsn,
         bagsStr: String(it.bags),
@@ -120,15 +120,15 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
     const bagsN = num(newBags);
     const kgN = num(newKg);
     const rateN = num(newRate);
-    if (!newLotId || bagsN <= 0 || kgN <= 0 || rateN < 0) {
-      toast.error("Pick a lot and enter bags, weight and price before adding.");
+    if (!newLotName.trim() || bagsN <= 0 || kgN <= 0 || rateN < 0) {
+      toast.error("Enter the lot, bags, weight and price before adding.");
       return;
     }
     setRows((xs) => [
       ...xs,
       {
         key: crypto.randomUUID(),
-        lotId: newLotId,
+        lotName: newLotName.trim(),
         description: newDescription.trim() || "Ground Nuts",
         hsn: newHsn.trim() || "12023090",
         bagsStr: newBags,
@@ -136,6 +136,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
         rateStr: newRate,
       },
     ]);
+    setNewLotName("");
     setNewBags("");
     setNewKg("");
     setNewRate("");
@@ -164,7 +165,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
       return;
     }
     for (const r of rows) {
-      if (!r.lotId || num(r.bagsStr) <= 0 || num(r.kgStr) <= 0 || num(r.rateStr) < 0) {
+      if (!r.lotName.trim() || num(r.bagsStr) <= 0 || num(r.kgStr) <= 0 || num(r.rateStr) < 0) {
         toast.error("Every line needs a lot, bags and weight.");
         return;
       }
@@ -185,7 +186,7 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
         invNo: invNo.trim(),
         invDate: invDate || undefined,
         items: rows.map((r) => ({
-          lotId: r.lotId,
+          lotName: r.lotName.trim(),
           description: r.description,
           hsn: r.hsn,
           bags: num(r.bagsStr),
@@ -323,29 +324,24 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
               </label>
             </div>
 
+            <datalist id="egp-lot-list">
+              {lots.map((l) => (
+                <option key={l.id} value={l.name} />
+              ))}
+            </datalist>
             <div className="space-y-3">
               {rows.map((r) => (
                 <div key={r.key} className="rounded-lg border bg-muted/30 p-3 space-y-2">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <Label>Lot</Label>
-                      <Select
-                        value={r.lotId}
-                        onValueChange={(v) => updateRow(r.key, { lotId: v ?? r.lotId })}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue>
-                            {(v) => lots.find((l) => l.id === v)?.name ?? "Pick a lot"}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {lots.map((l) => (
-                            <SelectItem key={l.id} value={l.id} label={l.name}>
-                              {l.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor={`egp-lot-${r.key}`}>Lot</Label>
+                      <Input
+                        id={`egp-lot-${r.key}`}
+                        list="egp-lot-list"
+                        value={r.lotName}
+                        onChange={(e) => updateRow(r.key, { lotName: e.target.value })}
+                        autoComplete="off"
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor={`egp-bags-${r.key}`}>Bags</Label>
@@ -426,21 +422,15 @@ export function EditGstPurchaseDialog({ id, no, lots, firmStateCode }: Props) {
               <div className="text-sm font-medium">+ Add another lot</div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label>Lot</Label>
-                  <Select value={newLotId} onValueChange={(v) => setNewLotId(v ?? "")}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue>
-                        {(v) => lots.find((l) => l.id === v)?.name ?? "Pick a lot"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {lots.map((l) => (
-                        <SelectItem key={l.id} value={l.id} label={l.name}>
-                          {l.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="egp-new-lot">Lot</Label>
+                  <Input
+                    id="egp-new-lot"
+                    list="egp-lot-list"
+                    value={newLotName}
+                    onChange={(e) => setNewLotName(e.target.value)}
+                    placeholder="Type a lot"
+                    autoComplete="off"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="egp-new-bags">Bags</Label>
