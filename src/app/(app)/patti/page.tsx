@@ -155,11 +155,12 @@ export default async function PattiPage({ searchParams }: Props) {
                         </td>
                         <td className="py-2 pr-0 text-right">
                           <div className="flex gap-1 justify-end items-center">
-                            <Button asChild variant="outline" size="sm">
-                              <Link href={`/patti/${b.id}/print`} aria-label={`Print patti ${pad2(b.no)}`}>
+                            <Link href={`/patti/${b.id}/print`} target="_blank">
+                              <Button type="button" size="icon-sm" variant="outline" title="Print">
                                 <Printer className="h-4 w-4" />
-                              </Link>
-                            </Button>
+                                <span className="sr-only">Print patti {pad2(b.no)}</span>
+                              </Button>
+                            </Link>
                             {canEdit && (
                               <EditPattiDialog
                                 pattiId={b.id}
