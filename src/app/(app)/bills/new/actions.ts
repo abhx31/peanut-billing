@@ -9,7 +9,7 @@ import { closedDateError } from "@/lib/year-close";
 import { fyOf, r2, roundRupee } from "@/lib/format";
 import { errorMessage } from "@/lib/errors";
 import { atLoc, getCurrentLoc } from "@/lib/loc";
-import { customerKey } from "@/lib/queries";
+import { billPaidSql, customerKey, duePaidSql } from "@/lib/queries";
 
 const itemSchema = z.object({
   lotId: z.string().uuid(),
@@ -206,10 +206,11 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
             id: schema.openingDues.id,
             customer: schema.openingDues.customer,
             amount: schema.openingDues.amount,
-            paid: sql<string>`coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)`,
+            paid: duePaidSql,
           })
           .from(schema.openingDues)
-          .where(dueNameMatches)
+          // Only dues that existed on this bill's date.
+          .where(sql`${dueNameMatches} AND ${schema.openingDues.date} <= ${d.date}`)
           .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt));
         let left = extra;
         for (const o of dues) {
@@ -234,10 +235,11 @@ export async function saveBill(input: z.input<typeof saveBillSchema>): Promise<R
             .select({
               id: schema.bills.id,
               total: schema.bills.total,
-              paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
+              paid: billPaidSql,
             })
             .from(schema.bills)
-            .where(sql`${nameMatches} AND ${schema.bills.id} <> ${bill.id}`)
+            // Older bills only — none dated after this bill.
+            .where(sql`${nameMatches} AND ${schema.bills.id} <> ${bill.id} AND ${schema.bills.date} <= ${d.date}`)
             .orderBy(asc(schema.bills.date), asc(schema.bills.no));
           for (const b of older) {
             if (left <= 0.005) break;

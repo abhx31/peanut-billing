@@ -7,7 +7,7 @@ import { db, schema } from "@/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { atLoc, getCurrentLoc } from "@/lib/loc";
 import { today } from "@/lib/format";
-import { customerKey } from "@/lib/queries";
+import { billPaidSql, customerKey, duePaidSql } from "@/lib/queries";
 
 const deleteBillSchema = z.object({ id: z.string().uuid() });
 const receiveForBillSchema = z.object({
@@ -107,10 +107,12 @@ export async function receiveFromCustomer(
         customer: schema.openingDues.customer,
         amount: schema.openingDues.amount,
         date: schema.openingDues.date,
-        paid: sql<string>`coalesce((select sum(amount) from opening_payments where opening_due_id = ${schema.openingDues.id}), 0)`,
+        paid: duePaidSql,
       })
       .from(schema.openingDues)
-      .where(dueNameMatches)
+      // Only dues that existed on the receipt's date: a backdated receipt
+      // must not pay something recorded after it.
+      .where(sql`${dueNameMatches} AND ${schema.openingDues.date} <= ${payDate}`)
       .orderBy(asc(schema.openingDues.date), asc(schema.openingDues.createdAt));
 
     let left = amount;
@@ -138,10 +140,12 @@ export async function receiveFromCustomer(
       .select({
         id: schema.bills.id,
         total: schema.bills.total,
-        paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
+        paid: billPaidSql,
       })
       .from(schema.bills)
-      .where(nameMatches)
+      // Only bills dated on or before the receipt (see above); the rest of the
+      // money becomes an advance.
+      .where(sql`${nameMatches} AND ${schema.bills.date} <= ${payDate}`)
       .orderBy(asc(schema.bills.date), asc(schema.bills.no));
 
     for (const b of bills) {

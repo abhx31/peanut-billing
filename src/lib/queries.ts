@@ -142,6 +142,19 @@ export function lotStockAt(l: LotWithStock, loc: Loc): LotStockAt {
   return { ...v, known: v.added !== 0 || v.moved !== 0 || v.sold !== 0 || v.left !== 0 };
 }
 
+/**
+ * Amount already paid on the bill of each row in a `.from(schema.bills)` query.
+ * The outer bill is written out as "bills"."id" on purpose: in a single-table
+ * query Drizzle prints the table's own columns unqualified, so
+ * `${schema.bills.id}` inside this sub-select would read as payments.id and
+ * every bill would look unpaid — receipts were then applied to bills that
+ * were already paid.
+ */
+export const billPaidSql = sql<string>`coalesce((select sum(p.amount) from payments p where p.bill_id = "bills"."id"), 0)`;
+
+/** Amount already received on each old due of a `.from(schema.openingDues)` query (see billPaidSql). */
+export const duePaidSql = sql<string>`coalesce((select sum(op.amount) from opening_payments op where op.opening_due_id = "opening_dues"."id"), 0)`;
+
 export async function getLotCosts(): Promise<Record<string, string>> {
   const rows = await db.select().from(schema.lotCosts);
   return Object.fromEntries(rows.map((r) => [r.lotId, r.costPerKg]));
@@ -740,7 +753,7 @@ export async function getPendingBillsByCustomer(loc: Loc): Promise<
       date: schema.bills.date,
       customer: schema.bills.customer,
       total: schema.bills.total,
-      paid: sql<string>`coalesce((select sum(amount) from payments where bill_id = ${schema.bills.id}), 0)`,
+      paid: billPaidSql,
     })
     .from(schema.bills)
     .where(atLoc(schema.bills.loc, loc))
