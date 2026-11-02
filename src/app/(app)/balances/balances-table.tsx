@@ -3,20 +3,13 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { money, pad2 } from "@/lib/format";
+import { money } from "@/lib/format";
 import { ReceiveFromCustomerButton } from "./receive-from-customer-button";
 import { StatementDialog } from "./statement-dialog";
 import { CustomerNoteDialog } from "./customer-note-dialog";
+import { PendingBillsDialog, type PendingBill } from "./pending-bills-dialog";
 
-type Pending = {
-  id: string;
-  no: number;
-  kind: "normal" | "gst" | "psale";
-  loc: "MS" | "NM";
-  date: string;
-  total: number;
-  balance: number;
-};
+type Pending = PendingBill;
 
 type Row = {
   name: string;
@@ -28,12 +21,6 @@ type Row = {
   pending: Pending[];
   note: string;
 };
-
-function billLabel(p: Pending) {
-  const prefix =
-    p.kind === "gst" ? "GST " : p.kind === "psale" ? "P " : "";
-  return `${prefix}${pad2(p.no)}${p.loc === "NM" ? " (NM)" : ""}`;
-}
 
 export function BalancesTable({
   rows,
@@ -144,11 +131,7 @@ export function BalancesTable({
                       {c.pending.length === 0 ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
-                        <span className="whitespace-pre-wrap">
-                          {c.pending
-                            .map((p) => `${billLabel(p)} · ${money(p.balance)}`)
-                            .join(", ")}
-                        </span>
+                        <PendingBillsDialog customer={c.name} pending={c.pending} />
                       )}
                     </td>
                     <td className="py-2 pr-0 text-right">
