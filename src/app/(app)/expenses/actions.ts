@@ -56,3 +56,47 @@ export async function deleteExpense(input: z.input<typeof delSchema>): Promise<R
   revalidatePath("/dashboard");
   return { ok: true };
 }
+
+const editSchema = addSchema.extend({ id: z.string().uuid() });
+
+/**
+ * Correct an expense: date, category, note, amount or how it was paid. It
+ * stays with its store. Hamali payments are changed from the Hamali tab, which
+ * keeps its own record of them in step.
+ */
+export async function updateExpense(input: z.input<typeof editSchema>): Promise<Result> {
+  await requireSession();
+  const parsed = editSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a category and an amount." };
+
+  const existing = await db.query.expenses.findFirst({
+    where: eq(schema.expenses.id, parsed.data.id),
+  });
+  if (!existing) return { ok: false, error: "Expense not found." };
+  if (existing.isHamali) {
+    return { ok: false, error: "This is a Hamali payment — change it from the Hamali tab." };
+  }
+  // Both the old and the new date must be in an open financial year.
+  if (parsed.data.date !== existing.date) {
+    const closedOld = await closedDateError(existing.date);
+    if (closedOld) return { ok: false, error: closedOld };
+  }
+  const closedNew = await closedDateError(parsed.data.date);
+  if (closedNew) return { ok: false, error: closedNew };
+
+  await db
+    .update(schema.expenses)
+    .set({
+      date: parsed.data.date,
+      category: parsed.data.category,
+      note: parsed.data.note || null,
+      amount: parsed.data.amount.toString(),
+      mode: parsed.data.mode,
+    })
+    .where(eq(schema.expenses.id, parsed.data.id));
+  revalidatePath("/expenses");
+  revalidatePath("/ledger");
+  revalidatePath("/profit");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}

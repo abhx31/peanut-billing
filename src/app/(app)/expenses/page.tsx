@@ -7,6 +7,7 @@ import { money, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { ExpenseForm } from "./expense-form";
 import { DeleteExpenseButton } from "./delete-expense-button";
+import { EditExpenseDialog } from "./edit-expense-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,20 @@ export default async function ExpensesPage({ searchParams }: Props) {
                       <td className="py-2 pr-4">{e.mode}</td>
                       <td className="py-2 pr-4 text-right">{money(e.amount)}</td>
                       <td className="py-2 pr-0 text-right">
-                        <DeleteExpenseButton id={e.id} />
+                        <div className="flex gap-1 justify-end items-center">
+                          {/* Hamali payments are changed from the Hamali tab. */}
+                          {!e.isHamali && e.mode !== "CJ" && (
+                            <EditExpenseDialog
+                              id={e.id}
+                              date={e.date}
+                              category={e.category}
+                              note={e.note}
+                              amount={Number(e.amount)}
+                              mode={e.mode}
+                            />
+                          )}
+                          <DeleteExpenseButton id={e.id} />
+                        </div>
                       </td>
                     </tr>
                   ))
