@@ -12,10 +12,6 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:clean": "node scripts/clean-db.mjs",
-    "db:migrate-copy": "node scripts/migrate-db.mjs",
-    "db:dedupe-receipts": "node scripts/dedupe-receipts.mjs",
-    "db:wipe-opening-payments": "node scripts/wipe-opening-payments.mjs",
     "db:backup": "node scripts/backup-db.mjs",
     "db:restore": "node scripts/restore-db.mjs"
   },
