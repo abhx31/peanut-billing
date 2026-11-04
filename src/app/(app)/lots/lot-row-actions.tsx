@@ -1,6 +1,6 @@
 "use client";
 
-import { Package, Pencil, PlusCircle, Tag, Trash2 } from "lucide-react";
+import { Pencil, PlusCircle, Tag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDestructive } from "@/components/confirm-destructive";
 import { NumberPromptDialog } from "@/components/number-prompt-dialog";
@@ -76,9 +76,6 @@ export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
           </Button>
         }
       />
-      <span className="sr-only">
-        <Package />
-      </span>
     </div>
   );
 }

@@ -128,8 +128,9 @@ export default async function ProfitPage({ searchParams }: Props) {
       byLotMap.set(it.lotId, row);
     }
   }
-  const byLot = Array.from(byLotMap.values())
-    .map((l) => ({ ...l, bills: l.billIds.size }))
+  // Keyed by lot id: different lots can share a name (e.g. two "GOLD" lots).
+  const byLot = Array.from(byLotMap.entries())
+    .map(([lotId, l]) => ({ ...l, lotId, bills: l.billIds.size }))
     .sort((a, b) => b.profit - a.profit);
 
   return (
@@ -249,7 +250,7 @@ export default async function ProfitPage({ searchParams }: Props) {
                 </thead>
                 <tbody>
                   {byLot.map((l) => (
-                    <tr key={l.name} className="border-b last:border-0">
+                    <tr key={l.lotId} className="border-b last:border-0">
                       <td className="py-2 pr-4">{l.name}</td>
                       <td className="py-2 pr-4 text-right">{l.bills}</td>
                       <td className="py-2 pr-4 text-right">{l.bags}</td>
