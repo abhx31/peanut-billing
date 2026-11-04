@@ -39,7 +39,8 @@ export async function getLotsWithStock(
   exec: DbExecutor = db,
 ): Promise<LotWithStock[]> {
   const { asOf } = opts;
-  const addedRows = await exec
+  // Independent queries — run together (each is a network round trip).
+  const addedQ = exec
     .select({
       lotId: schema.stockIn.lotId,
       bagsAdded: sql<number>`coalesce(sum(${schema.stockIn.bags}), 0)::int`,
@@ -48,12 +49,9 @@ export async function getLotsWithStock(
     .from(schema.stockIn)
     .where(asOf ? lte(schema.stockIn.date, asOf) : undefined)
     .groupBy(schema.stockIn.lotId);
-  const addedMap = new Map(
-    addedRows.map((r) => [r.lotId, { total: r.bagsAdded, nm: r.bagsAddedNM }]),
-  );
 
   // Total sold across the item + split by store (NM vs Main).
-  const soldRows = await exec
+  const soldQ = exec
     .select({
       lotId: schema.billItems.lotId,
       bagsSold: sql<number>`coalesce(sum(${schema.billItems.bags}), 0)::int`,
@@ -65,10 +63,9 @@ export async function getLotsWithStock(
     .innerJoin(schema.bills, eq(schema.billItems.billId, schema.bills.id))
     .where(asOf ? lte(schema.bills.date, asOf) : undefined)
     .groupBy(schema.billItems.lotId);
-  const soldMap = new Map(soldRows.map((r) => [r.lotId, r]));
 
   // Transfers out of Main / back from NM.
-  const xferRows = await exec
+  const xferQ = exec
     .select({
       lotId: schema.transfers.lotId,
       out: sql<number>`coalesce(sum(case when ${schema.transfers.dir} = 'out' then ${schema.transfers.bags} else 0 end), 0)::int`,
@@ -77,13 +74,19 @@ export async function getLotsWithStock(
     .from(schema.transfers)
     .where(asOf ? lte(schema.transfers.date, asOf) : undefined)
     .groupBy(schema.transfers.lotId);
-  const xferMap = new Map(xferRows.map((r) => [r.lotId, r]));
 
-  const lots = await exec
+  const lotsQ = exec
     .select()
     .from(schema.lots)
     .where(opts.includeDeleted ? undefined : isNull(schema.lots.deletedAt))
     .orderBy(desc(schema.lots.createdAt));
+
+  const [addedRows, soldRows, xferRows, lots] = await Promise.all([addedQ, soldQ, xferQ, lotsQ]);
+  const addedMap = new Map(
+    addedRows.map((r) => [r.lotId, { total: r.bagsAdded, nm: r.bagsAddedNM }]),
+  );
+  const soldMap = new Map(soldRows.map((r) => [r.lotId, r]));
+  const xferMap = new Map(xferRows.map((r) => [r.lotId, r]));
 
   return lots.map((l) => {
     const addedEntry = addedMap.get(l.id);
@@ -255,27 +258,27 @@ async function enrichBills(
   if (rows.length === 0) return [];
   const billIds = rows.map((b) => b.id);
 
-  const payRows = await db
-    .select({
-      billId: schema.payments.billId,
-      paid: sql<string>`coalesce(sum(${schema.payments.amount}), 0)`,
-    })
-    .from(schema.payments)
-    .where(inArray(schema.payments.billId, billIds))
-    .groupBy(schema.payments.billId);
+  // Independent queries — run together.
+  const [payRows, itemRows, costRows] = await Promise.all([
+    db
+      .select({
+        billId: schema.payments.billId,
+        paid: sql<string>`coalesce(sum(${schema.payments.amount}), 0)`,
+      })
+      .from(schema.payments)
+      .where(inArray(schema.payments.billId, billIds))
+      .groupBy(schema.payments.billId),
+    db
+      .select()
+      .from(schema.billItems)
+      .where(inArray(schema.billItems.billId, billIds))
+      .orderBy(asc(schema.billItems.billId), asc(schema.billItems.position)),
+    isOwner ? db.select().from(schema.lotCosts) : Promise.resolve([]),
+  ]);
   const paidMap = new Map(payRows.map((r) => [r.billId, Number(r.paid)]));
-
-  const itemRows = await db
-    .select()
-    .from(schema.billItems)
-    .where(inArray(schema.billItems.billId, billIds))
-    .orderBy(asc(schema.billItems.billId), asc(schema.billItems.position));
-
-  let costs: Record<string, number> = {};
-  if (isOwner) {
-    const costRows = await db.select().from(schema.lotCosts);
-    costs = Object.fromEntries(costRows.map((c) => [c.lotId, Number(c.costPerKg)]));
-  }
+  const costs: Record<string, number> = Object.fromEntries(
+    costRows.map((c) => [c.lotId, Number(c.costPerKg)]),
+  );
 
   const itemsByBill = new Map<string, BillLineRow[]>();
   for (const it of itemRows) {
@@ -505,21 +508,26 @@ export async function cashBalanceBefore(
   exec: DbExecutor = db,
 ) {
   const col = mode === "Cash" ? schema.closings.cash : schema.closings.bank;
-  const [latestClose] = await exec
-    .select({ date: schema.closings.date, value: col })
-    .from(schema.closings)
-    .where(
-      sql`${schema.closings.date} < ${before} AND ${col} IS NOT NULL AND ${schema.closings.loc} = ${loc}`,
-    )
-    .orderBy(desc(schema.closings.date))
-    .limit(1);
+  // The anchor (latest closing, else the opening balance) first, then every
+  // flow since it in one go.
+  const [[latestClose], settings] = await Promise.all([
+    exec
+      .select({ date: schema.closings.date, value: col })
+      .from(schema.closings)
+      .where(
+        sql`${schema.closings.date} < ${before} AND ${col} IS NOT NULL AND ${schema.closings.loc} = ${loc}`,
+      )
+      .orderBy(desc(schema.closings.date))
+      .limit(1),
+    getSettings(exec),
+  ]);
 
   let base: number;
   const after = latestClose?.date ?? null;
   if (latestClose && latestClose.value != null) {
     base = Number(latestClose.value);
   } else {
-    const opening = openingsFor(await getSettings(exec), loc);
+    const opening = openingsFor(settings, loc);
     base = mode === "Cash" ? opening.cash : opening.bank;
   }
 
@@ -528,7 +536,7 @@ export async function cashBalanceBefore(
       ? sql`${dateCol} > ${after} AND ${dateCol} < ${before}`
       : sql`${dateCol} < ${before}`;
 
-  const [pr] = await exec
+  const prQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
@@ -539,7 +547,7 @@ export async function cashBalanceBefore(
         atLoc(schema.bills.loc, loc),
       ),
     );
-  const [ex] = await exec
+  const exQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.expenses.amount}), 0)` })
     .from(schema.expenses)
     .where(
@@ -549,7 +557,7 @@ export async function cashBalanceBefore(
         atLoc(schema.expenses.loc, loc),
       ),
     );
-  const [cj] = await exec
+  const cjQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
     .from(schema.cjSettlements)
     .where(
@@ -562,7 +570,7 @@ export async function cashBalanceBefore(
   // Purchase payments made in this mode (Cash/UPI only here — CJ-mode
   // payments never touch our own cash/bank, see cjBalanceBefore-equivalent
   // handling in the Daily ledger page).
-  const [patti] = await exec
+  const pattiQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.pattiPayments.amount}), 0)` })
     .from(schema.pattiPayments)
     .innerJoin(schema.pattiBills, eq(schema.pattiBills.id, schema.pattiPayments.pattiId))
@@ -575,7 +583,7 @@ export async function cashBalanceBefore(
     );
 
   // Also credit opening-due payments received in this mode.
-  const [op] = await exec
+  const opQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)` })
     .from(schema.openingPayments)
     .where(
@@ -587,10 +595,19 @@ export async function cashBalanceBefore(
     );
 
   // Cash deposited into the bank: moves money OUT of Cash and INTO Bank/UPI.
-  const [dep] = await exec
+  const depQ = exec
     .select({ s: sql<string>`coalesce(sum(${schema.cashDeposits.amount}), 0)` })
     .from(schema.cashDeposits)
     .where(and(inWindow(schema.cashDeposits.date), atLoc(schema.cashDeposits.loc, loc)));
+
+  const [[pr], [ex], [cj], [patti], [op], [dep]] = await Promise.all([
+    prQ,
+    exQ,
+    cjQ,
+    pattiQ,
+    opQ,
+    depQ,
+  ]);
   const depositAmount = Number(dep?.s ?? 0);
 
   return (
@@ -649,7 +666,7 @@ export async function getCustomerBalances(
   loc: Loc,
   exec: DbExecutor = db,
 ): Promise<CustomerBalance[]> {
-  const bills = await exec
+  const billsQ = exec
     .select({
       customer: schema.bills.customer,
       billed: sql<string>`coalesce(sum(${schema.bills.total}), 0)`,
@@ -658,7 +675,7 @@ export async function getCustomerBalances(
     .where(atLoc(schema.bills.loc, loc))
     .groupBy(schema.bills.customer);
 
-  const pays = await exec
+  const paysQ = exec
     .select({
       customer: schema.bills.customer,
       paid: sql<string>`coalesce(sum(${schema.payments.amount}), 0)`,
@@ -668,7 +685,7 @@ export async function getCustomerBalances(
     .where(atLoc(schema.bills.loc, loc))
     .groupBy(schema.bills.customer);
 
-  const dues = await exec
+  const duesQ = exec
     .select({
       customer: schema.openingDues.customer,
       openingDue: sql<string>`coalesce(sum(${schema.openingDues.amount}), 0)`,
@@ -677,7 +694,7 @@ export async function getCustomerBalances(
     .where(atLoc(schema.openingDues.loc, loc))
     .groupBy(schema.openingDues.customer);
 
-  const duePays = await exec
+  const duePaysQ = exec
     .select({
       customer: schema.openingPayments.customer,
       openingPaid: sql<string>`coalesce(sum(${schema.openingPayments.amount}), 0)`,
@@ -686,6 +703,8 @@ export async function getCustomerBalances(
     .innerJoin(schema.openingDues, eq(schema.openingDues.id, schema.openingPayments.openingDueId))
     .where(atLoc(schema.openingDues.loc, loc))
     .groupBy(schema.openingPayments.customer);
+
+  const [bills, pays, dues, duePays] = await Promise.all([billsQ, paysQ, duesQ, duePaysQ]);
 
   // Merge by name-key so case / whitespace differences collapse into one row.
   type Row = {

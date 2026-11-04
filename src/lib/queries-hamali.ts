@@ -90,34 +90,26 @@ export async function getRecentHamaliDays(loc: Loc, limit = 14) {
     .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
     .slice(0, limit);
 
-  const result: {
-    date: string;
-    loadedBags: number;
-    loadedAmount: number;
-    unloadedBags: number;
-    unloadedAmount: number;
-    totalBags: number;
-    totalAmount: number;
-    paid: { amount: string; mode: "Cash" | "UPI" | "CJ" } | null;
-  }[] = [];
-  for (const date of dates) {
-    const [h, loads, paid] = await Promise.all([
-      getHamaliForDate(date, loc),
-      getHamaliLoadsForDate(date, loc),
-      getHamaliPaidForDate(date, loc),
-    ]);
-    const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
-    const unloadedAmount = loads.reduce((s, l) => s + Number(l.amount), 0);
-    result.push({
-      date,
-      loadedBags: h.totalBags,
-      loadedAmount: h.totalAmount,
-      unloadedBags,
-      unloadedAmount,
-      totalBags: h.totalBags + unloadedBags,
-      totalAmount: h.totalAmount + unloadedAmount,
-      paid: paid ? { amount: paid.amount, mode: paid.mode } : null,
-    });
-  }
-  return result;
+  // All days at once rather than one day after another.
+  return Promise.all(
+    dates.map(async (date) => {
+      const [h, loads, paid] = await Promise.all([
+        getHamaliForDate(date, loc),
+        getHamaliLoadsForDate(date, loc),
+        getHamaliPaidForDate(date, loc),
+      ]);
+      const unloadedBags = loads.reduce((s, l) => s + l.bags, 0);
+      const unloadedAmount = loads.reduce((s, l) => s + Number(l.amount), 0);
+      return {
+        date,
+        loadedBags: h.totalBags,
+        loadedAmount: h.totalAmount,
+        unloadedBags,
+        unloadedAmount,
+        totalBags: h.totalBags + unloadedBags,
+        totalAmount: h.totalAmount + unloadedAmount,
+        paid: paid ? { amount: paid.amount, mode: paid.mode } : null,
+      };
+    }),
+  );
 }

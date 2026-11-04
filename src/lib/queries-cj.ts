@@ -34,24 +34,27 @@ export async function getCjSettlementsLatest(loc: Loc, limit = 50) {
 
 /** Money CJ is holding for ONE store. */
 export async function getCjTotals(loc: Loc, exec: DbExecutor = db) {
-  const settings = await getSettings(exec);
-  const [recv] = await exec
+  const today = new Date().toISOString().slice(0, 10);
+  // Independent queries — run together.
+  const [settings, [recv], [paid], [todayRecv]] = await Promise.all([
+    getSettings(exec),
+    exec
     .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
-    .where(and(eq(schema.payments.mode, "CJ"), atLoc(schema.bills.loc, loc)));
-  const [paid] = await exec
+    .where(and(eq(schema.payments.mode, "CJ"), atLoc(schema.bills.loc, loc))),
+    exec
     .select({ s: sql<string>`coalesce(sum(${schema.cjSettlements.amount}), 0)` })
     .from(schema.cjSettlements)
-    .where(atLoc(schema.cjSettlements.loc, loc));
-  const today = new Date().toISOString().slice(0, 10);
-  const [todayRecv] = await exec
+    .where(atLoc(schema.cjSettlements.loc, loc)),
+    exec
     .select({ s: sql<string>`coalesce(sum(${schema.payments.amount}), 0)` })
     .from(schema.payments)
     .innerJoin(schema.bills, eq(schema.bills.id, schema.payments.billId))
     .where(
       sql`${schema.payments.mode} = 'CJ' AND ${schema.payments.date} = ${today} AND ${atLoc(schema.bills.loc, loc)}`,
-    );
+    ),
+  ]);
   const got = Number(recv?.s ?? 0);
   const settled = Number(paid?.s ?? 0);
   // CJ money carried forward from closed financial years.
