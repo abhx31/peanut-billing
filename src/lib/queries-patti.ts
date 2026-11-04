@@ -17,6 +17,38 @@ export async function getPattiBillsByDate(date: string, loc: Loc) {
     .orderBy(desc(schema.pattiBills.createdAt));
 }
 
+/** One store's regular purchase patti bills (kind is null) in a "YYYY-MM" month, newest first. */
+export async function getPattiBillsForMonth(ym: string, loc: Loc) {
+  return db
+    .select()
+    .from(schema.pattiBills)
+    .where(
+      and(
+        sql`to_char(${schema.pattiBills.date}, 'YYYY-MM') = ${ym}`,
+        isNull(schema.pattiBills.kind),
+        atLoc(schema.pattiBills.loc, loc),
+      ),
+    )
+    .orderBy(desc(schema.pattiBills.date), desc(schema.pattiBills.no));
+}
+
+/** Every payment recorded on the given purchase bills, oldest first. */
+export async function getPattiPaymentsFor(pattiIds: string[]) {
+  if (pattiIds.length === 0) return [];
+  return db
+    .select({
+      id: schema.pattiPayments.id,
+      pattiId: schema.pattiPayments.pattiId,
+      date: schema.pattiPayments.date,
+      mode: schema.pattiPayments.mode,
+      amount: schema.pattiPayments.amount,
+      note: schema.pattiPayments.note,
+    })
+    .from(schema.pattiPayments)
+    .where(inArray(schema.pattiPayments.pattiId, pattiIds))
+    .orderBy(asc(schema.pattiPayments.date), asc(schema.pattiPayments.createdAt));
+}
+
 export async function getPattiLotNameSuggestions() {
   const rows = await db
     .selectDistinct({ lotName: schema.pattiBills.lotName })

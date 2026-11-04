@@ -4,7 +4,7 @@ import { db, schema } from "@/db";
 import { getCustomerBalances, getExpensesByDate } from "@/lib/queries";
 import { getLedgerDay, type LedgerAccount } from "@/lib/ledger-day";
 import { getOldDues } from "@/lib/queries-recv";
-import { getPattiBillsByDate } from "@/lib/queries-patti";
+import { getPattiBillsByDate, getPattiBillsForMonth } from "@/lib/queries-patti";
 import { pad2 } from "@/lib/format";
 import { atLoc, locLabel, type Loc } from "@/lib/loc";
 import type { GstTaxBreakdown, PartySnapshot } from "@/lib/gst-types";
@@ -389,13 +389,20 @@ async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
   );
 }
 
-async function pattiSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
-  const bills = (await getPattiBillsByDate(date, loc)).sort((a, b) => a.no - b.no);
+/** Purchase pattis for one day, or (wholeMonth) the whole month of `date`. */
+async function pattiSheet(wb: ExcelJS.Workbook, date: string, loc: Loc, wholeMonth = false) {
+  const month = date.slice(0, 7);
+  const bills = (
+    wholeMonth ? await getPattiBillsForMonth(month, loc) : await getPattiBillsByDate(date, loc)
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.no - b.no);
   const w = sheet(wb, "Patti bills");
-  w.title(`Patti bills (purchases) · ${locLabel(loc)} — ${dmy(date)}`);
+  w.title(
+    `Patti bills (purchases) · ${locLabel(loc)} — ${wholeMonth ? `${month.slice(5, 7)}-${month.slice(0, 4)}` : dmy(date)}`,
+  );
   w.table(
     [
       { header: "No.", key: "no", width: 7 },
+      { header: "Date", key: "date", width: 12 },
       { header: "Seller", key: "party", width: 24 },
       { header: "Lot", key: "lot", width: 18 },
       { header: "Bags", key: "bags", width: 8, decimals: 0 },
@@ -412,6 +419,7 @@ async function pattiSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
     ],
     bills.map((b) => ({
       no: pad2(b.no),
+      date: dmy(b.date),
       party: b.party,
       lot: b.lotName ?? "",
       bags: b.bags,
@@ -455,7 +463,9 @@ export async function buildReport(
   if (report === "day" || report === "ledger") await ledgerSheet(wb, date, v, loc);
   if (report === "day" || report === "expenses") await expensesSheet(wb, date, loc);
   if (report === "day" || report === "gst") await gstSheet(wb, date, loc);
-  if ((report === "day" && v.isPrivileged) || report === "patti") await pattiSheet(wb, date, loc);
+  // The Patti page's Excel is the whole month; the full day report keeps that day's pattis.
+  if (report === "patti") await pattiSheet(wb, date, loc, true);
+  else if (report === "day" && v.isPrivileged) await pattiSheet(wb, date, loc);
   if (report === "day" || report === "receivables") await receivablesSheet(wb, date, loc);
   if (report === "day" || report === "balances") await balancesSheet(wb, date, loc);
 

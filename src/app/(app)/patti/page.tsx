@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { requireSession } from "@/lib/auth-helpers";
 import { ExcelButton } from "@/components/excel-button";
 import {
-  getPattiBillsByDate,
+  getPattiBillsForMonth,
+  getPattiPaymentsFor,
   getPattiLotNameSuggestions,
   getPattiPaidMap,
 } from "@/lib/queries-patti";
@@ -16,6 +17,8 @@ import {
 import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, pad2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
+import { MonthPicker } from "../gstp/month-picker";
+import { PattiPaymentsDialog, type PattiPayment } from "./patti-payments-dialog";
 import { PattiForm } from "./patti-form";
 import { SalePattiForm } from "./sale-patti-form";
 import { PattiTabs } from "./patti-tabs";
@@ -30,7 +33,7 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ d?: string }> };
+type Props = { searchParams: Promise<{ d?: string; m?: string }> };
 
 export default async function PattiPage({ searchParams }: Props) {
   // Staff can open this page, create pattis and record payments; editing and
@@ -39,18 +42,34 @@ export default async function PattiPage({ searchParams }: Props) {
   const isOwner = session.user.role === "owner";
   const canEdit = isOwner || session.user.role === "editor";
   const sp = await searchParams;
+  // Purchase pattis are listed by month; sale pattis by date.
   const date = sp.d || today();
+  const month = sp.m && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : today().slice(0, 7);
+  const monthLabel = new Date(`${month}-01T00:00:00Z`).toLocaleString("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   const loc = await getCurrentLoc();
   const [bills, lotSuggestions, lots, customerBalances, dayBills] =
     await Promise.all([
-      getPattiBillsByDate(date, loc),
+      getPattiBillsForMonth(month, loc),
       getPattiLotNameSuggestions(),
       getLotsWithStock(),
       getCustomerBalances(loc),
       getBillsByDate(date, isOwner, loc),
     ]);
   const saleBills = dayBills.filter((b) => b.kind === "psale");
-  const paidMap = await getPattiPaidMap(bills.map((b) => b.id));
+  const [paidMap, payRows] = await Promise.all([
+    getPattiPaidMap(bills.map((b) => b.id)),
+    getPattiPaymentsFor(bills.map((b) => b.id)),
+  ]);
+  const paymentsOf = new Map<string, PattiPayment[]>();
+  for (const p of payRows) {
+    const list = paymentsOf.get(p.pattiId) ?? [];
+    list.push({ id: p.id, date: p.date, mode: p.mode, amount: p.amount, note: p.note });
+    paymentsOf.set(p.pattiId, list);
+  }
 
   const total = bills.reduce((s, b) => s + Number(b.net), 0);
   const unpaid = bills.reduce((s, b) => {
@@ -87,19 +106,22 @@ export default async function PattiPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>{locLabel(loc)} patti bills on this date</CardTitle>
+          <CardTitle>
+            {locLabel(loc)} patti bills in {monthLabel}
+          </CardTitle>
           <CardDescription>
-            Total net: <b>{money(total)}</b> · Not paid: <b>{money(unpaid)}</b>
+            {bills.length} bill{bills.length === 1 ? "" : "s"} · Total net: <b>{money(total)}</b> ·
+            Not paid: <b>{money(unpaid)}</b>
           </CardDescription>
           <CardAction>
-            <DateFilter paramKey="d" value={date} />
-            <ExcelButton report="patti" date={date} label="Excel" />
+            <MonthPicker value={month} />
+            <ExcelButton report="patti" date={`${month}-01`} label="Excel" />
           </CardAction>
         </CardHeader>
         <CardContent>
           {bills.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No patti bills on this date.
+              No patti bills in {monthLabel}.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -107,6 +129,7 @@ export default async function PattiPage({ searchParams }: Props) {
                 <thead>
                   <tr className="text-left text-muted-foreground border-b">
                     <th className="py-2 pr-4">No.</th>
+                    <th className="py-2 pr-4">Date</th>
                     <th className="py-2 pr-4">Seller</th>
                     <th className="py-2 pr-4">Lot</th>
                     <th className="py-2 pr-4 text-right">Bags</th>
@@ -125,6 +148,7 @@ export default async function PattiPage({ searchParams }: Props) {
                     return (
                       <tr key={b.id} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-mono">{pad2(b.no)}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{fmtDate(b.date)}</td>
                         <td className="py-2 pr-4">{b.party}</td>
                         <td className="py-2 pr-4">{b.lotName ?? ""}</td>
                         <td className="py-2 pr-4 text-right">{b.bags}</td>
@@ -168,12 +192,24 @@ export default async function PattiPage({ searchParams }: Props) {
                                 lotNameSuggestions={lotSuggestions}
                               />
                             )}
-                            <PayPattiDialog
-                              pattiId={b.id}
-                              party={b.party}
-                              net={Number(b.net)}
-                              paid={paid}
-                            />
+                            {/* Pay while something is owed; once paid, Payments holds edit / undo. */}
+                            {balance > 0.5 && (
+                              <PayPattiDialog
+                                pattiId={b.id}
+                                party={b.party}
+                                net={Number(b.net)}
+                                paid={paid}
+                              />
+                            )}
+                            {(paymentsOf.get(b.id)?.length ?? 0) > 0 && (
+                              <PattiPaymentsDialog
+                                pattiNo={b.no}
+                                party={b.party}
+                                net={Number(b.net)}
+                                payments={paymentsOf.get(b.id)!}
+                                canEdit={canEdit}
+                              />
+                            )}
                             {canEdit && <DeletePattiButton id={b.id} />}
                           </div>
                         </td>
@@ -189,11 +225,14 @@ export default async function PattiPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sale pattis on this date</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardTitle>Sale pattis on {fmtDate(date)}</CardTitle>
+          <CardDescription>
             Sales recorded as patti bills (shown as <span className="font-mono">P NN</span>).
             Stock is deducted from the chosen lot; the buyer owes the net.
-          </p>
+          </CardDescription>
+          <CardAction>
+            <DateFilter paramKey="d" value={date} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {saleBills.length === 0 ? (
