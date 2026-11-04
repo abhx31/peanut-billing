@@ -99,7 +99,7 @@ type StoreSnapshot = {
 
 type Snapshot = {
   stores: Record<Loc, StoreSnapshot>;
-  stock: Map<string, { name: string; main: number; nm: number }>;
+  stock: Map<string, { name: string; main: number; nm: number; cs: number }>;
 };
 
 const FUTURE = "9999-12-31";
@@ -130,7 +130,9 @@ async function snapshot(exec: DbExecutor): Promise<Snapshot> {
   const lots = await getLotsWithStock({ includeDeleted: true }, exec);
   return {
     stores: { MS: await storeSnapshot(exec, "MS"), NM: await storeSnapshot(exec, "NM") },
-    stock: new Map(lots.map((l) => [l.id, { name: l.name, main: l.stkM, nm: l.stkN }])),
+    stock: new Map(
+      lots.map((l) => [l.id, { name: l.name, main: l.stkM, nm: l.stkN, cs: l.stkC }]),
+    ),
   };
 }
 
@@ -153,10 +155,12 @@ function compareSnapshots(a: Snapshot, b: Snapshot): string[] {
     money(`${store} CJ money held`, x.cjHeld, y.cjHeld);
   }
   for (const id of new Set([...a.stock.keys(), ...b.stock.keys()])) {
-    const x = a.stock.get(id) ?? { name: id, main: 0, nm: 0 };
-    const y = b.stock.get(id) ?? { name: x.name, main: 0, nm: 0 };
-    if (x.main !== y.main || x.nm !== y.nm) {
-      diffs.push(`Stock of ${x.name}: Main ${x.main}/NM ${x.nm} → Main ${y.main}/NM ${y.nm}`);
+    const x = a.stock.get(id) ?? { name: id, main: 0, nm: 0, cs: 0 };
+    const y = b.stock.get(id) ?? { name: x.name, main: 0, nm: 0, cs: 0 };
+    if (x.main !== y.main || x.nm !== y.nm || x.cs !== y.cs) {
+      diffs.push(
+        `Stock of ${x.name}: Main ${x.main}/NM ${x.nm}/Cold ${x.cs} → Main ${y.main}/NM ${y.nm}/Cold ${y.cs}`,
+      );
     }
   }
   return diffs;
@@ -182,7 +186,8 @@ export type CarryForward = {
   cjOpening: number;
   cjMovedNm?: number;
   cjOpeningNm?: number;
-  stock: { lotId: string; lotName: string; main: number; nm: number }[];
+  /** `cs` (Cold storage) is missing in archives made before it existed. */
+  stock: { lotId: string; lotName: string; main: number; nm: number; cs?: number }[];
 };
 
 export type ArchiveData = {
@@ -485,19 +490,21 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
   const cjOpening = cents(reference.settings[0]?.cjOpening ?? 0) + cjMovedCents;
   const cjOpeningNm = cents(reference.settings[0]?.cjOpeningNm ?? 0) + cjMovedNmCents;
 
-  // Stock (mirrors getLotsWithStock): Main = in − out + back − sold at Main; NM = out − back − sold at NM.
-  const delta = new Map<string, { main: number; nm: number }>();
-  const bump = (lotId: string, main: number, nm: number) => {
-    const d = delta.get(lotId) ?? { main: 0, nm: 0 };
-    delta.set(lotId, { main: d.main + main, nm: d.nm + nm });
+  // Stock (mirrors getLotsWithStock): each place = added there + moved in − moved out − sold there.
+  const delta = new Map<string, { main: number; nm: number; cs: number }>();
+  const bump = (lotId: string, main: number, nm: number, cs = 0) => {
+    const d = delta.get(lotId) ?? { main: 0, nm: 0, cs: 0 };
+    delta.set(lotId, { main: d.main + main, nm: d.nm + nm, cs: d.cs + cs });
   };
+  const bumpAt = (lotId: string, loc: "MS" | "NM" | "CS", n: number) =>
+    bump(lotId, loc === "MS" ? n : 0, loc === "NM" ? n : 0, loc === "CS" ? n : 0);
   for (const s of removed.stockIn) {
     if (s.loc === "NM") bump(s.lotId, 0, s.bags);
     else bump(s.lotId, s.bags, 0);
   }
   for (const t of removed.transfers) {
-    if (t.dir === "out") bump(t.lotId, -t.bags, t.bags);
-    else bump(t.lotId, t.bags, -t.bags);
+    bumpAt(t.lotId, t.fromLoc, -t.bags);
+    bumpAt(t.lotId, t.toLoc, t.bags);
   }
   for (const i of removed.billItems) {
     if (billLoc.get(i.billId) === "NM") bump(i.lotId, 0, -i.bags);
@@ -505,8 +512,14 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
   }
   const lotName = new Map(reference.lots.map((l) => [l.id, l.name]));
   const stockCarry = [...delta.entries()]
-    .filter(([, d]) => d.main !== 0 || d.nm !== 0)
-    .map(([lotId, d]) => ({ lotId, lotName: lotName.get(lotId) ?? "", main: d.main, nm: d.nm }));
+    .filter(([, d]) => d.main !== 0 || d.nm !== 0 || d.cs !== 0)
+    .map(([lotId, d]) => ({
+      lotId,
+      lotName: lotName.get(lotId) ?? "",
+      main: d.main,
+      nm: d.nm,
+      cs: d.cs,
+    }));
 
   const carry: CarryForward = {
     closing: { date: end, cash: counts.MS.cash, bank: counts.MS.bank },
@@ -592,21 +605,30 @@ export async function runYearClose(tx: DbExecutor, input: CloseInput, mode: Mode
   await tx.delete(schema.closings).where(lt(schema.closings.date, end));
 
   // 6. Carry-forward rows, dated the first day of the next year. stock_in adds the whole lot to
-  //    Main; a transfer then moves the New Mahavir share across.
+  //    Main; transfers then move the New Mahavir and Cold storage shares across.
   const stockRows = stockCarry
-    .filter((s) => s.main + s.nm !== 0)
-    .map((s) => ({ lotId: s.lotId, bags: s.main + s.nm, date: nextStart, createdBy: userId }));
-  const transferRows = stockCarry
-    .filter((s) => s.nm !== 0)
+    .filter((s) => s.main + s.nm + s.cs !== 0)
     .map((s) => ({
       lotId: s.lotId,
-      lotNameSnapshot: s.lotName,
-      bags: Math.abs(s.nm),
-      dir: s.nm > 0 ? ("out" as const) : ("back" as const),
+      bags: s.main + s.nm + s.cs,
       date: nextStart,
-      note: `Opening stock carried from ${fy}`,
       createdBy: userId,
     }));
+  const transferRows = stockCarry.flatMap((s) =>
+    (["NM", "CS"] as const)
+      .map((place) => ({ place, n: place === "NM" ? s.nm : s.cs }))
+      .filter(({ n }) => n !== 0)
+      .map(({ place, n }) => ({
+        lotId: s.lotId,
+        lotNameSnapshot: s.lotName,
+        bags: Math.abs(n),
+        fromLoc: n > 0 ? ("MS" as const) : place,
+        toLoc: n > 0 ? place : ("MS" as const),
+        date: nextStart,
+        note: `Opening stock carried from ${fy}`,
+        createdBy: userId,
+      })),
+  );
   if (stockRows.length) await tx.insert(schema.stockIn).values(stockRows);
   if (transferRows.length) await tx.insert(schema.transfers).values(transferRows);
   if (cjMovedCents !== 0 || cjMovedNmCents !== 0) {

@@ -7,14 +7,18 @@ import { db, schema } from "@/db";
 import { requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { today } from "@/lib/format";
+import { STOCK_LOCS } from "@/lib/stock-loc";
 
-const addTransferSchema = z.object({
-  lotId: z.string().uuid(),
-  bags: z.number().int().positive(),
-  dir: z.enum(["out", "back"]),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  note: z.string().trim().max(240).optional().default(""),
-});
+const addTransferSchema = z
+  .object({
+    lotId: z.string().uuid(),
+    bags: z.number().int().positive(),
+    from: z.enum(STOCK_LOCS),
+    to: z.enum(STOCK_LOCS),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    note: z.string().trim().max(240).optional().default(""),
+  })
+  .refine((v) => v.from !== v.to);
 
 const deleteTransferSchema = z.object({ id: z.string().uuid() });
 
@@ -38,7 +42,8 @@ export async function addTransfer(
     lotId: lot.id,
     lotNameSnapshot: lot.name,
     bags: parsed.data.bags,
-    dir: parsed.data.dir,
+    fromLoc: parsed.data.from,
+    toLoc: parsed.data.to,
     date: parsed.data.date ?? today(),
     note: parsed.data.note || null,
     createdBy: session.user.id,
@@ -62,6 +67,7 @@ export async function deleteTransfer(
   await db.delete(schema.transfers).where(eq(schema.transfers.id, parsed.data.id));
   revalidatePath("/nm");
   revalidatePath("/stock");
+  revalidatePath("/lots");
   revalidatePath("/dashboard");
   return { ok: true };
 }

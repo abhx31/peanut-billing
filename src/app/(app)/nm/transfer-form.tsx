@@ -15,21 +15,58 @@ import {
 } from "@/components/ui/select";
 import { Field, FormActions, FormGrid } from "@/components/form";
 import { today } from "@/lib/format";
+import { STOCK_LOCS, stockLocLabel, type StockLoc } from "@/lib/stock-loc";
 import { addTransfer } from "./actions";
 
-type Lot = { id: string; name: string; stkM: number; stkN: number };
+type Lot = { id: string; name: string; stkM: number; stkN: number; stkC: number };
+
+const stockAt = (l: Lot, loc: StockLoc) => (loc === "NM" ? l.stkN : loc === "CS" ? l.stkC : l.stkM);
+
+function PlaceSelect({
+  value,
+  onChange,
+}: {
+  value: StockLoc;
+  onChange: (v: StockLoc) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange(v as StockLoc)}>
+      <SelectTrigger className="w-full">
+        <SelectValue>{(v) => stockLocLabel(v as StockLoc)}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {STOCK_LOCS.map((l) => (
+          <SelectItem key={l} value={l} label={stockLocLabel(l)}>
+            {stockLocLabel(l)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export function TransferForm({ lots }: { lots: Lot[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [lotId, setLotId] = useState(lots[0]?.id ?? "");
   const [bags, setBags] = useState("");
-  const [dir, setDir] = useState<"out" | "back">("out");
+  const [from, setFrom] = useState<StockLoc>("MS");
+  const [to, setTo] = useState<StockLoc>("NM");
   const [date, setDate] = useState(today());
   const [note, setNote] = useState("");
 
   const selected = useMemo(() => lots.find((l) => l.id === lotId), [lots, lotId]);
-  const available = selected ? (dir === "out" ? selected.stkM : selected.stkN) : 0;
+  const available = selected ? stockAt(selected, from) : 0;
+
+  // Picking the same place on both sides swaps them, so From and To never match.
+  function pickFrom(v: StockLoc) {
+    if (v === to) setTo(from);
+    setFrom(v);
+  }
+  function pickTo(v: StockLoc) {
+    if (v === from) setFrom(to);
+    setTo(v);
+  }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +78,7 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
     if (
       n > available &&
       !confirm(
-        `Only ${available} bags available at the ${dir === "out" ? "Main store" : "New Mahavir"}. Continue anyway?`,
+        `Only ${available} bags available at ${stockLocLabel(from)}. Continue anyway?`,
       )
     ) {
       return;
@@ -50,7 +87,8 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
       const res = await addTransfer({
         lotId: selected.id,
         bags: Math.floor(n),
-        dir,
+        from,
+        to,
         date,
         note: note.trim(),
       });
@@ -58,7 +96,9 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
         toast.error(res.error);
         return;
       }
-      toast.success(`${dir === "out" ? "Sent" : "Returned"} ${n} bags of ${selected.name}`);
+      toast.success(
+        `Moved ${n} bags of ${selected.name}: ${stockLocLabel(from)} → ${stockLocLabel(to)}`,
+      );
       setBags("");
       setNote("");
       router.refresh();
@@ -93,29 +133,11 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Direction" required>
-          <Select
-            value={dir}
-            onValueChange={(v) => setDir(((v as "out" | "back") ?? "out"))}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue>
-                {(v) =>
-                  v === "back"
-                    ? "New Mahavir → Main (return)"
-                    : "Main store → New Mahavir"
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="out" label="Main → New Mahavir">
-                Main store → New Mahavir
-              </SelectItem>
-              <SelectItem value="back" label="New Mahavir → Main (return)">
-                New Mahavir → Main (return)
-              </SelectItem>
-            </SelectContent>
-          </Select>
+        <Field label="From" required>
+          <PlaceSelect value={from} onChange={pickFrom} />
+        </Field>
+        <Field label="To" required>
+          <PlaceSelect value={to} onChange={pickTo} />
         </Field>
         <Field label="Date" htmlFor="xf-date" required>
           <Input
@@ -131,7 +153,7 @@ export function TransferForm({ lots }: { lots: Lot[] }) {
           required
           hint={
             selected
-              ? `Available at ${dir === "out" ? "Main store" : "New Mahavir"}: ${available}`
+              ? `Available at ${stockLocLabel(from)}: ${available}`
               : undefined
           }
         >

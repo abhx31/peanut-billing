@@ -36,7 +36,7 @@ export default async function ArchivePage({ params, searchParams }: Props) {
   const open = bills.filter((b) => !b.settled);
   const expenses = data.removed.expenses.reduce((s, e) => s + Number(e.amount), 0);
   const expenseRows = [...data.removed.expenses].sort((a, b) => a.date.localeCompare(b.date));
-  const carriedBags = data.carryForward.stock.reduce((s, l) => s + l.main + l.nm, 0);
+  const carriedBags = data.carryForward.stock.reduce((s, l) => s + l.main + l.nm + (l.cs ?? 0), 0);
 
   return (
     <div className="space-y-6">

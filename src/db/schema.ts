@@ -107,7 +107,9 @@ export const stockIn = pgTable("stock_in", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// Stock transfers between Main store and New Mahavir branch.
+// Bag transfers between Main store (MS), New Mahavir (NM) and Cold storage (CS).
+// `dir` is the old two-way direction (out = MS → NM, back = NM → MS), kept for
+// rows written before Cold storage; from_loc / to_loc say where bags moved.
 export const transfers = pgTable("transfers", {
   id: uuid("id").defaultRandom().primaryKey(),
   lotId: uuid("lot_id")
@@ -115,7 +117,9 @@ export const transfers = pgTable("transfers", {
     .references(() => lots.id, { onDelete: "restrict" }),
   lotNameSnapshot: text("lot_name_snapshot").notNull(),
   bags: integer("bags").notNull(),
-  dir: xferDirEnum("dir").notNull(),
+  dir: xferDirEnum("dir"),
+  fromLoc: text("from_loc").notNull().$type<"MS" | "NM" | "CS">(),
+  toLoc: text("to_loc").notNull().$type<"MS" | "NM" | "CS">(),
   date: date("date", { mode: "string" }).notNull(),
   note: text("note"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

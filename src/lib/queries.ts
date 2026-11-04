@@ -13,8 +13,9 @@ export type LotWithStock = {
   /** Bags added straight into Main store / New Mahavir stock (not via transfer). */
   addedM: number;
   addedN: number;
-  /** Bags transferred to New Mahavir and still there (xfer out − xfer back). */
-  recvN: number;
+  /** Net bags moved in by transfer (in − out) at Main store / New Mahavir. */
+  movedM: number;
+  movedN: number;
   /** Bags sold at Main store / New Mahavir. */
   soldM: number;
   soldN: number;
@@ -25,6 +26,8 @@ export type LotWithStock = {
   stkM: number;
   /** Bags left at New Mahavir. */
   stkN: number;
+  /** Bags in Cold storage (only ever moved there and back by transfer). */
+  stkC: number;
   deletedAt: Date | null;
 };
 
@@ -64,12 +67,15 @@ export async function getLotsWithStock(
     .where(asOf ? lte(schema.bills.date, asOf) : undefined)
     .groupBy(schema.billItems.lotId);
 
-  // Transfers out of Main / back from NM.
+  // Net bags moved in by transfer at each place (in − out).
+  const netAt = (loc: "MS" | "NM" | "CS") =>
+    sql<number>`coalesce(sum(case when ${schema.transfers.toLoc} = ${loc} then ${schema.transfers.bags} when ${schema.transfers.fromLoc} = ${loc} then -${schema.transfers.bags} else 0 end), 0)::int`;
   const xferQ = exec
     .select({
       lotId: schema.transfers.lotId,
-      out: sql<number>`coalesce(sum(case when ${schema.transfers.dir} = 'out' then ${schema.transfers.bags} else 0 end), 0)::int`,
-      back: sql<number>`coalesce(sum(case when ${schema.transfers.dir} = 'back' then ${schema.transfers.bags} else 0 end), 0)::int`,
+      ms: netAt("MS"),
+      nm: netAt("NM"),
+      cs: netAt("CS"),
     })
     .from(schema.transfers)
     .where(asOf ? lte(schema.transfers.date, asOf) : undefined)
@@ -98,11 +104,11 @@ export async function getLotsWithStock(
     const soldMain = sold - soldNM;
     const kg = soldMap.get(l.id)?.kgSold ?? "0";
     const kgNM = Number(soldMap.get(l.id)?.kgSoldNM ?? 0);
-    const xferOut = xferMap.get(l.id)?.out ?? 0;
-    const xferBack = xferMap.get(l.id)?.back ?? 0;
-    const recvN = xferOut - xferBack;
-    const stkM = addedMain - xferOut + xferBack - soldMain;
-    const stkN = addedNM + xferOut - xferBack - soldNM;
+    const movedM = xferMap.get(l.id)?.ms ?? 0;
+    const movedN = xferMap.get(l.id)?.nm ?? 0;
+    const stkC = xferMap.get(l.id)?.cs ?? 0;
+    const stkM = addedMain + movedM - soldMain;
+    const stkN = addedNM + movedN - soldNM;
     return {
       id: l.id,
       name: l.name,
@@ -112,13 +118,15 @@ export async function getLotsWithStock(
       kgSold: Number(kg),
       addedM: addedMain,
       addedN: addedNM,
-      recvN,
+      movedM,
+      movedN,
       soldM: soldMain,
       soldN: soldNM,
       kgSoldM: Number(kg) - kgNM,
       kgSoldN: kgNM,
       stkM,
       stkN,
+      stkC,
       deletedAt: l.deletedAt,
     };
   });
@@ -128,7 +136,7 @@ export async function getLotsWithStock(
 export type LotStockAt = {
   /** Bags added straight into this store's stock. */
   added: number;
-  /** Net bags moved in by transfer (negative = more sent to the other store than received). */
+  /** Net bags moved in by transfer (negative = more sent away than received). */
   moved: number;
   sold: number;
   left: number;
@@ -140,8 +148,8 @@ export type LotStockAt = {
 export function lotStockAt(l: LotWithStock, loc: Loc): LotStockAt {
   const v =
     loc === "NM"
-      ? { added: l.addedN, moved: l.recvN, sold: l.soldN, left: l.stkN, kgSold: l.kgSoldN }
-      : { added: l.addedM, moved: -l.recvN, sold: l.soldM, left: l.stkM, kgSold: l.kgSoldM };
+      ? { added: l.addedN, moved: l.movedN, sold: l.soldN, left: l.stkN, kgSold: l.kgSoldN }
+      : { added: l.addedM, moved: l.movedM, sold: l.soldM, left: l.stkM, kgSold: l.kgSoldM };
   return { ...v, known: v.added !== 0 || v.moved !== 0 || v.sold !== 0 || v.left !== 0 };
 }
 

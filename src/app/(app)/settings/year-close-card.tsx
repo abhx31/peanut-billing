@@ -418,6 +418,7 @@ function PreviewSummary({ r, end }: { r: CloseResult; end: string }) {
   const so = r.stillOpen;
   const main = r.carry.stock.reduce((s, l) => s + l.main, 0);
   const nm = r.carry.stock.reduce((s, l) => s + l.nm, 0);
+  const cs = r.carry.stock.reduce((s, l) => s + (l.cs ?? 0), 0);
 
   return (
     <div className="space-y-3 rounded-md border p-3 text-sm">
@@ -453,7 +454,8 @@ function PreviewSummary({ r, end }: { r: CloseResult; end: string }) {
         {r.carry.stock.length > 0 && (
           <li>
             Opening stock for {r.carry.stock.length} lots (Main {main} bags
-            {nm ? `, New Mahavir ${nm} bags` : ""})
+            {nm ? `, New Mahavir ${nm} bags` : ""}
+            {cs ? `, Cold storage ${cs} bags` : ""})
           </li>
         )}
         {r.carry.cjMoved !== 0 && (
