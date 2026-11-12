@@ -12,6 +12,8 @@ import { fmtDate, money, r2, today } from "@/lib/format";
 import { DateFilter } from "@/components/date-filter";
 import { BillRowActions } from "../bills/bill-row-actions";
 import { EditBillDialog } from "../bills/edit-bill-dialog";
+import { EditGstBillDialog } from "../gst/edit-gst-bill-dialog";
+import { EditSalePattiDialog } from "../patti/edit-sale-patti-dialog";
 import { SumGrid } from "@/components/sum-grid";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +40,10 @@ export default async function DailySummaryPage({ searchParams }: Props) {
   ]);
   // Current stock, for the edit-bill dialog's "bags left" hints.
   const lotsHere = allLots.map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }));
+  const lotsForEdit = lotsHere.map((l) => ({ id: l.id, name: l.name, left: l.left }));
+  // GST invoices and sale pattis are listed here too; each opens its own editor.
+  const prefix = { normal: "", gst: "GST ", psale: "P " } as const;
+  const noun = { normal: "bill", gst: "GST invoice", psale: "sale patti" } as const;
   const lots = lotsOnDate
     .map((l) => ({ id: l.id, name: l.name, ...lotStockAt(l, loc) }))
     .filter((l) => l.known);
@@ -102,7 +108,10 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                 <tbody>
                   {bills.map((b) => (
                     <tr key={b.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-mono">{String(b.no).padStart(2, "0")}</td>
+                      <td className="py-2 pr-4 font-mono whitespace-nowrap">
+                        {prefix[b.kind]}
+                        {String(b.no).padStart(2, "0")}
+                      </td>
                       <td className="py-2 pr-4">{b.customer}</td>
                       <td className="py-2 pr-4">
                         <span>{b.lotSummary}</span>
@@ -126,7 +135,13 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                       )}
                       <td className="py-2 pr-0 text-right">
                         <div className="flex gap-1 justify-end items-center">
-                          {canEditBill && b.items.length > 0 && (
+                          {canEditBill && b.kind === "gst" && (
+                            <EditGstBillDialog billId={b.id} billNo={b.no} lots={lotsForEdit} />
+                          )}
+                          {canEditBill && b.kind === "psale" && (
+                            <EditSalePattiDialog billId={b.id} billNo={b.no} lots={lotsForEdit} />
+                          )}
+                          {canEditBill && b.kind === "normal" && b.items.length > 0 && (
                             <EditBillDialog
                               billId={b.id}
                               billNo={b.no}
@@ -142,14 +157,16 @@ export default async function DailySummaryPage({ searchParams }: Props) {
                                 rate: it.rate,
                                 weightsText: it.weightsText,
                               }))}
-                              lots={lotsHere.map((l) => ({
-                                id: l.id,
-                                name: l.name,
-                                left: l.left,
-                              }))}
+                              lots={lotsForEdit}
                             />
                           )}
-                          <BillRowActions billId={b.id} billNo={b.no} balance={b.balance} />
+                          <BillRowActions
+                            billId={b.id}
+                            billNo={b.no}
+                            balance={b.balance}
+                            labelPrefix={prefix[b.kind]}
+                            noun={noun[b.kind]}
+                          />
                         </div>
                       </td>
                     </tr>
