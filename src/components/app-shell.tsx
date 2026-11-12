@@ -76,6 +76,16 @@ export function AppShell({ firm, user, loc, items, children }: Props) {
   const pathname = usePathname();
   const closeMobile = React.useCallback(() => setMobileOpen(false), []);
 
+  // While the phone menu is open, the page behind it shouldn't scroll.
+  React.useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   const activeItem = items.find(
     (i) =>
       pathname === i.href ||
@@ -100,9 +110,12 @@ export function AppShell({ firm, user, loc, items, children }: Props) {
       )}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-background border-r shadow-xl md:hidden transform transition-transform",
+          // A column, so the link list below the brand gets the remaining
+          // height and scrolls on short phone screens.
+          "fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-background border-r shadow-xl md:hidden transform transition-transform",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
+        inert={!mobileOpen}
       >
         <div className="flex items-center justify-between p-4 border-b">
           <Brand firm={firm} />
@@ -171,7 +184,7 @@ function Sidebar({ firm, items }: { firm: string; items: NavItem[] }) {
 function SidebarNav({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
-    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+    <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-0.5">
       {items.map((item) => {
         const Icon = ICONS[item.icon];
         const active =

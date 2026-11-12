@@ -21,9 +21,10 @@ export default function SignInPage() {
           </Suspense>
         </div>
       </div>
-      <div className="hidden lg:flex items-center justify-center bg-muted/40 p-10">
+      {/* Beside the form on wide screens; below it on phones. */}
+      <div className="flex items-center justify-center bg-muted/40 p-6 lg:p-10">
         <div className="max-w-md space-y-4">
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
             Billing, stock, ledger &amp; expenses in one place.
           </h1>
           <p className="text-sm text-muted-foreground">
