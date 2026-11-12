@@ -17,6 +17,7 @@ export function MonthPicker({ value }: { value: string }) {
       defaultValue={value}
       className="h-8 w-40 text-sm"
       onChange={(e) => {
+        if (!/^\d{4}-\d{2}$/.test(e.target.value)) return;
         const p = new URLSearchParams(sp?.toString() ?? "");
         p.set("m", e.target.value);
         router.push(`${pathname}?${p.toString()}`);

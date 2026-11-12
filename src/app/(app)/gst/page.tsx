@@ -23,7 +23,8 @@ export default async function GstBillPage({ searchParams }: Props) {
   const isOwner = session.user.role === "owner";
   const currentFy = fyOf(today());
   const sp = await searchParams;
-  const month = sp.m || today().slice(0, 7);
+  // Every invoice of the picked month (this month by default).
+  const month = sp.m && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : today().slice(0, 7);
   const loc = await getCurrentLoc();
   const [customers, settingsRow, lots, nextNoRow, lotCosts, monthBills] = await Promise.all([
     db
@@ -126,8 +127,8 @@ export default async function GstBillPage({ searchParams }: Props) {
         <CardHeader>
           <CardTitle>GST invoices · {locLabel(loc)}</CardTitle>
           <CardAction>
-            <MonthPicker value={month} />
-            <ExcelButton report="gst" pickDate label="Day's GST bills" />
+            <MonthPicker key={month} value={month} />
+            <ExcelButton report="gst" date={`${month}-01`} label="Excel" />
           </CardAction>
         </CardHeader>
         <CardContent>

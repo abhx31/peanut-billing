@@ -309,14 +309,22 @@ async function balancesSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
   );
 }
 
-async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
+/** GST invoices for one day, or (wholeMonth) the whole month of `date`. */
+async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc, wholeMonth = false) {
+  const month = date.slice(0, 7);
   const bills = await db
     .select()
     .from(schema.bills)
     .where(
-      and(eq(schema.bills.kind, "gst"), eq(schema.bills.date, date), atLoc(schema.bills.loc, loc)),
+      and(
+        eq(schema.bills.kind, "gst"),
+        wholeMonth
+          ? sql`to_char(${schema.bills.date}, 'YYYY-MM') = ${month}`
+          : eq(schema.bills.date, date),
+        atLoc(schema.bills.loc, loc),
+      ),
     )
-    .orderBy(asc(schema.bills.no));
+    .orderBy(asc(schema.bills.date), asc(schema.bills.no));
   const paid = bills.length
     ? await db
         .select({
@@ -341,6 +349,7 @@ async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
     const p = paidMap.get(b.id) ?? 0;
     return {
       no: pad2(b.no),
+      date: dmy(b.date),
       buyer: buyer.name ?? b.customer,
       gstin: buyer.gstin ?? "",
       state: [buyer.state, buyer.stateCode].filter(Boolean).join(" / "),
@@ -357,10 +366,13 @@ async function gstSheet(wb: ExcelJS.Workbook, date: string, loc: Loc) {
   });
 
   const w = sheet(wb, "GST bills");
-  w.title(`GST invoices · ${locLabel(loc)} — ${dmy(date)}`);
+  w.title(
+    `GST invoices · ${locLabel(loc)} — ${wholeMonth ? `${month.slice(5, 7)}-${month.slice(0, 4)}` : dmy(date)}`,
+  );
   w.table(
     [
       { header: "Invoice no.", key: "no", width: 11 },
+      { header: "Date", key: "date", width: 12 },
       { header: "Buyer", key: "buyer", width: 26 },
       { header: "Buyer GSTIN", key: "gstin", width: 18 },
       { header: "State / code", key: "state", width: 16 },
@@ -462,7 +474,9 @@ export async function buildReport(
 
   if (report === "day" || report === "ledger") await ledgerSheet(wb, date, v, loc);
   if (report === "day" || report === "expenses") await expensesSheet(wb, date, loc);
-  if (report === "day" || report === "gst") await gstSheet(wb, date, loc);
+  // The GST page's Excel is the whole month; the full day report keeps that day's invoices.
+  if (report === "gst") await gstSheet(wb, date, loc, true);
+  else if (report === "day") await gstSheet(wb, date, loc);
   // The Patti page's Excel is the whole month; the full day report keeps that day's pattis.
   if (report === "patti") await pattiSheet(wb, date, loc, true);
   else if (report === "day" && v.isPrivileged) await pattiSheet(wb, date, loc);
