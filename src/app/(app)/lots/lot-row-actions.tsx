@@ -6,15 +6,28 @@ import { ConfirmDestructive } from "@/components/confirm-destructive";
 import { NumberPromptDialog } from "@/components/number-prompt-dialog";
 import { TextPromptDialog } from "@/components/text-prompt-dialog";
 import { addBags, deleteLot, renameLot, setLotCost } from "./actions";
+import { DeductBagsDialog } from "./deduct-bags-dialog";
 
 type Props = {
   lotId: string;
   lotName: string;
   currentCost: string;
   isOwner: boolean;
+  /** Owner / editor: may deduct bags. */
+  canDeduct: boolean;
+  left: number;
+  storeName: string;
 };
 
-export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
+export function LotRowActions({
+  lotId,
+  lotName,
+  currentCost,
+  isOwner,
+  canDeduct,
+  left,
+  storeName,
+}: Props) {
   return (
     <div className="flex gap-1 justify-end items-center">
       <TextPromptDialog
@@ -47,6 +60,9 @@ export function LotRowActions({ lotId, lotName, currentCost, isOwner }: Props) {
           </Button>
         }
       />
+      {canDeduct && (
+        <DeductBagsDialog lotId={lotId} lotName={lotName} left={left} storeName={storeName} />
+      )}
       {isOwner && (
         <NumberPromptDialog
           title={`Cost per kg for "${lotName}"`}

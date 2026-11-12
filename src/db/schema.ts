@@ -99,8 +99,9 @@ export const stockIn = pgTable("stock_in", {
   date: date("date", { mode: "string" }).notNull(),
   loc: text("loc"), // null = Main store, "NM" = New Mahavir
   // Where the stock came from. null = opening/manual add, "patti" = purchase
-  // patti with Add-to-stock, "gstp" = GST purchase. `ref` points at that
-  // source doc (patti_bills.id) so deleting the source removes these rows.
+  // patti with Add-to-stock, "gstp" = GST purchase, "deduct" = bags taken
+  // out without a sale (negative bags). `ref` points at the source doc
+  // (patti_bills.id) so deleting the source removes these rows.
   src: text("src"),
   ref: uuid("ref"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

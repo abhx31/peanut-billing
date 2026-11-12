@@ -8,14 +8,18 @@ import { getCurrentLoc, locLabel } from "@/lib/loc";
 import { fmtDate, money, r2, today } from "@/lib/format";
 import { SumGrid } from "@/components/sum-grid";
 import { DateFilter } from "@/components/date-filter";
+import { UndoDeductionButton } from "./undo-deduction-button";
 
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ d?: string }> };
 
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+
 export default async function StockPage({ searchParams }: Props) {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
+  const canUndo = isOwner || session.user.role === "editor";
   const loc = await getCurrentLoc();
   const storeName = locLabel(loc);
   // A picked date shows the closing stock at the end of that day.
@@ -34,10 +38,8 @@ export default async function StockPage({ searchParams }: Props) {
   const totals: [string, string][] = [
     ["Lots", String(lots.length)],
     ["Bags added", String(lots.reduce((s, l) => s + l.added, 0))],
-    [
-      loc === "NM" ? "Received (net)" : "Sent to New Mahavir (net)",
-      String(Math.abs(lots.reduce((s, l) => s + l.moved, 0))),
-    ],
+    ["Transfers (net)", signed(lots.reduce((s, l) => s + l.moved, 0))],
+    ["Bags deducted", String(lots.reduce((s, l) => s + l.deducted, 0))],
     ["Bags sold", String(lots.reduce((s, l) => s + l.sold, 0))],
     ["Bags left", String(lots.reduce((s, l) => s + l.left, 0))],
   ];
@@ -68,6 +70,7 @@ export default async function StockPage({ searchParams }: Props) {
                   <th className="py-2 pr-4">Lot / quality</th>
                   <th className="py-2 pr-4 text-right">Added</th>
                   <th className="py-2 pr-4 text-right">Transfers (net)</th>
+                  <th className="py-2 pr-4 text-right">Deducted</th>
                   <th className="py-2 pr-4 text-right">Sold</th>
                   <th className="py-2 pr-4 text-right">Left</th>
                   <th className="py-2 pr-4 text-right">Kg sold</th>
@@ -77,7 +80,7 @@ export default async function StockPage({ searchParams }: Props) {
               <tbody>
                 {lots.length === 0 ? (
                   <tr>
-                    <td colSpan={isOwner ? 7 : 6} className="py-2 text-muted-foreground">
+                    <td colSpan={isOwner ? 8 : 7} className="py-2 text-muted-foreground">
                       No stock at {storeName} yet.
                     </td>
                   </tr>
@@ -86,9 +89,8 @@ export default async function StockPage({ searchParams }: Props) {
                     <tr key={l.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">{l.name}</td>
                       <td className="py-2 pr-4 text-right">{l.added}</td>
-                      <td className="py-2 pr-4 text-right">
-                        {l.moved > 0 ? `+${l.moved}` : l.moved}
-                      </td>
+                      <td className="py-2 pr-4 text-right">{signed(l.moved)}</td>
+                      <td className="py-2 pr-4 text-right">{l.deducted || ""}</td>
                       <td className="py-2 pr-4 text-right">{l.sold}</td>
                       <td
                         className={`py-2 pr-4 text-right font-semibold ${l.left <= 0 ? "text-destructive" : ""}`}
@@ -112,7 +114,7 @@ export default async function StockPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock added at {storeName} (latest 30)</CardTitle>
+          <CardTitle>Stock added / deducted at {storeName} (latest 30)</CardTitle>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
@@ -124,7 +126,9 @@ export default async function StockPage({ searchParams }: Props) {
                   <tr className="text-left text-muted-foreground border-b">
                     <th className="py-2 pr-4">Date</th>
                     <th className="py-2 pr-4">Lot / quality</th>
-                    <th className="py-2 pr-4 text-right">Bags added</th>
+                    <th className="py-2 pr-4 text-right">Bags</th>
+                    <th className="py-2 pr-4">Note</th>
+                    {canUndo && <th className="py-2 pr-0" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -132,7 +136,21 @@ export default async function StockPage({ searchParams }: Props) {
                     <tr key={h.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">{fmtDate(h.date)}</td>
                       <td className="py-2 pr-4">{h.lotName ?? "(deleted lot)"}</td>
-                      <td className="py-2 pr-4 text-right">{h.bags}</td>
+                      <td
+                        className={`py-2 pr-4 text-right tabular-nums ${h.bags < 0 ? "text-destructive" : ""}`}
+                      >
+                        {signed(h.bags)}
+                      </td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground">
+                        {h.src === "deduct" ? "Deducted" : ""}
+                      </td>
+                      {canUndo && (
+                        <td className="py-2 pr-0 text-right">
+                          {h.src === "deduct" && (
+                            <UndoDeductionButton id={h.id} bags={-h.bags} />
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

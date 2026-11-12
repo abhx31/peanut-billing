@@ -1,10 +1,10 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { requireOwner, requireSession } from "@/lib/auth-helpers";
+import { requireOwner, requireOwnerOrEditor, requireSession } from "@/lib/auth-helpers";
 import { closedDateError } from "@/lib/year-close";
 import { getCurrentLoc } from "@/lib/loc";
 import { today } from "@/lib/format";
@@ -20,6 +20,13 @@ const addBagsSchema = z.object({
   bags: z.number().int().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
+
+const deductBagsSchema = z.object({
+  lotId: z.string().uuid(),
+  bags: z.number().int().positive(),
+});
+
+const undoDeductionSchema = z.object({ id: z.string().uuid() });
 
 const setCostSchema = z.object({
   lotId: z.string().uuid(),
@@ -94,6 +101,57 @@ export async function addBags(input: z.input<typeof addBagsSchema>): Promise<Res
   revalidatePath("/lots");
   revalidatePath("/stock");
   revalidatePath("/bills/new");
+  return { ok: true };
+}
+
+/**
+ * Take bags out of the current store's stock without a sale (damaged,
+ * shortage, used …). Saved as a negative stock entry dated today.
+ * Owner / editor only — like deleting a transfer, it changes stock directly.
+ */
+export async function deductBags(input: z.input<typeof deductBagsSchema>): Promise<Result> {
+  const session = await requireOwnerOrEditor();
+  const parsed = deductBagsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a positive number of bags." };
+  const date = today();
+  const closed = await closedDateError(date);
+  if (closed) return { ok: false, error: closed };
+  const loc = await getCurrentLoc();
+
+  await db.insert(schema.stockIn).values({
+    lotId: parsed.data.lotId,
+    bags: -parsed.data.bags,
+    date,
+    loc: loc === "NM" ? "NM" : "MS",
+    src: "deduct",
+    createdBy: session.user.id,
+  });
+  revalidatePath("/lots");
+  revalidatePath("/stock");
+  revalidatePath("/bills/new");
+  revalidatePath("/dashboard");
+  revalidatePath("/nm");
+  return { ok: true };
+}
+
+/** Put a deduction's bags back into stock. */
+export async function undoDeduction(input: z.input<typeof undoDeductionSchema>): Promise<Result> {
+  await requireOwnerOrEditor();
+  const parsed = undoDeductionSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid entry." };
+  const row = await db.query.stockIn.findFirst({
+    where: and(eq(schema.stockIn.id, parsed.data.id), eq(schema.stockIn.src, "deduct")),
+  });
+  if (!row) return { ok: false, error: "Deduction not found." };
+  const closed = await closedDateError(row.date);
+  if (closed) return { ok: false, error: closed };
+
+  await db.delete(schema.stockIn).where(eq(schema.stockIn.id, row.id));
+  revalidatePath("/lots");
+  revalidatePath("/stock");
+  revalidatePath("/bills/new");
+  revalidatePath("/dashboard");
+  revalidatePath("/nm");
   return { ok: true };
 }
 

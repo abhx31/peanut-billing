@@ -13,6 +13,10 @@ export type LotWithStock = {
   /** Bags added straight into Main store / New Mahavir stock (not via transfer). */
   addedM: number;
   addedN: number;
+  /** Bags deducted without a sale (damaged, shortage …) — total, Main store, New Mahavir. */
+  deducted: number;
+  dedM: number;
+  dedN: number;
   /** Net bags moved in by transfer (in − out) at Main store / New Mahavir. */
   movedM: number;
   movedN: number;
@@ -43,11 +47,15 @@ export async function getLotsWithStock(
 ): Promise<LotWithStock[]> {
   const { asOf } = opts;
   // Independent queries — run together (each is a network round trip).
+  // Deductions are stock_in rows too (negative bags), kept apart from "added".
+  const notDeduct = sql`${schema.stockIn.src} is distinct from 'deduct'`;
   const addedQ = exec
     .select({
       lotId: schema.stockIn.lotId,
-      bagsAdded: sql<number>`coalesce(sum(${schema.stockIn.bags}), 0)::int`,
-      bagsAddedNM: sql<number>`coalesce(sum(case when ${schema.stockIn.loc} = 'NM' then ${schema.stockIn.bags} else 0 end), 0)::int`,
+      bagsAdded: sql<number>`coalesce(sum(case when ${notDeduct} then ${schema.stockIn.bags} else 0 end), 0)::int`,
+      bagsAddedNM: sql<number>`coalesce(sum(case when ${notDeduct} and ${schema.stockIn.loc} = 'NM' then ${schema.stockIn.bags} else 0 end), 0)::int`,
+      bagsDed: sql<number>`coalesce(sum(case when ${notDeduct} then 0 else -${schema.stockIn.bags} end), 0)::int`,
+      bagsDedNM: sql<number>`coalesce(sum(case when ${notDeduct} or ${schema.stockIn.loc} is distinct from 'NM' then 0 else -${schema.stockIn.bags} end), 0)::int`,
     })
     .from(schema.stockIn)
     .where(asOf ? lte(schema.stockIn.date, asOf) : undefined)
@@ -89,7 +97,10 @@ export async function getLotsWithStock(
 
   const [addedRows, soldRows, xferRows, lots] = await Promise.all([addedQ, soldQ, xferQ, lotsQ]);
   const addedMap = new Map(
-    addedRows.map((r) => [r.lotId, { total: r.bagsAdded, nm: r.bagsAddedNM }]),
+    addedRows.map((r) => [
+      r.lotId,
+      { total: r.bagsAdded, nm: r.bagsAddedNM, ded: r.bagsDed, dedNM: r.bagsDedNM },
+    ]),
   );
   const soldMap = new Map(soldRows.map((r) => [r.lotId, r]));
   const xferMap = new Map(xferRows.map((r) => [r.lotId, r]));
@@ -99,6 +110,9 @@ export async function getLotsWithStock(
     const added = addedEntry?.total ?? 0;
     const addedNM = addedEntry?.nm ?? 0;
     const addedMain = added - addedNM;
+    const deducted = addedEntry?.ded ?? 0;
+    const dedNM = addedEntry?.dedNM ?? 0;
+    const dedMain = deducted - dedNM;
     const sold = soldMap.get(l.id)?.bagsSold ?? 0;
     const soldNM = soldMap.get(l.id)?.bagsSoldNM ?? 0;
     const soldMain = sold - soldNM;
@@ -107,17 +121,20 @@ export async function getLotsWithStock(
     const movedM = xferMap.get(l.id)?.ms ?? 0;
     const movedN = xferMap.get(l.id)?.nm ?? 0;
     const stkC = xferMap.get(l.id)?.cs ?? 0;
-    const stkM = addedMain + movedM - soldMain;
-    const stkN = addedNM + movedN - soldNM;
+    const stkM = addedMain - dedMain + movedM - soldMain;
+    const stkN = addedNM - dedNM + movedN - soldNM;
     return {
       id: l.id,
       name: l.name,
       added,
       sold,
-      left: added - sold,
+      left: added - deducted - sold,
       kgSold: Number(kg),
       addedM: addedMain,
       addedN: addedNM,
+      deducted,
+      dedM: dedMain,
+      dedN: dedNM,
       movedM,
       movedN,
       soldM: soldMain,
@@ -138,6 +155,8 @@ export type LotStockAt = {
   added: number;
   /** Net bags moved in by transfer (negative = more sent away than received). */
   moved: number;
+  /** Bags taken out without a sale (damaged, shortage …). */
+  deducted: number;
   sold: number;
   left: number;
   kgSold: number;
@@ -148,9 +167,26 @@ export type LotStockAt = {
 export function lotStockAt(l: LotWithStock, loc: Loc): LotStockAt {
   const v =
     loc === "NM"
-      ? { added: l.addedN, moved: l.movedN, sold: l.soldN, left: l.stkN, kgSold: l.kgSoldN }
-      : { added: l.addedM, moved: l.movedM, sold: l.soldM, left: l.stkM, kgSold: l.kgSoldM };
-  return { ...v, known: v.added !== 0 || v.moved !== 0 || v.sold !== 0 || v.left !== 0 };
+      ? {
+          added: l.addedN,
+          moved: l.movedN,
+          deducted: l.dedN,
+          sold: l.soldN,
+          left: l.stkN,
+          kgSold: l.kgSoldN,
+        }
+      : {
+          added: l.addedM,
+          moved: l.movedM,
+          deducted: l.dedM,
+          sold: l.soldM,
+          left: l.stkM,
+          kgSold: l.kgSoldM,
+        };
+  return {
+    ...v,
+    known: v.added !== 0 || v.moved !== 0 || v.deducted !== 0 || v.sold !== 0 || v.left !== 0,
+  };
 }
 
 /**
@@ -461,6 +497,7 @@ export async function getStockHistory(loc: Loc, limit = 30) {
       bags: schema.stockIn.bags,
       date: schema.stockIn.date,
       loc: schema.stockIn.loc,
+      src: schema.stockIn.src,
       createdAt: schema.stockIn.createdAt,
     })
     .from(schema.stockIn)

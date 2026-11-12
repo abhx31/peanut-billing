@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function LotsPage() {
   const session = await requireSession();
   const isOwner = session.user.role === "owner";
+  const canDeduct = isOwner || session.user.role === "editor";
   const [allLots, costs, loc] = await Promise.all([
     getLotsWithStock(),
     isOwner ? getLotCosts() : Promise.resolve({} as Record<string, string>),
@@ -73,6 +74,9 @@ export default async function LotsPage() {
                           lotName={l.name}
                           currentCost={costs[l.id] ?? ""}
                           isOwner={isOwner}
+                          canDeduct={canDeduct}
+                          left={l.left}
+                          storeName={storeName}
                         />
                       </td>
                     </tr>

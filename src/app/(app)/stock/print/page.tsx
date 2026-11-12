@@ -47,7 +47,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
       <table className="print-table w-full border-collapse">
         <thead>
           <tr>
-            {["Lot / quality", "Added", "Transfers", "Sold", "Left", "Kg sold"].map((h, i) => (
+            {["Lot / quality", "Added", "Transfers", "Deducted", "Sold", "Left", "Kg sold"].map((h, i) => (
               <th
                 key={h}
                 className={`border-b border-gray-500 py-1 text-xs whitespace-nowrap ${i === 0 ? "text-left" : "text-right"}`}
@@ -60,7 +60,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
         <tbody>
           {lots.length === 0 ? (
             <tr>
-              <td colSpan={6} className="py-2">
+              <td colSpan={7} className="py-2">
                 No stock at {locLabel(loc)}.
               </td>
             </tr>
@@ -70,6 +70,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
                 <td className="py-1">{l.name}</td>
                 <td className="py-1 text-right">{l.added}</td>
                 <td className="py-1 text-right">{l.moved > 0 ? `+${l.moved}` : l.moved}</td>
+                <td className="py-1 text-right">{l.deducted || ""}</td>
                 <td className="py-1 text-right">{l.sold}</td>
                 <td className="py-1 text-right font-semibold">{l.left}</td>
                 <td className="py-1 text-right">{r2(l.kgSold)}</td>
@@ -83,6 +84,7 @@ export default async function PrintStockPage({ searchParams }: Props) {
               <td className="py-1">Total ({lots.length} lots)</td>
               <td className="py-1 text-right">{total((l) => l.added)}</td>
               <td className="py-1 text-right">{total((l) => l.moved)}</td>
+              <td className="py-1 text-right">{total((l) => l.deducted)}</td>
               <td className="py-1 text-right">{total((l) => l.sold)}</td>
               <td className="py-1 text-right">{total((l) => l.left)}</td>
               <td className="py-1 text-right">{r2(total((l) => l.kgSold))}</td>
